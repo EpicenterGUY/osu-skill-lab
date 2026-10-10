@@ -1,13 +1,13 @@
 {
-  "version": "0.4.0",
+  "version": "0.5.0",
   "channel": "ranked",
-  "name": "Official osu! API Integration",
+  "name": "Mobile/PWA Edition",
   "released": "2026-10-11",
   "features": [
-    "official osu! API v2 OAuth client credentials",
-    "ranked beatmapset search (osu!standard)",
-    "MD5 checksum lookup and status verification",
-    "official SR display when available",
-    "local skill DNA, X-Ray and replay analysis"
+    "installable PWA shell",
+    "offline app cache",
+    "browser-only .osu beatmap analysis",
+    "responsive phone and foldable UI",
+    "PC server fallback for official osu! API and replay analysis"
   ]
 }
