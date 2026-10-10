@@ -1,4 +1,4 @@
-"""osu! Skill Lab Ranked Edition v0.4 â€” local-only prototype, Python 3.10+."""
+"""osu! Skill Lab Mobile/PWA v0.5 â€” local-only prototype, Python 3.10+."""
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -147,6 +147,8 @@ class H(BaseHTTPRequestHandler):
                 if p=='/api/osu/search': return self.sendj(osu_api.search_ranked(q.get('q',[''])[0],q.get('page',['1'])[0]))
                 return self.sendj({'error':'Not found'},404)
             except Exception as exc: return self.sendj({'error':str(exc)},400)
+        if p in ('/manifest.webmanifest','/sw.js','/mobile-analyzer.js'):
+            fp=BASE/p.lstrip('/');b=fp.read_bytes();ct='application/manifest+json' if p.endswith('.webmanifest') else ('text/javascript; charset=utf-8' if p.endswith('.js') else 'application/octet-stream');self.send_response(200);self.send_header('Content-Type',ct);self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b);return
         if p=='/version.json':
             b=(BASE/'version.json').read_bytes();self.send_response(200);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b);return
         if p not in ('/','/index.html'):self.send_error(404);return
