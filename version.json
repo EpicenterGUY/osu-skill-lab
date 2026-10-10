@@ -1,13 +1,13 @@
 {
-  "version": "0.3.0",
+  "version": "0.4.0",
   "channel": "ranked",
-  "name": "Ranked Database",
+  "name": "Official osu! API Integration",
   "released": "2026-10-11",
   "features": [
-    "local ranked beatmap database",
-    "skill-specific rankings",
-    "chart x-ray and pattern detection",
-    "replay MD5 matching",
-    "community/perceived difficulty data schema"
+    "official osu! API v2 OAuth client credentials",
+    "ranked beatmapset search (osu!standard)",
+    "MD5 checksum lookup and status verification",
+    "official SR display when available",
+    "local skill DNA, X-Ray and replay analysis"
   ]
 }
