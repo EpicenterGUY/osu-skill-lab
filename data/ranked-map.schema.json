@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "osu! Skill Lab Ranked Map Extension",
+  "type": "object",
+  "properties": {
+    "beatmap_id": {"type": ["integer","null"]},
+    "beatmapset_id": {"type": ["integer","null"]},
+    "status": {"enum": ["ranked","approved","qualified","loved","pending","unknown"]},
+    "official_sr": {"type": ["number","null"]},
+    "playcount": {"type": ["integer","null"]},
+    "passcount": {"type": ["integer","null"]},
+    "perceived": {
+      "type": "object",
+      "properties": {
+        "clear": {"type": ["number","null"]},
+        "fc": {"type": ["number","null"]},
+        "accuracy": {"type": ["number","null"]},
+        "reading": {"type": ["number","null"]},
+        "stamina": {"type": ["number","null"]},
+        "sample_size": {"type": "integer", "minimum": 0}
+      }
+    },
+    "tags": {"type": "array", "items": {"type": "string"}},
+    "skillset": {"type": "array", "items": {"enum":["aim","jump","stream","burst","speed","stamina","tech","reading","flow","slider"]}}
+  }
+}
