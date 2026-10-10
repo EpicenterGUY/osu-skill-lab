@@ -1,4 +1,4 @@
-# osu! Skill Lab — Ranked Edition v0.4
+# osu! Skill Lab — Ranked Edition v0.5
 
 Ranked osu!standard 비트맵과 리플레이를 로컬에서 분석하는 개인용 프로토타입입니다.
 
@@ -25,9 +25,9 @@ Windows에서 `실행.bat`을 더블클릭하세요. Python 3.10+가 필요합�
 - 전 세계 순위/백분위, 공식 API 동기화, 정확한 판정/UR 재구성은 아직 미구현입니다.
 
 ## Version
-v0.4 Ranked Edition
+v0.5 Ranked Edition
 
-## 공식 osu! API 연결 (v0.4)
+## 공식 osu! API 연결 (v0.5)
 1. osu! 계정 설정에서 OAuth 애플리케이션을 등록하세요: https://osu.ppy.sh/home/account/edit
 2. Windows PowerShell에서 아래 환경변수를 등록하세요 (값은 본인 발급값 사용).
    `[Environment]::SetEnvironmentVariable("OSU_CLIENT_ID", "발급된_ID", "User")`
@@ -40,3 +40,17 @@ v0.4 Ranked Edition
 - 공식 검색 결과는 메타데이터만 표시합니다. 채보 자체 분석은 로컬 .osu 파일이 필요합니다.
 - 현재 공식 전체 Ranked DB 크기/세계 백분위는 제공하지 않습니다.
 - 공식 SR은 기본 난이도 기준이며, Skill Lab 휴리스틱과 별도입니다.
+
+## 📱 Mobile / PWA Edition
+v0.5부터 정적 웹 호스팅에서도 `.osu` 파일을 브라우저에서 직접 분석할 수 있습니다.
+
+- Python 없이 모바일 브라우저에서 .osu 채보 분석
+- 홈 화면 설치용 PWA manifest
+- Service Worker 기반 앱 셸 오프라인 캐시
+- 작은 화면/Fold 계열 반응형 UI
+- 브라우저 계산 결과는 `MOBILE · 미검증`으로 표시
+- 공식 osu! API 검색과 .osr 고급 분석은 로컬 PC 서버 모드에서 사용
+
+### GitHub Pages
+이 저장소가 Private인 경우 계정/플랜 설정에 따라 Pages 사용 가능 여부가 달라질 수 있습니다.
+Pages를 사용할 경우 배포 소스는 main 브랜치의 루트(/)로 설정합니다.
