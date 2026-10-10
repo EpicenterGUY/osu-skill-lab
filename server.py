@@ -1,8 +1,9 @@
-"""osu! Skill Lab Ranked Edition v0.2 — local-only prototype, Python 3.10+."""
+"""osu! Skill Lab Ranked Edition v0.4 â€” local-only prototype, Python 3.10+."""
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 import struct,lzma,json,math,statistics,webbrowser,threading,hashlib
+import osu_api
 BASE=Path(__file__).resolve().parent; MAX_UPLOAD=25*1024*1024
 
 def osu_string(b,p):
@@ -22,7 +23,7 @@ def parse_replay(blob):
         nonlocal p
         z=struct.calcsize('<'+f);v=struct.unpack_from('<'+f,blob,p)[0];p+=z;return v
     mode=take('B');version=take('i')
-    if mode!=0:raise ValueError('osu!standard 리플레이만 지원합니다.')
+    if mode!=0:raise ValueError('osu!standard ë¦¬í”Œë ˆì´ë§Œ ì§€ì›í•©ë‹ˆë‹¤.')
     beatmap,p=osu_string(blob,p);player,p=osu_string(blob,p);checksum,p=osu_string(blob,p)
     h=[take('h') for _ in range(6)];score=take('i');combo=take('h');perfect=take('?');mods=take('i');life,p=osu_string(blob,p);ticks=take('q');size=take('i')
     raw=lzma.decompress(blob[p:p+size],format=lzma.FORMAT_AUTO).decode('utf-8','replace')
@@ -75,7 +76,7 @@ def parse_map(blob):
                 x,y,t,typ=int(a[0]),int(a[1]),int(a[2]),int(a[3]);kind='circle' if typ&1 else ('slider' if typ&2 else ('spinner' if typ&8 else 'other'))
                 objs.append({'x':x,'y':y,'t':t,'type':kind})
             except:pass
-    if not objs:raise ValueError('HitObjects가 없는 .osu 파일입니다.')
+    if not objs:raise ValueError('HitObjectsê°€ ì—†ëŠ” .osu íŒŒì¼ìž…ë‹ˆë‹¤.')
     # Per-object geometric/rhythm features.
     gaps=[];dists=[];angles=[];features=[]
     for i,o in enumerate(objs):
@@ -137,12 +138,23 @@ class H(BaseHTTPRequestHandler):
     def sendj(self,d,s=200):
         b=json.dumps(d,ensure_ascii=False).encode();self.send_response(s);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b)
     def do_GET(self):
-        if urlparse(self.path).path not in ('/','/index.html'):self.send_error(404);return
+        p=urlparse(self.path).path
+        if p.startswith('/api/'):
+            try:
+                q=parse_qs(urlparse(self.path).query)
+                if p=='/api/osu/status': return self.sendj({'configured':osu_api.configured(),'version':'0.4.0'})
+                if p=='/api/osu/lookup': return self.sendj(osu_api.lookup_md5(q.get('checksum',[''])[0]))
+                if p=='/api/osu/search': return self.sendj(osu_api.search_ranked(q.get('q',[''])[0],q.get('page',['1'])[0]))
+                return self.sendj({'error':'Not found'},404)
+            except Exception as exc: return self.sendj({'error':str(exc)},400)
+        if p=='/version.json':
+            b=(BASE/'version.json').read_bytes();self.send_response(200);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b);return
+        if p not in ('/','/index.html'):self.send_error(404);return
         b=(BASE/'index.html').read_bytes();self.send_response(200);self.send_header('Content-Type','text/html; charset=utf-8');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b)
     def do_POST(self):
         try:
             n=int(self.headers.get('Content-Length','0'))
-            if n<1 or n>MAX_UPLOAD:raise ValueError('m��일은 25MB 이하여야 합니다.')
+            if n<1 or n>MAX_UPLOAD:raise ValueError('mŒŒì¼ì€ 25MB ì´í•˜ì—¬ì•¼ í•©ë‹ˆë‹¤.')
             b=self.rfile.read(n);p=urlparse(self.path).path
             self.sendj(parse_map(b) if p=='/api/map' else parse_replay(b) if p=='/api/replay' else {'error':'not found'},200 if p in ('/api/map','/api/replay') else 404)
         except Exception as e:self.sendj({'error':str(e)},400)
