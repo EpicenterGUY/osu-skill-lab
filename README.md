@@ -26,6 +26,16 @@ Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analys
 - The optional **STATS → Ranked 색인 가져오기** button is only for importing additional local datasets.
 - Each map's official SR/BPM/AR/OD/CS/HP is obtained from osu! API v2. Custom skill heuristics are NOT official ratings.
 
+## Fast full-history Ranked backfill
+**Automatic workflow:** [Fast osu! Ranked history backfill](.github/workflows/fast-ranked-backfill.yml)
+- Starts automatically from the workflow-file push and can also be started manually in Actions → Fast osu! Ranked history backfill → Run workflow.
+- Runs batches of 150 cursor-paginated official osu! API search pages. Pages typically contain 50 beatmapsets. Requests are sequential with at least 1 second between page requests, with Retry-After/backoff on HTTP 429/5xx.
+- Checkpoints the history cursor every 50 API pages inside each batch. Each complete batch commits its new Ranked month shards, public search views and state back to main, so restarts do not require starting from scratch.
+- Runs for up to ~3h35m per attempt, automatically resuming every three hours while the search cursor remains unfinished. GitHub's schedule can be delayed; no exact completion time is guaranteed.
+- The hourly sync and fast backfill share a data-writer lock, and the backfill also checks the newest Ranked search page. At the end of a run with changes, the GitHub Pages site is rebuilt and deployed.
+- Scope: osu!standard Ranked/Approved metadata. This does NOT download all original .osu charts or replay files; Chart DNA is separate. An exhausted API cursor is not a guarantee that every deleted or unavailable historical item was recovered.
+- Progress appears in [data/ranked-manifest.json](data/ranked-manifest.json), with indexed counts and backfill_complete.
+
 ## Automated background collection (GitHub Actions)
 Workflow: `.github/workflows/sync-ranked.yml`.
 
