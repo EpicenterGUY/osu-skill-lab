@@ -1,16 +1,15 @@
 {
-  "version": "0.6.2",
+  "version": "0.8.0",
   "channel": "ranked",
-  "name": "Mobile Navigation Fix",
+  "name": "Automatic Ranked Catalogue",
   "released": "2026-10-11",
   "features": [
-    "installable PWA shell",
-    "offline app cache",
-    "browser-only .osu beatmap analysis",
-    "responsive phone and foldable UI",
-    "PC server fallback for official osu! API and replay analysis",
-    "mobile statistics center",
-    "PC-mobile JSON database export/import",
-    "BPM bucket and verification statistics"
+    "Seeded 832 official ranked difficulties hosted publicly",
+    "Monthly sharded official metadata catalogue",
+    "Automatic progressive loading on desktop and mobile",
+    "Search, sort, and official beatmap links",
+    "6-hour GitHub Actions historical backfill plus newest-page refresh",
+    "Resume state and safe OAuth secret usage",
+    "Local browser .osu skill heuristics; Python PC replay mode"
   ]
 }
