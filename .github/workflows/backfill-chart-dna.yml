@@ -27,8 +27,8 @@ jobs:
         run: |
           python -m py_compile build_chart_dna.py build_ranked_views.py
           python build_chart_dna.py --help
-      - name: Analyze one recoverable DNA batch
-        run: python build_chart_dna.py --limit 100 --delay 1.5 --checkpoint-every 25
+      - name: Analyze large recoverable DNA batch
+        run: python build_chart_dna.py --limit 300 --delay 1.25 --checkpoint-every 25
       - name: Rebuild derived views
         run: python build_ranked_views.py
       - name: Commit derived DNA only
