@@ -431,25 +431,36 @@ $("importRanked").addEventListener("change", async e => {
 
 
 /* Actual-chart experimental DNA viewer; never label the scores as official SR/pp. */
+function mapDistance(a,b){
+  const keys=["official_sr","bpm","ar","od","cs","total_length"], scales=[1.2,80,2,2,1.5,180];
+  let sum=0,n=0;keys.forEach((k,i)=>{if(a?.[k]!=null&&b?.[k]!=null){sum+=Math.pow((Number(a[k])-Number(b[k]))/scales[i],2);n++;}});
+  if(a?.dna?.skills&&b?.dna?.skills){for(const k of ["aim","stream","speed","stamina","tech","reading","flow"]){sum+=Math.pow((Number(a.dna.skills[k]||0)-Number(b.dna.skills[k]||0))/25,2);n++;}}
+  return n?Math.sqrt(sum/n):999;
+}
+function detailNeighbors(map){
+  return rankedIndex.filter(x=>String(x.beatmap_id)!==String(map.beatmap_id)).map(x=>({map:x,d:mapDistance(map,x)})).sort((a,b)=>a.d-b.d).slice(0,6);
+}
 function showRankedDetails(map) {
   if(!map) return;
-  const dna=map.dna?.skills, fields=[
+  const dna=map.dna?.skills, neighbors=detailNeighbors(map), sameMapper=rankedIndex.filter(x=>x.creator===map.creator&&String(x.beatmap_id)!==String(map.beatmap_id)).slice(0,5), fields=[
     ["공식 SR","★"+Number(map.official_sr||0).toFixed(2)],["BPM",Number(map.bpm||0).toFixed(1)],
     ["AR",map.ar??"—"],["OD",map.od??"—"],["CS",map.cs??"—"],
     ["HP",map.hp??"—"],["길이",Math.floor(Number(map.total_length||0)/60)+"분 "+Math.round(Number(map.total_length||0)%60)+"초"],
     ["플레이 수",ct(map.playcount)],["Ranked 날짜",String(map.ranked_date||"—").slice(0,10)]
   ];
+  const mini=m=>'<button type="button" class="detail-neighbor" data-ranked-detail="'+encodeURIComponent(String(m.beatmap_id))+'"><b>'+cx(m.title)+' ['+cx(m.version)+']</b><small>'+cx(m.creator)+' · ★'+Number(m.official_sr||0).toFixed(2)+' · '+Number(m.bpm||0).toFixed(0)+' BPM</small></button>';
   const area=$("chartModalBody");
   area.innerHTML='<span class="chart-dna-badge">Ranked Explorer · 공식 메타데이터</span>'+
     '<h2>'+cx(map.artist||"?")+' — '+cx(map.title||"?")+'</h2>'+
     '<p class="muted">['+cx(map.version||"?")+'] · '+cx(map.creator||"?")+'</p>'+
     '<div class="ranked-detail-grid">'+fields.map(([k,v])=>'<div><small>'+cx(k)+'</small><b>'+cx(v)+'</b></div>').join("")+'</div>'+
-    (dna?'<h3>Chart DNA · 자체 분석</h3><div class="dna-leaderboard">'+
-      Object.entries(dna).map(([k,v])=>'<div class="dna-lead"><span>'+cx(k.toUpperCase())+'</span><b>'+Number(v||0).toFixed(1)+'</b></div>').join("")+'</div>':
+    (dna?'<h3>Chart DNA · 자체 분석</h3><div class="dna-leaderboard">'+Object.entries(dna).map(([k,v])=>'<div class="dna-lead"><span>'+cx(k.toUpperCase())+'</span><b>'+Number(v||0).toFixed(1)+'</b></div>').join("")+'</div>':
       '<div class="collection-state"><b>Chart DNA 분석 대기 중</b><span>이 채보의 실제 노트 데이터가 아직 분석되지 않았습니다. 공식 메타데이터만 표시합니다.</span></div>')+
+    '<div class="detail-discovery"><section><h3>비슷한 채보 · 현재 불러온 범위</h3><p class="muted">SR·BPM·AR·OD·CS·길이'+(dna?' + Chart DNA':'')+' 거리 기준</p><div class="detail-neighbors">'+(neighbors.length?neighbors.map(x=>mini(x.map)).join(""):'<div class="empty">비교 후보 없음</div>')+'</div></section>'+
+    '<section><h3>같은 맵퍼 더 보기</h3><div class="detail-neighbors">'+(sameMapper.length?sameMapper.map(mini).join(""):'<div class="empty">현재 불러온 범위에 다른 채보 없음</div>')+'</div></section></div>'+
     '<div class="ranked-detail-actions"><a class="ghost-btn" href="https://osu.ppy.sh/beatmaps/'+encodeURIComponent(map.beatmap_id)+'" target="_blank" rel="noopener noreferrer">osu! 채보 페이지 ↗</a>'+
     '<a class="ghost-btn" href="https://osu.ppy.sh/beatmapsets/'+encodeURIComponent(map.beatmapset_id)+'" target="_blank" rel="noopener noreferrer">비트맵셋 보기 ↗</a></div>';
-  const dialog=$("chartModal");if(typeof dialog.showModal==="function")dialog.showModal();else dialog.setAttribute("open","");
+  const dialog=$("chartModal");if(typeof dialog.showModal==="function"&&!dialog.open)dialog.showModal();else dialog.setAttribute("open","");
 }
 function showChartDna(map) {
   if (!map?.dna?.skills) return;
