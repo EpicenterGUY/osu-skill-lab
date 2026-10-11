@@ -1,7 +1,7 @@
 {
-  "version": "2.0.0",
+  "version": "2.0.1",
   "channel": "ranked",
-  "name": "Research Observatory",
+  "name": "Ranked loading repair and map details",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -21,6 +21,8 @@
     "Training data confidence that avoids claiming unobserved player skill",
     "Meta Time Machine and Mapper Fingerprints",
     "Weird Map Observatory and DNA Difficulty Twins",
-    "DNA skill leaderboards fed by resumable large backfill"
+    "DNA skill leaderboards fed by resumable large backfill",
+    "Fixed Ranked summary rendering and loading retry",
+    "Beatmap detail modal with official metadata and optional Chart DNA"
   ]
 }
