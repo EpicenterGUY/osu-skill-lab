@@ -42,6 +42,20 @@ $('indexedMore').onclick=()=>{indexedLimit+=20;renderIndexed()};
 function renderRankedIndex(){let el=$('rankedIndexStats'),top=$('rankedIndexTop');if(!rankedIndex.length){el.textContent='공식 Ranked 색인이 없습니다.';top.innerHTML='';return}let sr=rankedIndex.map(x=>Number(x.official_sr)).filter(Number.isFinite),bp=rankedIndex.map(x=>Number(x.bpm)).filter(Number.isFinite);el.textContent='색인된 난이도 '+rankedIndex.length.toLocaleString()+'개 · 평균 공식 SR '+(sr.reduce((a,b)=>a+b,0)/Math.max(1,sr.length)).toFixed(2)+'★ · 평균 BPM '+Math.round(bp.reduce((a,b)=>a+b,0)/Math.max(1,bp.length))+' · 표본 내 통계 (전체 Ranked 아님)';top.innerHTML='<h3>색인 내 공식 SR 상위 15</h3>'+[...rankedIndex].filter(x=>Number.isFinite(Number(x.official_sr))).sort((a,b)=>Number(b.official_sr)-Number(a.official_sr)).slice(0,15).map((x,i)=>'<div class="dbitem"><b>#'+(i+1)+' '+esc(x.artist||'?')+' — '+esc(x.title||'?')+'</b><div class="muted">'+esc(x.creator||'')+' · '+esc(x.version||'')+' · ★'+Number(x.official_sr).toFixed(2)+' · '+Number(x.bpm||0).toFixed(0)+' BPM</div></div>').join('')}
 $('importRanked').onchange=async e=>{let f=e.target.files[0];if(!f)return;try{let data=JSON.parse(await f.text());if(data.format!=='osu-skill-lab-ranked-index'||!Array.isArray(data.maps))throw Error('Ranked 색인 파일이 아닙니다');let merged=new Map(rankedIndex.filter(x=>x.beatmap_id).map(x=>[String(x.beatmap_id),x]));for(let m of data.maps){if(m.beatmap_id&&m.source==='osu! API v2')merged.set(String(m.beatmap_id),m)}rankedIndex=[...merged.values()];localStorage.setItem('osl-ranked-index',JSON.stringify(rankedIndex));renderRankedIndex();renderIndexed();alert('공식 Ranked 색인 '+rankedIndex.length+'개 로드 완료')}catch(err){alert('색인 불러오기 실패: '+err.message)}e.target.value=''};
 renderRankedIndex();renderIndexed();
+async function loadHostedRanked(){
+ try{
+  const r=await fetch('./data/ranked-index.json?ts='+Date.now(),{cache:'no-store'});
+  if(!r.ok) return;
+  const d=await r.json();
+  if(d.format!=='osu-skill-lab-ranked-index'||!Array.isArray(d.maps))return;
+  const merged=new Map(rankedIndex.filter(x=>x.beatmap_id).map(x=>[String(x.beatmap_id),x]));
+  for(const m of d.maps)if(m.beatmap_id&&m.source==='osu! API v2')merged.set(String(m.beatmap_id),m);
+  rankedIndex=[...merged.values()];
+  try{localStorage.setItem('osl-ranked-index',JSON.stringify(rankedIndex))}catch(e){}
+  renderRankedIndex();renderIndexed();
+ }catch(e){console.warn('Hosted Ranked index unavailable',e)}
+}
+loadHostedRanked();
 $('exportDb').onclick=()=>{let payload={format:'osu-skill-lab-db',version:1,exported_at:new Date().toISOString(),maps:db};let blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='osu-skill-lab-db.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
 $('importDb').onchange=async e=>{let f=e.target.files[0];if(!f)return;try{let x=JSON.parse(await f.text()),maps=Array.isArray(x)?x:x.maps;if(!Array.isArray(maps))throw Error('Skill Lab DB 형식이 아닙니다.');let by=new Map(db.map(m=>[(m.md5||m.filename),m]));maps.forEach(m=>by.set(m.md5||m.filename,m));db=[...by.values()];localStorage.setItem('osl-db',JSON.stringify(db));selected=db.at(-1)||null;render();alert('DB '+maps.length+'개를 가져왔습니다.')}catch(err){alert('가져오기 실패: '+err.message)}e.target.value=''};
 render();
