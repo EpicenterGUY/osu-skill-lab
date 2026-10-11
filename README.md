@@ -60,3 +60,12 @@ Pages를 사용할 경우 배포 소스는 main 브랜치의 루트(/)로 설정
 - Skill 평균 / BPM 구간 / 패턴 / 검증 상태 통계
 - JSON DB 내보내기/가져오기로 기기간 기록 이동
 - 브라우저 localStorage는 기기별 저장이므로 자동 동기화는 아직 지원하지 않음
+
+### v0.6 Ranked Metadata Index (PC → Mobile)
+1. 공식 osu! OAuth 애플리케이션을 만들고 `OSU_CLIENT_ID` / `OSU_CLIENT_SECRET`을 **PC 환경변수**로 설정합니다. 비밀키를 GitHub Pages에 넣지 마세요.
+2. 저장소 파일을 PC에 내려받은 뒤 PowerShell에서 `python collect_ranked.py --pages 5`를 실행합니다. 최대 20페이지/실행, 요청 간 최소 1초 간격. `--query`로 검색어를 제한할 수 있습니다.
+3. 생성된 `data/ranked-index.json`을 폰으로 전송합니다.
+4. 모바일 사이트 **STATS → Ranked 색인 가져오기**에서 파일을 선택합니다. 공식 SR 상위 목록과 평균 통계를 확인할 수 있습니다.
+5. 같은 명령을 다시 실행하면 `next_cursor`부터 이어서 수집하고 beatmap_id로 중복 제거합니다. 완료된 경우 다시 첫 페이지에서 시작합니다.
+
+**한계:** API 자격증명 없이는 수집을 실행할 수 없습니다. 현재 공개 GitHub Pages 자체는 osu! API 자격증명을 보관하거나 자동 수집하지 않습니다. 색인은 공식 **메타데이터만** 담고 있으며 개별 `.osu` 채보 파일, Chart X-Ray 분석, 전 세계 Ranked 전체 통계, 개인 성적/백분위가 자동 생성되는 것은 아닙니다. 분석된 로컬 맵 DB와 공식 메타데이터 색인은 별도로 관리됩니다. API 이용 약관과 호출 제한을 준수하세요.
