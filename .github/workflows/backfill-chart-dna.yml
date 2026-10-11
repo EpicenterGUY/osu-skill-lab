@@ -1,12 +1,9 @@
 name: Backfill Ranked Chart DNA
 
 on:
-  push:
-    paths:
-      - '.github/workflows/backfill-chart-dna.yml'
   workflow_dispatch:
   schedule:
-    - cron: "41 */3 * * *"
+    - cron: "43 * * * *"
 
 concurrency:
   group: osu-chart-dna-backfill
@@ -15,20 +12,27 @@ concurrency:
 jobs:
   dna:
     runs-on: ubuntu-latest
-    timeout-minutes: 220
+    timeout-minutes: 50
     permissions:
       contents: write
+    concurrency:
+      # Serialize writes with the hourly Ranked metadata collector.
+      group: osu-ranked-data-writer
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Validate analyzer
+      - name: Validate analyzer and UI contracts
         run: |
           python -m py_compile build_chart_dna.py build_ranked_views.py
+          python -m unittest discover -s tests -q
           python build_chart_dna.py --help
       - name: Analyze large recoverable DNA batch
-        run: python build_chart_dna.py --limit 300 --delay 1.25 --checkpoint-every 25
+        # Keep a single request stream at <= 1 request/sec. Throughput comes from
+        # longer batches and cheap incremental checkpoints, not parallel scraping.
+        run: python build_chart_dna.py --limit 1000 --delay 1 --checkpoint-every 100 --max-minutes 38
       - name: Rebuild derived views
         run: python build_ranked_views.py
       - name: Commit derived DNA only
