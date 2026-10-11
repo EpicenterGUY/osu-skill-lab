@@ -1,17 +1,20 @@
-name: Sync osu Ranked catalogue
+name: Sync osu Ranked catalogue + publish Pages
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: '23 */6 * * *'
-permissions:
-  contents: write
 concurrency:
-  group: osu-ranked-sync
+  group: osu-ranked-sync-and-deploy
   cancel-in-progress: false
 jobs:
   sync:
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,7 +27,7 @@ jobs:
           OSU_CLIENT_ID: ${{ secrets.OSU_CLIENT_ID }}
           OSU_CLIENT_SECRET: ${{ secrets.OSU_CLIENT_SECRET }}
         run: python sync_catalog.py --pages 20 --fresh-pages 2
-      - name: Publish catalog even if a later API page failed
+      - name: Publish completed pages even if a later API request fails
         if: always()
         run: |
           git config user.name "github-actions[bot]"
@@ -34,3 +37,32 @@ jobs:
             git commit -m "Sync osu Ranked metadata catalog"
             git push
           fi
+
+  deploy:
+    needs: sync
+    if: always() && (github.event_name == 'push' || needs.sync.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/configure-pages@v5
+      - name: Prepare static Skill Lab site
+        run: |
+          mkdir -p _site
+          cp index.html mobile-analyzer.js manifest.webmanifest sw.js version.json _site/
+          cp -R data _site/data
+          touch _site/.nojekyll
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
