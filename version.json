@@ -1,7 +1,7 @@
 {
-  "version": "1.1.1",
+  "version": "1.2.0",
   "channel": "ranked",
-  "name": "Browser-private osu! profiles",
+  "name": "Browser-private osu! stats auto-refresh (optional Worker)",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -12,6 +12,8 @@
     "GitHub Actions push deployments collapse old runs without canceling scheduled data collection",
     "Experimental real-chart DNA and .osr local parsing remain available",
     "osu! profile nicknames stay in this browser only; no public profile publishing jobs or snapshots",
-    "Local profile shortcut can be erased using the browser-only remove button"
+    "Local profile shortcut can be erased using the browser-only remove button",
+    "Optional server-secret Worker for on-demand osu! public stats, stored only in browser",
+    "Six-hour local cache, manual refresh and JSON import fallback"
   ]
 }
