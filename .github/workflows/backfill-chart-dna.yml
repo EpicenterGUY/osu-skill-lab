@@ -29,17 +29,33 @@ jobs:
           python -m py_compile build_chart_dna.py build_ranked_views.py
           python -m unittest discover -s tests -q
           python build_chart_dna.py --help
-      - name: Analyze large recoverable DNA batch
-        # Keep a single request stream at <= 1 request/sec. Throughput comes from
-        # longer batches and cheap incremental checkpoints, not parallel scraping.
-        run: python build_chart_dna.py --limit 1000 --delay 1 --checkpoint-every 100 --max-minutes 38
-      - name: Rebuild derived views
-        run: python build_ranked_views.py
+      - name: Analyze adaptive recoverable DNA batch
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Request frequency stays capped at 1/sec. We adapt only the total hourly
+          # work budget: healthy runs use more of the runner; blocked runs cool down.
+          limit=$(python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("data/chart-dna-state.json")
+          s=json.loads(p.read_text()) if p.exists() else {}
+          attempted=int(s.get("attempted_last_run") or 0)
+          succeeded=int(s.get("succeeded_last_run") or 0)
+          blocked=bool(s.get("blocked_on_last_run"))
+          ratio=(succeeded/attempted) if attempted else 1.0
+          print(500 if blocked else 900 if ratio < .75 else 1600)
+          PY
+          )
+          echo "Chart DNA hourly target: $limit charts (1 request/sec maximum)"
+          python build_chart_dna.py --limit "$limit" --delay 1 --checkpoint-every 100 --max-minutes 32
+      - name: Rebuild DNA research summary without touching metadata search shards
+        run: python build_ranked_views.py --skip-search
       - name: Commit derived DNA only
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A -- data/chart-dna data/chart-dna-manifest.json data/chart-dna-state.json data/ranked-summary.json data/ranked-search
+          git add -A -- data/chart-dna data/chart-dna-manifest.json data/chart-dna-state.json data/ranked-summary.json
           if ! git diff --cached --quiet; then
             git commit -m "Backfill derived Ranked Chart DNA"
             git pull --rebase origin main
