@@ -438,7 +438,11 @@ function mapDistance(a,b){
   return n?Math.sqrt(sum/n):999;
 }
 function detailNeighbors(map){
-  return rankedIndex.filter(x=>String(x.beatmap_id)!==String(map.beatmap_id)).map(x=>({map:x,d:mapDistance(map,x)})).sort((a,b)=>a.d-b.d).slice(0,6);
+  const globalIds=catalogSummary?.research?.similarity_index?.[String(map.beatmap_id)]||[];
+  const local=new Map(rankedIndex.map(x=>[String(x.beatmap_id),x]));
+  const global=globalIds.map(x=>({map:local.get(String(x.beatmap_id))||catalogSummary?.recent?.find(m=>String(m.beatmap_id)===String(x.beatmap_id)),d:Number(x.distance),global:true})).filter(x=>x.map);
+  if(global.length)return global.slice(0,6);
+  return rankedIndex.filter(x=>String(x.beatmap_id)!==String(map.beatmap_id)).map(x=>({map:x,d:mapDistance(map,x),global:false})).sort((a,b)=>a.d-b.d).slice(0,6);
 }
 function showRankedDetails(map) {
   if(!map) return;
