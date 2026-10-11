@@ -166,5 +166,5 @@ initOfficial();if('serviceWorker' in navigator&&location.protocol==='https:')nav
   window.addEventListener("error",e=>{if(e.filename&&e.filename.includes("ranked-catalog"))show("⚠ Ranked 스크립트 오류: "+e.message);});
   window.addEventListener("unhandledrejection",e=>{if(!window.__rankedSummaryReady)show("⚠ Ranked 초기화 오류: "+String(e.reason?.message||e.reason).slice(0,110));});
 })();
-</script><script src="./ranked-catalog.js?v=227" onerror="document.getElementById('hostedSyncState').textContent='⚠ Ranked JS 파일 다운로드 실패'"></script><script src="./profile.js?v=115"></script>
+</script><script src="./ranked-catalog.js?v=228" onerror="document.getElementById('hostedSyncState').textContent='⚠ Ranked JS 파일 다운로드 실패'"></script><script src="./profile.js?v=115"></script>
 <dialog id="chartModal" class="chart-modal" aria-label="실제 채보 Chart DNA 자세히 보기"><button id="chartModalClose" class="modal-close" type="button" aria-label="닫기">×</button><div id="chartModalBody"></div></dialog></body></html>
