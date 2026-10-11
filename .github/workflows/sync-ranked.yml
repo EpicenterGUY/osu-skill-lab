@@ -21,7 +21,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Validate Python source
-        run: python -m py_compile osu_api.py sync_catalog.py build_ranked_views.py build_chart_dna.py
+        run: |
+          python -m py_compile osu_api.py sync_catalog.py build_ranked_views.py build_chart_dna.py
+          python -m unittest discover -s tests -q
       - name: Refresh newest maps and continue historical backfill
         env:
           OSU_CLIENT_ID: ${{ secrets.OSU_CLIENT_ID }}
@@ -64,6 +66,7 @@ jobs:
       - name: Build lightweight public statistics and search indexes
         run: |
           python -m py_compile build_ranked_views.py build_chart_dna.py
+          python -m unittest discover -s tests -q
           python build_ranked_views.py
       - name: Prepare static Skill Lab site
         run: |
