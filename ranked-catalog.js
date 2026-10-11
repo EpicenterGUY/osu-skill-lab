@@ -604,6 +604,15 @@ $("chartModal").addEventListener("click", event => {
 
 // Observatory controls: make every visible research/tab button perform an obvious action.
 function bindObservatoryControls() {
+  // Generic navigation delegation also covers buttons injected after startup.
+  document.addEventListener("click", event => {
+    const nav = event.target.closest("[data-tab]");
+    if (nav && typeof openTab === "function") {
+      event.preventDefault();
+      openTab(nav.dataset.tab);
+      document.querySelector("main")?.scrollIntoView({behavior:"smooth", block:"start"});
+    }
+  });
   const viewToTarget = {overview:"era", difficulty:"odd", history:"era", mapper:"mapper", extreme:"odd"};
   document.querySelectorAll("[data-stats-view]").forEach(btn => btn.addEventListener("click", () => {
     document.querySelectorAll("[data-stats-view]").forEach(x => x.classList.toggle("active", x === btn));
