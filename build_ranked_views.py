@@ -87,6 +87,30 @@ def main():
                 maps[int(m["beatmap_id"])] = m
 
     values = list(maps.values())
+    # Optional actual-chart heuristics. Keep the original metadata independent.
+    dna = {}
+    for source in sorted((DATA / "chart-dna").glob("*.json")):
+        try:
+            for record in json.loads(source.read_text(encoding="utf-8")):
+                if record.get("beatmap_id") and isinstance(record.get("skills"), dict):
+                    dna[int(record["beatmap_id"])] = record
+        except (ValueError, TypeError) as exc:
+            print(f"Skipping damaged experimental Chart DNA shard {source.name}: {exc}", flush=True)
+
+    def searchable(entry):
+        compact = mini(entry)
+        chart = dna.get(int(entry.get("beatmap_id") or 0))
+        if chart:
+            compact["dna"] = {
+                "skills": chart.get("skills", {}),
+                "objects": chart.get("objects"),
+                "duration_s": chart.get("duration_s"),
+                "max_stream": chart.get("max_stream"),
+                "peak_density_2s": chart.get("peak_density_2s"),
+                "median_gap_ms": chart.get("median_gap_ms"),
+                "analysis_method": chart.get("analysis_method"),
+            }
+        return compact
     by_year = defaultdict(list)
     year_sets = defaultdict(set)
     month_maps = Counter()
@@ -103,7 +127,7 @@ def main():
         year = date_year(m)
         month = str(m.get("ranked_date") or "")[:7] if year != "unknown" else "unknown"
         sid = m.get("beatmapset_id")
-        by_year[year].append(mini(m))
+        by_year[year].append(searchable(m))
         if sid:
             year_sets[year].add(sid)
             month_sets[month].add(sid)
@@ -152,10 +176,16 @@ def main():
             "difficulties": len(values),
             "beatmapsets": len(ranked_sets),
             "mappers": len(mapper_maps),
+            "chart_dna_analyzed": len(set(maps).intersection(dna)),
         },
         "averages": {
             "sr": round(sum(sr_values) / len(sr_values), 2) if sr_values else None,
             "bpm": round(sum(bpm_values) / len(bpm_values), 1) if bpm_values else None,
+        },
+        "chart_dna": {
+            "method": "chart-dna-pilot-v1",
+            "status": "experimental partial coverage",
+            "note": "Real .osu object geometry; heuristic scores are NOT official SR/pp.",
         },
         "date_range": {
             "oldest": min(ranked_dates) if ranked_dates else None,
@@ -183,13 +213,13 @@ def main():
             for name in mappers[:25]
         ],
         "top_sr": [
-            mini(m) for m in sorted(values, key=lambda m: number(m.get("official_sr")), reverse=True)[:20]
+            searchable(m) for m in sorted(values, key=lambda m: number(m.get("official_sr")), reverse=True)[:20]
         ],
         "top_playcount": [
-            mini(m) for m in sorted(values, key=lambda m: number(m.get("playcount")), reverse=True)[:20]
+            searchable(m) for m in sorted(values, key=lambda m: number(m.get("playcount")), reverse=True)[:20]
         ],
         "recent": [
-            mini(m) for m in sorted(values, key=lambda m: str(m.get("ranked_date") or ""), reverse=True)[:30]
+            searchable(m) for m in sorted(values, key=lambda m: str(m.get("ranked_date") or ""), reverse=True)[:30]
         ],
         "search_shards": search_shards,
     }
