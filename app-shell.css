@@ -135,3 +135,22 @@ td{overflow-wrap:anywhere}
 @media(max-width:760px){header.app-sidebar{left:0;right:0;top:auto;bottom:0;width:100%;height:calc(67px + env(safe-area-inset-bottom,0px));overflow:hidden;border-right:0;border-top:1px solid #324157;background:#101825f7;backdrop-filter:blur(18px);z-index:40}.app-sidebar .top{height:100%;padding:5px 5px env(safe-area-inset-bottom,0px);gap:0;display:block}.app-sidebar .brand,.sidebar-note{display:none!important}.app-sidebar nav{display:flex;flex-direction:row;width:100%;height:62px;align-items:stretch;justify-content:space-around;gap:0;overflow:hidden}.app-sidebar nav button{width:auto;flex:1;min-width:0;flex-direction:column;gap:1px;justify-content:center;padding:5px 0;border:0!important;border-radius:11px;font-size:10px;letter-spacing:-.04em;background:transparent!important;text-align:center;color:#8b9eb3}.app-sidebar nav button.active{color:#ffb1d0}.app-sidebar nav button .nav-symbol{width:23px;height:26px;flex:none;font-size:21px;color:inherit}main{margin-left:0;padding:16px 13px calc(104px + env(safe-area-inset-bottom,0px))}.hero{min-height:0;padding:25px 22px;border-radius:20px;margin-bottom:18px}.hero h1{font-size:clamp(27px,7.6vw,40px)}.hero p{font-size:12px}.hero-actions{margin-top:18px}.section-heading{margin:6px 2px 14px}.section-heading h2{font-size:23px}.grid{gap:11px}.card{padding:18px;border-radius:17px}.metrics{gap:9px}.metric{padding:13px 11px}.metric b{font-size:21px}.metric span{font-size:10px}.quarter,.third,.half{grid-column:span 12}.filter-toolbar{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.filter-toolbar .search-field{grid-column:span 2}#indexedList{grid-template-columns:1fr}input[type=text],select{font-size:16px;min-height:43px}#officialStatsArea .grid{gap:10px}.stat-bar-row{grid-template-columns:78px minmax(0,1fr) 52px;gap:6px}.stat-bar-row>b{font-size:10px}.row{gap:9px}table{display:block;overflow-x:auto}#rankedIndexTop .dbitem{display:block} }
 @media(max-width:370px){.app-sidebar nav button{font-size:9px}.app-sidebar nav button .nav-symbol{font-size:19px}.hero-actions>.btn,.hero-actions>.hero-primary,.hero-actions>.ghost-btn{flex:1 1 130px}.hero{padding:22px 17px}.card{padding:15px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation:none!important;transition:none!important}}
+
+/* Keep the large landing hero exclusive to HOME; inner tools use their own headings. */
+body[data-view="ranked"] .hero,
+body[data-view="analyze"] .hero,
+body[data-view="skills"] .hero,
+body[data-view="stats"] .hero,
+body[data-view="train"] .hero{display:none}
+#recentRankedPreview .empty{padding:18px 12px}
+#officialStatsArea .card .muted{font-size:11px}
+.details-advanced:open summary{border-bottom:1px solid #324256}
+[data-tab]{touch-action:manipulation}
+#ranking,#dbList{scrollbar-color:#43576d transparent;scrollbar-width:thin}
+dialog.chart-modal{width:min(560px,calc(100% - 30px));max-height:min(85dvh,750px);overflow:auto;border:1px solid #51627c;border-radius:22px;background:linear-gradient(160deg,#1a2740,#111c2c);color:#f3f7fe;padding:23px;box-shadow:0 35px 120px #0009}
+dialog.chart-modal::backdrop{background:#030812ce;backdrop-filter:blur(6px)}
+.chart-modal h2{font-size:21px;letter-spacing:-.04em;line-height:1.4;margin:0 35px 9px 0}
+.chart-modal .modal-close{position:absolute;top:15px;right:14px;border:1px solid #41536c;border-radius:9px;background:#233349;color:#fff;width:32px;height:32px;font-size:20px}
+.chart-modal .skill{grid-template-columns:94px 1fr 48px}
+.chart-dna-badge{font-size:10px;color:#f6bfd6;border:1px solid #d083a452;border-radius:6px;padding:2px 6px;white-space:nowrap}
+@media(max-width:760px){dialog.chart-modal{padding:19px;border-radius:17px}}
