@@ -73,6 +73,25 @@ function renderCatalogSummary(s) {
     " · 시범 Chart DNA " + ct(count.chart_dna_analyzed || 0) + "채보" +
     " · 수치는 현재 수집된 DB 기준이며 전 세계 Ranked 전체 합계가 아닙니다.";
 
+  const kpis = $("statsHeroKpis");
+  if (kpis) kpis.innerHTML =
+    '<div class="dash-kpi"><span>Ranked 채보</span><b>' + ct(count.difficulties) + '</b><small>수집 DB</small></div>' +
+    '<div class="dash-kpi"><span>비트맵셋</span><b>' + ct(count.beatmapsets) + '</b><small>수집 DB</small></div>' +
+    '<div class="dash-kpi"><span>평균 SR</span><b>★' + Number(avg.sr || 0).toFixed(2) + '</b><small>공식 Star Rating</small></div>' +
+    '<div class="dash-kpi"><span>평균 BPM</span><b>' + Number(avg.bpm || 0).toFixed(1) + '</b><small>수집 DB</small></div>';
+  const dnaCoverage = $("dnaCoverage");
+  if (dnaCoverage) {
+    const dnaN = Number(count.chart_dna_analyzed || 0), all = Number(count.difficulties || 0), pct = all ? dnaN / all * 100 : 0;
+    dnaCoverage.innerHTML =
+      '<div class="dash-kpi"><span>전체 Ranked</span><b>' + ct(all) + '</b><small>메타데이터</small></div>' +
+      '<div class="dash-kpi"><span>DNA 분석</span><b>' + ct(dnaN) + '</b><small>실제 .osu 기반</small></div>' +
+      '<div class="dash-kpi"><span>커버리지</span><b>' + pct.toFixed(pct < 1 ? 2 : 1) + '%</b><small>분석 진행률</small></div>' +
+      '<div class="dash-kpi"><span>내 분석</span><b>' + ct(Number($("dbCount")?.textContent || 0)) + '</b><small>이 기기</small></div>';
+    const global = $("dnaGlobalRanking");
+    if (global && !dnaN) global.innerHTML = '<div class="collection-state"><b>Chart DNA 대량 분석 준비 중</b><span>메타데이터 ' + ct(all) +
+      '개 확보 · 실제 노트 분석이 들어오면 스킬 랭킹이 자동 활성화됩니다.</span><div class="coverage-track"><i style="width:' + Math.max(.3,pct) + '%"></i></div></div>';
+  }
+
   const yearRows = (s.years || []).filter(x => x.year !== "unknown");
   const mapperRows = (s.top_mappers || []).slice(0, 15).map((m, i) =>
     '<tr><td>' + (i + 1) + '</td><td>' + cx(m.name) + '</td><td>' +
@@ -91,10 +110,16 @@ function renderCatalogSummary(s) {
     barGraph(s.bpm_buckets, "count", "label") + '</div>' +
     '<div class="card half"><h2>최근 Ranked 월별 채보 수</h2>' +
     barGraph(s.months, "difficulties", "month", 12) + '</div>' +
+    '<div class="card half"><h2>AR 분포</h2>' + barGraph(s.attribute_buckets?.ar, "count", "label", 12) + '</div>' +
+    '<div class="card half"><h2>OD 분포</h2>' + barGraph(s.attribute_buckets?.od, "count", "label", 12) + '</div>' +
+    '<div class="card half"><h2>CS 분포</h2>' + barGraph(s.attribute_buckets?.cs, "count", "label", 12) + '</div>' +
+    '<div class="card half"><h2>채보 길이</h2>' + barGraph(s.attribute_buckets?.length, "count", "label", 8) + '</div>' +
     '<div class="card half"><h2>맵퍼 TOP 15 · 비트맵셋 수</h2>' +
     statsTable("맵퍼", mapperRows, "곡 / 난이도") + '</div>' +
     '<div class="card half"><h2>공식 SR TOP 10</h2>' +
     statsTable("채보", topRows(s.top_sr, "sr"), "SR") + '</div>' +
+    '<div class="card half"><h2>최고 BPM</h2>' + statsTable("채보", topRows(s.extremes?.highest_bpm, "bpm"), "BPM") + '</div>' +
+    '<div class="card half"><h2>최장 채보</h2>' + statsTable("채보", (s.extremes?.longest || []).slice(0,8).map((m,i)=>'<tr><td>'+(i+1)+' '+officialMapLink(m)+'</td><td>'+Math.floor(Number(m.total_length||0)/60)+'m '+Math.round(Number(m.total_length||0)%60)+'s</td></tr>').join(""), "길이") + '</div>' +
     '<div class="card full"><h2>플레이카운트 TOP 10 · 현재 수집분</h2>' +
     statsTable("채보", topRows(s.top_playcount, "plays"), "플레이 수") + '</div>' +
     '<div class="card full"><h2>실제 채보 기반 Chart DNA · 시범 운영</h2>' +
