@@ -1,7 +1,15 @@
-# osu! Skill Lab — Rhythm Intelligence v1.0
+# osu! Skill Lab — Rhythm Intelligence v1.1
 
 Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analysis.
 **GitHub Pages:** https://epicenterguy.github.io/osu-skill-lab/
+
+## v1.1 fast load and user profile
+- The repository contains a pre-seeded `data/ranked-summary.json` (about 25 KB at initial 5,058 difficulties), so first paint never depends on downloading every Ranked map.
+- The summary lists compact month-index files under `data/ranked-search/YYYY-MM.json`. RANKED initially shows 30 recent maps, and fetching a month/year/all-years requires explicitly selecting that scope. Unchanged monthly files have stable content hashes so returning visitors can use HTTP cache.
+- `profile.js` offers a local-only osu! username/ID shortcut and a dedicated profile panel. Merely saving a username is **not** osu! authentication.
+- For the repository owner to opt in to **publishing their already-public osu!standard statistics** (PP, global/country rank, accuracy, play count), go to **Settings → Secrets and variables → Actions → Variables → New repository variable**, set `OSU_PROFILE_USERNAME` to their osu! username (or numeric ID), then manually run the existing sync workflow. The Actions job reads the existing secure osu! Client ID/Secret, writes the allowlisted `data/osu-profile.json`, and refreshes at most once every 12 hours. Anyone visiting this PUBLIC repository can read that output; never use it for a private account.
+- Other visitors can save their own osu! profile link locally. The static site does not fetch their private info, solicit tokens, or masquerade as a multi-user OAuth login.
+- Rapid GitHub UI commits now cancel older push-only deployment attempts, rather than queue dozens of redundant deploys. Hourly background sync runs remain separate.
 
 ## Web and mobile
 - Desktop uses a left sidebar, mobile uses a fixed bottom dock. Official Ranked data, per-device .osu analysis and local replay header results are explicitly separated.
