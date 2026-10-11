@@ -166,8 +166,10 @@ def main():
     parser.add_argument("--checkpoint-every", type=int, default=25, help="persist derived metrics every N attempts")
     parser.add_argument("--delay", type=float, default=5.0, help="minimum seconds between chart fetch attempts")
     args = parser.parse_args()
-    if not 0 <= args.limit <= 30 or args.delay < 3:
-        parser.error("--limit must be 0..30 and --delay >= 3")
+    if not 0 <= args.limit <= 500 or args.delay < 1:
+        parser.error("--limit must be 0..500 and --delay >= 1")
+    if not 1 <= args.checkpoint_every <= 100:
+        parser.error("--checkpoint-every must be 1..100")
     meta = read_json(DATA / "ranked-manifest.json", {"shards": []})
     candidates = {}
     for shard in meta.get("shards", []):
@@ -184,6 +186,29 @@ def main():
     ordered = sorted(candidates.values(), key=lambda m: str(m.get("ranked_date") or ""), reverse=True)
     attempted = succeeded = 0
     blocked = False
+    def persist(current_now, current_blocked=False):
+        groups = {}
+        for entry in dna.values():
+            year = str(entry.get("ranked_date") or "unknown")[:4]
+            if not year.isdigit():
+                year = "unknown"
+            groups.setdefault(year, []).append(entry)
+        shards = []
+        for year in sorted(groups, reverse=True):
+            values = sorted(groups[year], key=lambda x: x["beatmap_id"])
+            dump(DNA_DIR / (year + ".json"), values)
+            shards.append({"year": year, "path": f"data/chart-dna/{year}.json", "count": len(values)})
+        state["updated_at"] = current_now.isoformat()
+        state["blocked_on_last_run"] = current_blocked
+        state["succeeded_last_run"] = succeeded
+        state["attempted_last_run"] = attempted
+        dump(DNA_STATE, state)
+        dump(DNA_MANIFEST, {"format":"osu-skill-lab-chart-dna","version":2,
+            "analyzed_difficulties":len(dna),"candidate_difficulties":len(candidates),
+            "coverage_percent":round(len(dna)/max(1,len(candidates))*100,4),
+            "method":"chart-dna-pilot-v1","status":"experimental partial coverage",
+            "source":"official public osu! beatmap text; derived metrics only",
+            "updated_at":current_now.isoformat(),"shards":shards})
     for item in ordered:
         if attempted >= args.limit:
             break
@@ -234,11 +259,16 @@ def main():
             print(f"Chart DNA {beatmap_id}: unavailable ({type(exc).__name__})", flush=True)
             failed[str(beatmap_id)] = {"retry_after": (now + timedelta(hours=24)).isoformat(),
                                        "reason": type(exc).__name__}
+        if attempted % args.checkpoint_every == 0:
+            persist(datetime.now(timezone.utc), blocked)
+            print(f"Checkpoint: {len(dna)}/{len(candidates)} DNA charts stored.", flush=True)
         if blocked:
             print("Source requested a pause; stopping the pilot for this run.", flush=True)
             break
 
-    # Final checkpoint. Raw .osu content is never written to disk.\n    persist(datetime.now(timezone.utc), blocked)\n    print(f"Chart DNA pilot: {succeeded}/{attempted} newly analyzed, {len(dna)} stored. No raw charts published.", flush=True)
+    # Final checkpoint. Raw .osu content is never written to disk.
+    persist(datetime.now(timezone.utc), blocked)
+    print(f"Chart DNA pilot: {succeeded}/{attempted} newly analyzed, {len(dna)} stored. No raw charts published.", flush=True)
 
 
 if __name__ == "__main__":
