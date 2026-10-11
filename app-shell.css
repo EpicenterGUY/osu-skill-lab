@@ -213,3 +213,13 @@ dialog.chart-modal::backdrop{background:#030812ce;backdrop-filter:blur(6px)}
 
 /* Ranked live loading diagnostics */
 .ranked-loader{display:grid;grid-template-columns:1fr auto;gap:7px 10px;align-items:center;padding:11px 12px;border:1px solid #33465f;border-radius:13px;background:#101a29}.ranked-loader-head{grid-column:1/-1;display:flex;justify-content:space-between;gap:10px;align-items:center}.ranked-loader-head b{color:#eef5ff}.ranked-loader-head span,.ranked-loader small{color:#91a0b8;font-size:10px}.ranked-loader-track{height:7px;background:#202c3e;border-radius:99px;overflow:hidden}.ranked-loader-track i{display:block;height:100%;min-width:7px;border-radius:99px;background:linear-gradient(90deg,#ff66aa,#65e3dc);transition:width .2s ease}.ranked-loader-done{border-color:#3b5b63}.ranked-loader-done .ranked-loader-track i{width:100%}@media(max-width:500px){.ranked-loader-head{align-items:flex-start;flex-direction:column;gap:3px}}
+
+/* v1.4 interaction clarity: every clickable research/DNA control has visible state and touch feedback. */
+.research-launchpad button.active{border-color:#6f88ad;background:linear-gradient(145deg,#223451,#151d2e);box-shadow:inset 0 0 0 1px #6f88ad55}
+.research-launchpad button:active,.research-rank-btn:active,.dna-lead-btn:active,.dna-rank-row:active{transform:scale(.985)}
+.dna-lead-btn{appearance:none;width:100%;text-align:left;color:inherit;cursor:pointer}
+.dna-rank-row{width:100%;display:grid;grid-template-columns:38px minmax(0,1fr);gap:10px;align-items:center;padding:11px 12px;border:1px solid #293a53;border-radius:13px;background:#111a2a;color:#eef4ff;text-align:left}
+.dna-rank-row>b{color:#ff83bb;font-size:12px}.dna-rank-row span{min-width:0}.dna-rank-row strong,.dna-rank-row small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dna-rank-row small{margin-top:4px;color:#91a0b8;font-size:10px}
+.dna-rank-row:hover,.research-rank-btn:hover,.dna-lead-btn:hover{border-color:#49617f;background:#172338}
+.lab-tabs button[aria-selected="true"]{background:#263650;color:#fff;box-shadow:inset 0 0 0 1px #4d6385}
+@media(max-width:700px){.dna-rank-row{grid-template-columns:31px minmax(0,1fr);padding:10px}.dna-rank-row small{font-size:9px}}
