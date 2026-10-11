@@ -7,6 +7,7 @@ If the source blocks requests, stop gently and keep the metadata site working.
 """
 import argparse
 import hashlib
+import heapq
 import json
 import math
 import statistics
@@ -165,9 +166,12 @@ def main():
     parser.add_argument("--limit", type=int, default=100, help="max individual .osu files to request per run")
     parser.add_argument("--checkpoint-every", type=int, default=25, help="persist derived metrics every N attempts")
     parser.add_argument("--delay", type=float, default=5.0, help="minimum seconds between chart fetch attempts")
+    parser.add_argument("--max-minutes", type=float, default=45.0, help="stop cleanly before the CI job timeout")
     args = parser.parse_args()
-    if not 0 <= args.limit <= 500 or args.delay < 1:
-        parser.error("--limit must be 0..500 and --delay >= 1")
+    if not 0 <= args.limit <= 5000 or args.delay < 1:
+        parser.error("--limit must be 0..5000 and --delay >= 1")
+    if not 1 <= args.max_minutes <= 50:
+        parser.error("--max-minutes must be 1..50")
     if not 1 <= args.checkpoint_every <= 100:
         parser.error("--checkpoint-every must be 1..100")
     meta = read_json(DATA / "ranked-manifest.json", {"shards": []})
@@ -177,40 +181,98 @@ def main():
             if row.get("mode") == "osu" and row.get("status") in ("ranked", "approved") and row.get("beatmap_id"):
                 candidates[int(row["beatmap_id"])] = row
     dna = {}
+    dna_by_year = {}
     for path in sorted(DNA_DIR.glob("*.json")):
         for row in read_json(path, []):
-            dna[int(row["beatmap_id"])] = row
+            beatmap_id = int(row["beatmap_id"])
+            dna[beatmap_id] = row
+            year = str(row.get("ranked_date") or "unknown")[:4]
+            if not year.isdigit():
+                year = "unknown"
+            dna_by_year.setdefault(year, {})[beatmap_id] = row
     state = read_json(DNA_STATE, {"version": 1, "failed": {}})
     failed = state.setdefault("failed", {})
     now = datetime.now(timezone.utc)
-    ordered = sorted(candidates.values(), key=lambda m: str(m.get("ranked_date") or ""), reverse=True)
+    started_monotonic = time.monotonic()
+
+    # Coverage-balanced ordering: early partial DNA should represent every osu! era,
+    # not only the newest year. Within each year we still prefer the newest maps.
+    candidate_by_year = {}
+    for item in candidates.values():
+        year = str(item.get("ranked_date") or "unknown")[:4]
+        if not year.isdigit():
+            year = "unknown"
+        candidate_by_year.setdefault(year, []).append(item)
+    for rows in candidate_by_year.values():
+        rows.sort(key=lambda m: str(m.get("ranked_date") or ""), reverse=True)
+    pending_by_year = {
+        year: [m for m in rows if int(m["beatmap_id"]) not in dna]
+        for year, rows in candidate_by_year.items()
+    }
+    positions = {year: 0 for year in pending_by_year}
+    selected_counts = {year: 0 for year in pending_by_year}
+    heap = []
+    for year, rows in pending_by_year.items():
+        if rows:
+            done = len(dna_by_year.get(year, {}))
+            total = max(1, len(candidate_by_year.get(year, [])))
+            heapq.heappush(heap, (done / total, year))
+    ordered = []
+    while heap:
+        _, year = heapq.heappop(heap)
+        pos = positions[year]
+        rows = pending_by_year[year]
+        if pos >= len(rows):
+            continue
+        ordered.append(rows[pos])
+        positions[year] = pos + 1
+        selected_counts[year] += 1
+        if positions[year] < len(rows):
+            done = len(dna_by_year.get(year, {})) + selected_counts[year]
+            total = max(1, len(candidate_by_year.get(year, [])))
+            heapq.heappush(heap, (done / total, year))
+
     attempted = succeeded = 0
     blocked = False
+    dirty_years = set()
+
     def persist(current_now, current_blocked=False):
-        groups = {}
-        for entry in dna.values():
-            year = str(entry.get("ranked_date") or "unknown")[:4]
-            if not year.isdigit():
-                year = "unknown"
-            groups.setdefault(year, []).append(entry)
-        shards = []
-        for year in sorted(groups, reverse=True):
-            values = sorted(groups[year], key=lambda x: x["beatmap_id"])
+        # Only rewrite year shards that actually changed during this checkpoint.
+        # This keeps checkpoint cost roughly constant even when DNA grows to 100k+.
+        for year in sorted(dirty_years, reverse=True):
+            values = sorted(dna_by_year.get(year, {}).values(), key=lambda x: x["beatmap_id"])
             dump(DNA_DIR / (year + ".json"), values)
-            shards.append({"year": year, "path": f"data/chart-dna/{year}.json", "count": len(values)})
+        shards = [
+            {"year": year, "path": f"data/chart-dna/{year}.json", "count": len(rows)}
+            for year, rows in sorted(dna_by_year.items(), reverse=True) if rows
+        ]
+        coverage_by_year = []
+        for year, rows in sorted(candidate_by_year.items(), reverse=True):
+            analyzed = len(dna_by_year.get(year, {}))
+            coverage_by_year.append({
+                "year": year, "analyzed": analyzed, "candidates": len(rows),
+                "coverage_percent": round(analyzed / max(1, len(rows)) * 100, 3),
+            })
         state["updated_at"] = current_now.isoformat()
         state["blocked_on_last_run"] = current_blocked
         state["succeeded_last_run"] = succeeded
         state["attempted_last_run"] = attempted
+        state["elapsed_seconds_last_run"] = round(time.monotonic() - started_monotonic, 1)
         dump(DNA_STATE, state)
-        dump(DNA_MANIFEST, {"format":"osu-skill-lab-chart-dna","version":2,
+        dump(DNA_MANIFEST, {"format":"osu-skill-lab-chart-dna","version":3,
             "analyzed_difficulties":len(dna),"candidate_difficulties":len(candidates),
             "coverage_percent":round(len(dna)/max(1,len(candidates))*100,4),
+            "coverage_by_year":coverage_by_year,
             "method":"chart-dna-pilot-v1","status":"experimental partial coverage",
+            "selection_strategy":"coverage-balanced by ranked year; newest first within year",
             "source":"official public osu! beatmap text; derived metrics only",
             "updated_at":current_now.isoformat(),"shards":shards})
+        dirty_years.clear()
     for item in ordered:
         if attempted >= args.limit:
+            break
+        if (time.monotonic() - started_monotonic) >= args.max_minutes * 60:
+            print(f"Time budget reached after {attempted} attempts; saving clean checkpoint.", flush=True)
             break
         beatmap_id = int(item["beatmap_id"])
         if beatmap_id in dna:
@@ -245,6 +307,11 @@ def main():
                 "analyzed_at": now.isoformat(),
             })
             dna[beatmap_id] = entry
+            year = str(entry.get("ranked_date") or "unknown")[:4]
+            if not year.isdigit():
+                year = "unknown"
+            dna_by_year.setdefault(year, {})[beatmap_id] = entry
+            dirty_years.add(year)
             failed.pop(str(beatmap_id), None)
             succeeded += 1
             print(f"Chart DNA {beatmap_id}: analyzed {entry['objects']} objects", flush=True)
@@ -268,7 +335,9 @@ def main():
 
     # Final checkpoint. Raw .osu content is never written to disk.
     persist(datetime.now(timezone.utc), blocked)
-    print(f"Chart DNA pilot: {succeeded}/{attempted} newly analyzed, {len(dna)} stored. No raw charts published.", flush=True)
+    elapsed = max(0.1, time.monotonic() - started_monotonic)
+    rate = succeeded / elapsed * 60
+    print(f"Chart DNA pilot: {succeeded}/{attempted} newly analyzed, {len(dna)} stored, {rate:.1f}/min. No raw charts published.", flush=True)
 
 
 if __name__ == "__main__":
