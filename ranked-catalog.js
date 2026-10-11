@@ -26,6 +26,10 @@ try {
 } catch (_) {}
 
 const ct = (n) => Number(n || 0).toLocaleString("ko-KR");
+
+// Start the only network-critical boot task before optional UI bindings below.
+// A missing/older DOM control must never prevent the public summary from loading.
+queueMicrotask(() => loadRankedSummary());
 const cx = (s) => esc(s === null || s === undefined ? "" : s);
 const barGraph = (rows, key, labelKey, limit = 25) => {
   const data = (rows || []).slice(0, limit);
@@ -597,8 +601,7 @@ $("chartModal").addEventListener("click", event => {
   if (event.target === $("chartModal")) $("chartModalClose").click();
 });
 
-// Boot summary first. renderIndexed() needs DOM controls that may not exist in older cached shells.
-loadRankedSummary();
+// Optional first list paint. The summary boot was already scheduled near the top of this file.
 try { renderIndexed(); } catch (err) {
   console.warn("Initial Ranked list render deferred", err);
 }
