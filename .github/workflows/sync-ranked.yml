@@ -4,7 +4,7 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: '23 */6 * * *'
+    - cron: '23 * * * *'
 concurrency:
   group: osu-ranked-sync-and-deploy
   cancel-in-progress: false
@@ -12,7 +12,7 @@ jobs:
   sync:
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 55
     permissions:
       contents: write
     steps:
@@ -26,7 +26,7 @@ jobs:
         env:
           OSU_CLIENT_ID: ${{ secrets.OSU_CLIENT_ID }}
           OSU_CLIENT_SECRET: ${{ secrets.OSU_CLIENT_SECRET }}
-        run: python sync_catalog.py --pages 20 --fresh-pages 2
+        run: python sync_catalog.py --pages 200 --fresh-pages 1 --delay 1.0
       - name: Publish completed pages even if a later API request fails
         if: always()
         run: |
