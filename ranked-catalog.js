@@ -207,7 +207,8 @@ async function loadRankedSummary() {
       loadRankedSearch();
   } catch (err) {
     $("catalogUpdated").textContent = "공식 Ranked 통계를 아직 불러오지 못했습니다. 배포 및 연결을 확인하세요.";
-    $("hostedSyncState").textContent = "검색 인덱스 배포 대기 중 · " + err.message;
+    $("hostedSyncState").innerHTML = "검색 인덱스 로딩 실패 · " + cx(err.message) + ' <button type="button" class="ghost-btn" id="retryRankedSummary">다시 불러오기 ↻</button>';
+    $("retryRankedSummary")?.addEventListener("click",loadRankedSummary);
     $("officialStatsArea").innerHTML = '<p class="muted">통계 데이터 배포 또는 네트워크 연결을 기다리는 중입니다.</p>';
     console.warn("Ranked summary unavailable", err);
     // Graceful migration: earlier public releases provide a seeded official index.
@@ -221,7 +222,7 @@ async function loadRankedSummary() {
       $("catalogUpdated").textContent = "요약 통계 배포 대기 중 · 기본 DB 목차로 수집량 표시";
     } catch (_) {}
     // Never download the bulky legacy JSON on the landing page.
-    $("indexedYear").innerHTML = '<option value="seed">배포 대기 · Ranked에 들어가면 예비 검색 사용</option>';
+    $("indexedYear").innerHTML = '<option value="seed">통계 로딩 실패 · 다시 불러오기</option>';
     $("recentRankedPreview").innerHTML = '<p class="muted">공식 통계 생성 대기 중입니다. Ranked 검색은 해당 메뉴에서 이용할 수 있습니다.</p>';
 
   }
