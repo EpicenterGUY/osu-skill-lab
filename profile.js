@@ -1,136 +1,78 @@
-/* Local, explicitly selected public osu! profile + optional server-side snapshot.
- * No OAuth access tokens in browser, no arbitrary API-key proxy.
+/* osu! Skill Lab — local-only profile shortcut.
+ * Username is saved exclusively to this browser's localStorage.
+ * No network API calls or public GitHub data files are used for the profile.
+ * External osu! profile page opens only after the user clicks its link.
  */
 const OSLProfile = (() => {
-  const STORE = "osl-profile-username";
-  const $p = id => document.getElementById(id);
-  const safe = value => esc(String(value ?? ""));
-  const commas = number => Number(number || 0).toLocaleString("ko-KR");
-  const clean = value => String(value || "").trim().slice(0, 60);
-  let chosen = "";
-  try { chosen = clean(localStorage.getItem(STORE)); } catch (_) {}
-  let published = null;
-  let publishedChecked = false;
-  let loading = null;
+  const KEY = "osl-profile-username";
+  const byId = id => document.getElementById(id);
+  const escapeHtml = value => esc(String(value ?? ""));
+  const clean = value => String(value ?? "").trim().slice(0, 60);
+  const userLink = name => "https://osu.ppy.sh/users/" + encodeURIComponent(name);
+  let username = "";
+  try { username = clean(localStorage.getItem(KEY)); } catch (_) {}
 
-  const urlFor = user => {
-    if (!user) return "https://osu.ppy.sh/home";
-    return "https://osu.ppy.sh/users/" + encodeURIComponent(user);
-  };
-  function validImage(url) {
-    try {
-      const parsed = new URL(String(url || ""));
-      return parsed.protocol === "https:" &&
-        (parsed.hostname === "a.ppy.sh" ||
-         parsed.hostname === "assets.ppy.sh" ||
-         parsed.hostname === "osu.ppy.sh") ? parsed.href : "";
-    } catch (_) { return ""; }
-  }
   function render() {
-    const field = $p("profileUserInput");
-    const result = $p("profileResult");
-    const home = $p("profileHomePreview");
-    const status = $p("profileStatus");
-    if (field && document.activeElement !== field) field.value = chosen;
-    if (!chosen) {
-      if (status) status.textContent = "osu! 닉네임 또는 숫자 ID를 입력하면 이 브라우저에 저장해 둘 수 있어요.";
-      if (result) result.innerHTML = '<div class="empty">프로필을 연결해 보세요. 비밀번호, OAuth 비밀키, 로그인 토큰은 필요하지 않습니다.</div>';
-      if (home) home.innerHTML = '<p class="muted">내 osu! 계정을 즐겨찾기에 등록하고 공식 프로필로 빠르게 이동하세요.</p><button type="button" data-tab="profile" class="ghost-btn">프로필 연결하기 ↗</button>';
+    const input = byId("profileUserInput");
+    const home = byId("profileHomePreview");
+    const result = byId("profileResult");
+    const status = byId("profileStatus");
+    if (input && document.activeElement !== input) input.value = username;
+
+    if (!username) {
+      if (status) status.textContent = "이 기기의 브라우저에만 저장합니다. GitHub나 다른 방문자에게 전송하지 않습니다.";
+      if (result) result.innerHTML =
+        '<div class="empty">프로필을 연결해 보세요. osu! 비밀번호나 API 키는 필요하지 않습니다.</div>';
+      if (home) home.innerHTML =
+        '<p class="muted">내 osu! 닉네임을 이 브라우저에만 저장하고 공식 프로필로 빠르게 이동할 수 있어요.</p>' +
+        '<button type="button" class="ghost-btn" data-tab="profile">프로필 등록 ↗</button>';
       return;
     }
-    const matched = published && (String(published.username || "").toLocaleLowerCase() === chosen.toLocaleLowerCase() ||
-        String(published.id || "") === chosen);
-    const account = matched ? published : null;
-    const username = account?.username || chosen;
-    const rank = account?.statistics || {};
-    const avatar = validImage(account?.avatar_url || (/^\d+$/.test(chosen) ? "https://a.ppy.sh/" + chosen : ""));
-    const cover = validImage(account?.cover_url);
-    const link = account?.id ? urlFor(String(account.id)) : urlFor(username);
-    const photo = avatar ? '<img class="profile-avatar" src="' + safe(avatar) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' :
-      '<span class="profile-avatar profile-avatar-fallback" aria-hidden="true">' + safe(username.charAt(0).toUpperCase()) + '</span>';
-    const banner = cover ? ' style="background-image:linear-gradient(90deg,#121c2de0,#121c2d86),url(&quot;' +
-      safe(cover) + '&quot;)"' : "";
-    const subline = account ? (safe(account.country_code || "—") + " · ID " + safe(account.id) +
-        " · " + safe((account.refreshed_at || "").slice(0, 10)) + " 공개 통계") :
-      "이 브라우저에 계정 저장됨 · 공개 통계 연결 대기";
-    let stats = "";
-    if (account) {
-      const items = [
-        ["PP", rank.pp == null ? "—" : commas(Math.round(rank.pp))],
-        ["세계 순위", rank.global_rank == null ? "—" : "#" + commas(rank.global_rank)],
-        ["국가 순위", rank.country_rank == null ? "—" : "#" + commas(rank.country_rank)],
-        ["정확도", rank.hit_accuracy == null ? "—" : Number(rank.hit_accuracy).toFixed(2) + "%"],
-        ["플레이 수", rank.play_count == null ? "—" : commas(rank.play_count)],
-        ["최대 콤보", rank.maximum_combo == null ? "—" : commas(rank.maximum_combo)]
-      ];
-      stats = '<div class="metrics profile-stats">' + items.map(([name, val]) =>
-        '<div class="metric"><b>' + safe(val) + '</b><span>' + safe(name) + '</span></div>'
-      ).join("") + '</div>';
-      if (status) status.textContent = "서버가 공식 osu! API에서 가져온 공개 프로필 정보를 표시 중입니다. 최신 기록과 다를 수 있어요.";
-    } else {
-      stats = '<div class="subtle-panel"><p><b>공식 기록은 아직 연결되지 않았어요.</b></p>' +
-        '<p class="hint-text">이 화면은 계정 링크를 저장한 상태입니다. GitHub Pages에는 실시간 osu! API 인증 서버가 없으므로 PP·순위는 임의로 표시하지 않습니다. ' +
-        '사이트 운영자가 저장소 변수 <code>OSU_PROFILE_USERNAME</code>에 해당 계정을 지정하면 GitHub Actions가 공개 통계를 주기적으로 가져옵니다.</p></div>';
-      if (status) status.textContent = publishedChecked ?
-        "계정 즐겨찾기는 완료 · 해당 계정의 공식 공개 통계 파일은 아직 없습니다." :
-        "계정 즐겨찾기 완료 · 공개 프로필 통계 확인 중…";
-    }
-    if (result) result.innerHTML = '<div class="profile-cover"' + banner + '>' +
-      '<div class="profile-identity">' + photo + '<div><span class="profile-kicker">OSU!STANDARD PROFILE</span>' +
-      '<h2>' + safe(username) + '</h2><p class="muted">' + subline + '</p></div></div></div>' +
-      stats + '<div class="profile-actions">' +
-      '<a class="hero-primary" href="' + safe(link) +
+
+    const name = escapeHtml(username);
+    const avatar = '<span class="profile-avatar profile-avatar-fallback" aria-hidden="true">' +
+      escapeHtml(username.charAt(0).toUpperCase()) + '</span>';
+    const link = escapeHtml(userLink(username));
+    if (status) status.textContent =
+      "내 브라우저 전용 · 계정 정보는 외부 서버나 공개 저장소에 업로드하지 않습니다.";
+    if (result) result.innerHTML =
+      '<div class="profile-cover"><div class="profile-identity">' + avatar +
+      '<div><span class="profile-kicker">LOCAL-ONLY OSU! PROFILE</span><h2>' + name +
+      '</h2><p class="muted">이 기기의 브라우저에만 저장된 프로필 바로가기</p></div></div></div>' +
+      '<div class="subtle-panel"><b>개인 프로필 모드</b><p class="hint-text">' +
+      'osu! 닉네임은 이 브라우저에만 저장됩니다. 다른 방문자는 자신의 계정을 별도로 등록할 수 있고, ' +
+      '공개 사이트에는 내 PP·랭크·플레이 기록을 게시하지 않습니다. ' +
+      'GitHub Pages만으로는 각 계정의 최신 통계를 비공개로 가져올 인증 기능이 없어 숫자를 임의로 표시하지 않습니다.' +
+      '</p></div><div class="profile-actions">' +
+      '<a class="hero-primary" href="' + link +
       '" target="_blank" rel="noopener noreferrer">osu! 공식 프로필 열기 ↗</a>' +
-      '<button type="button" id="profileChange" class="ghost-btn">다른 계정 선택</button></div>';
-    $p("profileChange")?.addEventListener("click", () => {
-      $p("profileUserInput")?.focus();
-      $p("profileUserInput")?.select();
+      '<button type="button" id="profileChange" class="ghost-btn">다른 계정 입력</button>' +
+      '<button type="button" id="profileForget" class="ghost-btn">이 브라우저에서 삭제</button></div>';
+    byId("profileChange")?.addEventListener("click", () => {
+      input?.focus();
+      input?.select();
     });
-    if (home) home.innerHTML = '<div class="profile-home-compact">' + photo +
-      '<div><b>' + safe(username) + '</b><span>' +
-      (account?.statistics?.pp != null ? commas(Math.round(account.statistics.pp)) + 'pp · ' +
-      (account.statistics.global_rank ? "#" + commas(account.statistics.global_rank) : "세계 순위 —") :
-      "공식 프로필 링크 저장됨") + '</span></div></div><button type="button" data-tab="profile" class="ghost-btn">프로필 보기 ↗</button>';
+    byId("profileForget")?.addEventListener("click", () => {
+      username = "";
+      try { localStorage.removeItem(KEY); } catch (_) {}
+      render();
+    });
+    if (home) home.innerHTML =
+      '<div class="profile-home-compact">' + avatar + '<div><b>' + name +
+      '</b><span>이 브라우저에만 저장된 계정</span></div></div>' +
+      '<button type="button" data-tab="profile" class="ghost-btn">내 프로필 보기 ↗</button>';
   }
 
-  async function checkPublished() {
-    if (publishedChecked) return published;
-    if (loading) return loading;
-    loading = (async () => {
-      try {
-        const response = await fetch("./data/osu-profile.json", {cache:"no-store"});
-        if (!response.ok) return null;
-        const value = await response.json();
-        if (value?.format === "osu-skill-lab-public-profile" &&
-            value.mode === "osu" && value.id && value.username) published = value;
-      } catch (err) {
-        console.info("Optional public profile snapshot unavailable", err);
-      } finally {
-        publishedChecked = true;
-        loading = null;
-        render();
-      }
-      return published;
-    })();
-    return loading;
-  }
-  const form = $p("profileForm");
-  form?.addEventListener("submit", event => {
+  byId("profileForm")?.addEventListener("submit", event => {
     event.preventDefault();
-    const text = clean($p("profileUserInput")?.value);
-    if (!text) return;
-    chosen = text;
-    try {localStorage.setItem(STORE,chosen);} catch (_) {}
+    const next = clean(byId("profileUserInput")?.value);
+    if (!next) return;
+    username = next;
+    try { localStorage.setItem(KEY, next); } catch (_) {}
     render();
-    checkPublished();
   });
 
-  // Profile data are optional, so never block HOME or Ranked from rendering.
   render();
-  if (chosen) checkPublished();
-  return {open: () => { render(); checkPublished(); }, refresh: () => {
-    publishedChecked = false;
-    return checkPublished();
-  }};
-})()
+  return { open: render, refresh: render };
+})();
 window.OSLProfile = OSLProfile;
