@@ -130,6 +130,21 @@ async function loadRankedSummary() {
     indexedYearCache.clear();
     indexedLoadedKey = "";
     renderCatalogSummary(s);
+    const progress = $("backfillProgress");
+    if (progress) {
+      const oldest = s.date_range?.oldest || "—";
+      const newest = s.date_range?.newest || "—";
+      const complete = Boolean(s.backfill_complete);
+      progress.innerHTML = '<div class="card-header"><b>역대 Ranked 수집 현황</b><span class="pill">' +
+        (complete ? "검색 커서 순회 완료" : "과거 데이터 수집 중") + '</span></div>' +
+        '<div class="metrics"><div class="metric"><b>' + ct(s.counts?.difficulties) +
+        '</b><span>확보된 채보</span></div><div class="metric"><b>' + ct(s.counts?.beatmapsets) +
+        '</b><span>확보된 비트맵셋</span></div></div>' +
+        '<p class="hint-text">수집된 날짜 범위: ' + cx(oldest) + ' ~ ' + cx(newest) +
+        ' · ' + (complete ? "API 페이지 순회가 끝났지만 삭제된 과거 채보의 완전성은 별도 검증이 필요합니다." :
+        "과거 채보를 계속 수집하는 중입니다. 전체 목표 개수가 확인되지 않아 퍼센트는 표시하지 않습니다.") +
+        '</p><a class="ghost-btn" target="_blank" rel="noopener noreferrer" href="https://github.com/EpicenterGUY/osu-skill-lab/actions/workflows/fast-ranked-backfill.yml">고속 수집 작업 확인 ↗</a>';
+    }
     const select = $("indexedYear");
     const prev = select.value;
     const months = s.search_shards.filter(sh => typeof sh.month === "string");
