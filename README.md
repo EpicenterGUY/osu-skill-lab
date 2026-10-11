@@ -10,7 +10,7 @@ Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analys
 - The profile nickname/ID stays **only in the current browser's localStorage**. It is not committed, uploaded, or sent to the GitHub Actions workflow. Other visitors cannot see it through the shared site.
 - No public osu! user profile snapshot is generated. The former `sync_profile.py` action and profile publishing code have been removed.
 - On a shared device, other people who use the same browser profile may see locally stored nicknames. The profile page includes an "이 브라우저에서 삭제" button to erase the saved shortcut.
-- Because the site is static and has no user-specific OAuth session, it does not show live PP/rank statistics for a personal private-browser profile. It provides an explicit official osu! profile link instead; that link is opened only when clicked.
+- With no Worker configured, the profile is a local-only shortcut plus optional manual JSON stats import. A user-deployed secret-backed Worker can fetch public osu! stats on demand without putting the data into the public site or repository.
 - Rapid GitHub UI commits now cancel older push-only deployment attempts, rather than queue dozens of redundant deploys. Hourly background sync runs remain separate.
 
 ## Web and mobile
@@ -25,6 +25,19 @@ Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analys
 - Full monthly metadata shards are not loaded by the page on entry; only the selected month/year search index is fetched on demand. Mobile, PWA, and desktop work with no browser OAuth credentials.
 - The optional **STATS → Ranked 색인 가져오기** button is only for importing additional local datasets.
 - Each map's official SR/BPM/AR/OD/CS/HP is obtained from osu! API v2. Custom skill heuristics are NOT official ratings.
+
+## Private-browser osu! profile auto-refresh (opt-in)
+
+**Important:** The Cloudflare Worker code is provided in [worker/osu-profile-worker.mjs](worker/osu-profile-worker.mjs), but it is **not deployed automatically**. The GitHub Pages site cannot read osu! API data without a secret-backed service, and the browser cannot safely hold the osu! OAuth Client Secret.
+
+Deployment setup:
+1. Create a Cloudflare Worker and paste/upload the module source from `worker/osu-profile-worker.mjs`. Publish it at your own HTTPS workers.dev or custom domain.
+2. In the Worker settings, add **encrypted secrets** `OSU_CLIENT_ID` and `OSU_CLIENT_SECRET` from an osu! OAuth application. **Never** put these values in public GitHub files, GitHub Pages HTML/JS, or the profile input.
+3. Set the Worker variable `SITE_ORIGIN` to `https://epicenterguy.github.io` (no trailing slash). The Worker only permits browser requests with this Origin header.
+4. Open Skill Lab → My osu! Profile, save your username in the browser, then paste the HTTPS Worker **base URL** into the Worker field and click Connect/Refresh. Only the endpoint URL and allowlisted profile stats are saved in the current browser's localStorage.
+5. The browser refreshes on profile visit / tab return if the local snapshot is over six hours old. Manual Refresh forces a request. There is no timer continuously polling in the background. Existing JSON import remains available.
+
+**Privacy limitations:** This approach does not publish a username or statistics to the GitHub repository or a public database. A profile lookup necessarily transmits the requested username to the Worker and osu!; the Worker returns public osu! statistics to the requesting browser. The Worker source does not persist profile requests or responses, but Cloudflare and osu! may maintain their own infrastructure/access logs. The Worker endpoint is publicly reachable and is **not** a private account authentication system; never send sensitive/private user data through it. An Origin check reduces casual browser cross-site access but is not proof of user identity or protection against non-browser callers. For production use, configure Cloudflare rate limiting/abuse protection and review provider logging settings.
 
 ## Fast full-history Ranked backfill
 **Automatic workflow:** [Fast osu! Ranked history backfill](.github/workflows/fast-ranked-backfill.yml)
