@@ -77,7 +77,8 @@ def main():
         parser.error("Invalid OSU_PROFILE_USERNAME")
     if DEST.exists():
         cached = json.loads(DEST.read_text(encoding="utf-8"))
-        if cached.get("username", "").casefold() == username.casefold():
+        if (cached.get("username", "").casefold() == username.casefold() or
+                (username.isdigit() and str(cached.get("id")) == username)):
             try:
                 age = (datetime.now(timezone.utc) - datetime.fromisoformat(cached["refreshed_at"])).total_seconds()
                 if 0 <= age < args.min_age_hours * 3600:
@@ -88,7 +89,8 @@ def main():
     if not osu_api.configured():
         print("No server-side osu! API credentials; public profile refresh skipped.")
         return
-    data = osu_api.get("/users/" + quote(username, safe="") + "/osu", {"key": "username"})
+    data = osu_api.get("/users/" + quote(username, safe="") + "/osu",
+                       {"key": "id" if username.isdigit() else "username"})
     if not isinstance(data, dict) or not data.get("id") or not data.get("username"):
         raise ValueError("osu! API returned no valid user profile")
     result = compact_user(data)
