@@ -210,6 +210,7 @@ async function loadRankedSummary() {
     if (s.format !== "osu-skill-lab-summary" || !Array.isArray(s.search_shards))
       throw Error("지원하지 않는 통계 형식");
     catalogSummary = s;
+    window.__rankedSummaryReady = true;
     summaryRetryCount = 0;
     try { localStorage.setItem("osl-ranked-summary-backup", JSON.stringify(s)); } catch (_) {}
     indexedYearCache.clear();
