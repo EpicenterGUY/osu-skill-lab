@@ -347,6 +347,7 @@ async function loadRankedSummary() {
     summaryRetryCount = 0;
     try { localStorage.setItem("osl-ranked-summary-backup", JSON.stringify(s)); } catch (_) {}
     indexedYearCache.clear();
+    dnaOverlayCache.clear();
     indexedLoadedKey = "";
     renderCatalogSummary(s);
     setRankedLoadState("Ranked 인덱스 준비", ct(s.counts?.difficulties) + "채보 · " + ((performance.now()-started)/1000).toFixed(1) + "초", 96);
