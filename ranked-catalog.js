@@ -8,6 +8,7 @@ let rankedIndex = [];
 let indexedLimit = 20;
 const indexedImported = new Map();
 const indexedYearCache = new Map();
+let legacyLoaded = false;
 let indexedGeneration = 0;
 let indexedLoadedKey = "";
 let indexedLoadPromise = null;
@@ -131,12 +132,19 @@ async function loadRankedSummary() {
     renderCatalogSummary(s);
     const select = $("indexedYear");
     const prev = select.value;
-    select.innerHTML = '<option value="all">전체 연도 (전체 검색 인덱스 로드)</option>' +
-      s.search_shards.map(sh => '<option value="' + cx(sh.year) + '">' +
-        cx(sh.year) + '년 · ' + ct(sh.count) + '채보</option>').join("");
-    select.value = s.search_shards.some(sh => sh.year === prev) || prev === "all" ? prev :
-      (s.search_shards[0]?.year || "all");
-    $("hostedSyncState").textContent = "연도 선택 시 해당 연도 검색 데이터를 불러옵니다. 통계는 이미 준비됐어요.";
+    const months = s.search_shards.filter(sh => typeof sh.month === "string");
+    const yearCounts = new Map();
+    for (const sh of s.search_shards) yearCounts.set(String(sh.year), (yearCounts.get(String(sh.year)) || 0) + Number(sh.count || 0));
+    const yearOptions = [...yearCounts.entries()].sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([year,count]) => '<option value="year:' + cx(year) + '">' + cx(year) + '년 전체 · ' + ct(count) + '채보</option>').join("");
+    select.innerHTML = '<option value="recent">최근 Ranked 30개 (즉시 표시)</option>' +
+      (months.length ? '<optgroup label="월별 빠른 검색">' + months.map(sh =>
+        '<option value="month:' + cx(sh.month) + '">' + cx(sh.month) + ' · ' + ct(sh.count) + '채보</option>').join("") + '</optgroup>' : "") +
+      '<optgroup label="연도별 검색">' + yearOptions + '</optgroup>' +
+      '<option value="all">전체 연도 검색 (데이터 다운로드 많음)</option>';
+    const validValues = ["recent","all",...months.map(sh => "month:" + sh.month),...yearCounts.keys()].map(x=>x.startsWith("year:")||x==="recent"||x==="all"||x.startsWith("month:")?x:"year:"+x);
+    select.value = validValues.includes(prev) ? prev : "recent";
+    $("hostedSyncState").textContent = "최근 Ranked는 즉시 표시됩니다. 월·연도 검색만 필요한 데이터를 받아요.";
     renderRecentPreview();
     if (document.getElementById("ranked").classList.contains("active"))
       loadRankedSearch();
@@ -155,21 +163,9 @@ async function loadRankedSummary() {
         '<div class="metric"><b>—</b><span>평균 BPM</span></div>';
       $("catalogUpdated").textContent = "요약 통계 배포 대기 중 · 기본 DB 목차로 수집량 표시";
     } catch (_) {}
-    try {
-      const legacy = await fetchCatalogJson("data/ranked-index.json", Date.now(), true);
-      if (Array.isArray(legacy.maps)) {
-        rankedIndex = legacy.maps.filter(m => m?.beatmap_id && m.source === "osu! API v2");
-        $("indexedYear").innerHTML = '<option value="seed">초기 공식 색인 (임시)</option>';
-        renderIndexed();
-        $("hostedSyncState").textContent = "예비 공식 색인 " + ct(rankedIndex.length) +
-          "개 표시 중 · 통계/연도별 검색 배포 대기";
-        $("recentRankedPreview").innerHTML = rankedIndex.slice(0, 5).map((m, i) =>
-          '<div class="recent-item"><span class="recent-num">' + (i + 1) +
-          '</span><div class="recent-copy"><a class="recent-title" href="https://osu.ppy.sh/beatmaps/' +
-          encodeURIComponent(m.beatmap_id) + '" target="_blank" rel="noopener noreferrer">' +
-          cx(m.artist || "?") + ' — ' + cx(m.title || "?") + '</a></div></div>').join("");
-      }
-    } catch (_) {}
+    // Never download the bulky legacy JSON on the landing page.
+    $("indexedYear").innerHTML = '<option value="seed">배포 대기 · Ranked에 들어가면 예비 검색 사용</option>';
+    $("recentRankedPreview").innerHTML = '<p class="muted">공식 통계 생성 대기 중입니다. Ranked 검색은 해당 메뉴에서 이용할 수 있습니다.</p>';
 
   }
 }
@@ -236,64 +232,100 @@ $("dnaOnly").addEventListener("change", () => {indexedLimit = 20; renderIndexed(
 $("indexedMore").addEventListener("click", () => {indexedLimit += 20; renderIndexed();});
 $("indexedYear").addEventListener("change", () => {indexedLoadedKey = ""; loadRankedSearch();});
 
+async function loadLegacyRanked() {
+  if (legacyLoaded) return;
+  $("hostedSyncState").textContent = "구버전 예비 색인 다운로드 중…";
+  try {
+    const legacy = await fetchCatalogJson("data/ranked-index.json", "seed1");
+    if (!Array.isArray(legacy.maps)) throw Error("예비 색인 형식 오류");
+    rankedIndex = legacy.maps.filter(m => m?.beatmap_id && m.source === "osu! API v2");
+    legacyLoaded = true;
+    indexedLimit = 20;
+    renderIndexed();
+    $("hostedSyncState").textContent = "예비 검색 " + ct(rankedIndex.length) +
+      "채보 준비 완료 · 새 통계 파일 배포를 기다리는 중";
+  } catch (e) {
+    $("hostedSyncState").textContent = "예비 색인 로딩 실패 · " + e.message;
+  }
+}
 async function loadRankedSearch() {
-  if (!catalogSummary) return;
-  const year = $("indexedYear").value;
-  const version = catalogSummary.updated_at || "1";
-  const key = year + "@" + version;
-  if (key === indexedLoadedKey) return;
-  if (indexedLoadPromise?.key === key) return indexedLoadPromise.promise;
-
-  const generation = ++indexedGeneration;
-  const shards = year === "all" ? catalogSummary.search_shards :
-    catalogSummary.search_shards.filter(sh => sh.year === year);
-  if (!shards.length) {
-    $("hostedSyncState").textContent = "해당 연도의 공개 검색 인덱스가 없습니다.";
+  if (!catalogSummary) return loadLegacyRanked();
+  const selection = $("indexedYear").value || "recent";
+  if (selection === "recent") {
+    indexedGeneration++;
+    indexedLoadedKey = "";
+    renderRecentPreview();
+    $("hostedSyncState").textContent = "최근 Ranked 30개 · 추가 다운로드 없음 (전체 검색은 월/연도 선택)";
     return;
   }
+  const version = catalogSummary.updated_at || "1";
+  const key = selection + "@" + version;
+  if (key === indexedLoadedKey) return;
+  if (indexedLoadPromise?.key === key) return indexedLoadPromise.promise;
+  const shards = selection === "all" ? catalogSummary.search_shards :
+    selection.startsWith("month:") ? catalogSummary.search_shards.filter(sh => sh.month === selection.slice(6)) :
+    selection.startsWith("year:") ? catalogSummary.search_shards.filter(sh => sh.year === selection.slice(5)) :
+    catalogSummary.search_shards.filter(sh => sh.year === selection); // v1 compatibility
+  if (!shards.length) {
+    $("hostedSyncState").textContent = "선택한 범위의 공개 검색 파일이 없습니다.";
+    return;
+  }
+  const generation = ++indexedGeneration;
   const task = (async () => {
+    const gathered = new Map();
     let loaded = 0, failed = 0;
-    const gathered = [];
-    $("hostedSyncState").textContent = year === "all" ?
-      "전체 연도 검색 인덱스 로딩 중… (" + shards.length + "개 묶음)" :
-      year + "년 검색 데이터 로딩 중…";
+    $("hostedSyncState").textContent = "검색 데이터 준비 중… " + shards.length + "개 월별 파일";
+    const range = selection === "all" ? "전체 연도" : selection.replace("month:", "").replace("year:", "");
     for (let i = 0; i < shards.length; i += 3) {
-      const batch = await Promise.allSettled(shards.slice(i, i + 3).map(async sh => {
-        if (indexedYearCache.has(sh.year)) return indexedYearCache.get(sh.year);
-        const rows = await fetchCatalogJson(sh.path, version);
-        if (!Array.isArray(rows)) throw Error("손상된 인덱스 · " + sh.year);
-        indexedYearCache.set(sh.year, rows);
+      const batch = await Promise.allSettled(shards.slice(i, i+3).map(async sh => {
+        const cacheKey = sh.path + "@" + (sh.version || version);
+        if (indexedYearCache.has(cacheKey)) return indexedYearCache.get(cacheKey);
+        const rows = await fetchCatalogJson(sh.path, sh.version || version);
+        if (!Array.isArray(rows)) throw Error("손상된 검색 파일 · " + sh.path);
+        indexedYearCache.set(cacheKey, rows);
         return rows;
       }));
       if (generation !== indexedGeneration) return;
       for (const item of batch) {
-        if (item.status === "fulfilled") {loaded += item.value.length; gathered.push(...item.value);}
-        else {failed++; console.warn("Ranked index load failure", item.reason);}
+        if (item.status === "fulfilled") {
+          loaded += item.value.length;
+          for (const m of item.value) if(m?.beatmap_id) gathered.set(String(m.beatmap_id),m);
+        } else {
+          failed++;
+          console.warn("Partial Ranked index unavailable",item.reason);
+        }
       }
-      $("hostedSyncState").textContent = "검색 인덱스 " + ct(loaded) + "개 로드 · " +
-        (Math.min(i + 3, shards.length)) + "/" + shards.length + "개 묶음" +
-        (failed ? " · 실패 " + failed + "개" : "");
-      await new Promise(resolve => setTimeout(resolve, 0));
+      // Progressively show results: the visitor doesn't wait for all years.
+      rankedIndex = [...gathered.values()];
+      indexedLimit = 20;
+      renderIndexed();
+      $("hostedSyncState").textContent = "검색 데이터 " + ct(loaded) + "개 로드 · " +
+        Math.min(i+3,shards.length) + "/" + shards.length + "파일" +
+        (failed ? " · 실패 " + failed : "");
+      await new Promise(resolve=>setTimeout(resolve,0));
     }
     if (generation !== indexedGeneration) return;
-    const merged = new Map();
-    for (const m of indexedImported.values()) if (year === "all" || String(m.ranked_date || "").startsWith(year))
-      merged.set(String(m.beatmap_id), m);
-    for (const m of gathered) if (m?.beatmap_id) merged.set(String(m.beatmap_id), m);
-    rankedIndex = [...merged.values()];
+    for (const m of indexedImported.values()) {
+      const date = String(m.ranked_date || "");
+      if (selection === "all" ||
+          (selection.startsWith("year:") && date.startsWith(selection.slice(5))) ||
+          (selection.startsWith("month:") && date.startsWith(selection.slice(6))))
+        gathered.set(String(m.beatmap_id),m);
+    }
+    rankedIndex = [...gathered.values()];
     indexedLoadedKey = failed ? "" : key;
     indexedLimit = 20;
     renderIndexed();
-    $("hostedSyncState").textContent = (year === "all" ? "전체 연도" : year + "년") +
-      " 수집된 " + ct(rankedIndex.length) + "채보 검색 준비 완료" +
-      (failed ? " · 일부 실패: 연도 변경 후 다시 시도" : "") +
-      " · 전체 Ranked 모집단이 아닌 확보된 DB 기준";
+    $("hostedSyncState").textContent = range + " · " + ct(rankedIndex.length) +
+      "채보 검색 가능" + (failed ? " · 일부 파일 실패 (범위를 바꿔 다시 시도)" : "") +
+      " · 현재 수집된 DB 기준";
   })();
-  indexedLoadPromise = {key, promise: task};
+  indexedLoadPromise = {key,promise:task};
   try {await task;} finally {
     if (indexedLoadPromise?.promise === task) indexedLoadPromise = null;
   }
 }
+
 window.loadRankedSearch = loadRankedSearch;
 
 $("importRanked").addEventListener("change", async e => {
