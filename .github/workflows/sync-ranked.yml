@@ -23,7 +23,7 @@ jobs:
           python-version: '3.12'
       - name: Validate Python source
         run: |
-          python -m py_compile osu_api.py sync_catalog.py build_ranked_views.py build_chart_dna.py sync_profile.py
+          python -m py_compile osu_api.py sync_catalog.py build_ranked_views.py build_chart_dna.py
           python -m unittest discover -s tests -q
       - name: Refresh newest maps and continue historical backfill
         env:
@@ -34,14 +34,6 @@ jobs:
         if: always()
         continue-on-error: true
         run: python build_chart_dna.py --limit 10 --delay 5
-      - name: Update opted-in public osu! profile (optional)
-        if: always()
-        continue-on-error: true
-        env:
-          OSU_CLIENT_ID: ${{ secrets.OSU_CLIENT_ID }}
-          OSU_CLIENT_SECRET: ${{ secrets.OSU_CLIENT_SECRET }}
-          OSU_PROFILE_USERNAME: ${{ vars.OSU_PROFILE_USERNAME }}
-        run: python sync_profile.py --min-age-hours 12
       - name: Build small dashboard summary and lazy search indexes
         if: always()
         run: python build_ranked_views.py
@@ -74,7 +66,7 @@ jobs:
       - uses: actions/configure-pages@v5
       - name: Build lightweight public statistics and search indexes
         run: |
-          python -m py_compile build_ranked_views.py build_chart_dna.py sync_profile.py
+          python -m py_compile build_ranked_views.py build_chart_dna.py
           python -m unittest discover -s tests -q
           python build_ranked_views.py
       - name: Prepare static Skill Lab site
