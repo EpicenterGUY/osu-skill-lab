@@ -1,15 +1,16 @@
 {
-  "version": "0.8.0",
+  "version": "0.9.0",
   "channel": "ranked",
-  "name": "Automatic Ranked Catalogue",
-  "released": "2026-10-11",
+  "name": "Fast Ranked dashboard and on-demand search",
+  "released": "2026-10-12",
   "features": [
-    "Seeded 832 official ranked difficulties hosted publicly",
-    "Monthly sharded official metadata catalogue",
-    "Automatic progressive loading on desktop and mobile",
-    "Search, sort, and official beatmap links",
-    "6-hour GitHub Actions historical backfill plus newest-page refresh",
-    "Resume state and safe OAuth secret usage",
-    "Local browser .osu skill heuristics; Python PC replay mode"
+    "Precomputed light public Ranked statistics on startup",
+    "Official summary: collected beatmapsets, difficulties, mapper count, date range, SR and BPM distributions",
+    "Mapper and popularity leaderboards",
+    "Lazily download yearly compact Ranked search indexes only on RANKED tab",
+    "All-years search optional on mobile",
+    "Hourly newer Ranked scan and resumable faster historical backfill",
+    "Original monthly detailed shards stay available but do not block page startup",
+    "Local browser .osu chart skill heuristics remain separate from official metadata"
   ]
 }
