@@ -1,0 +1,1 @@
+{"format":"osu-skill-lab-catalog","version":1,"source":"osu! API v2","mode":"osu","status_filter":"ranked","updated_at":"2026-10-11T14:30:19.978663+00:00","indexed_difficulties":832,"indexed_sets":250,"backfill_complete":false,"shards":[{"path":"data/ranked/2026-10.json","count":208,"month":"2026-10"},{"path":"data/ranked/2026-09.json","count":624,"month":"2026-09"}]}
