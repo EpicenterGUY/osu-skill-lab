@@ -4,6 +4,10 @@
  * "All years" is opt-in to protect phones as the catalogue grows.
  */
 let catalogSummary = null;
+let summaryRetryCount = 0;
+let summaryRetryTimer = null;
+let summaryLoadInFlight = false;
+
 let rankedIndex = [];
 let indexedLimit = 20;
 const indexedImported = new Map();
@@ -164,11 +168,16 @@ function renderCatalogSummary(s) {
 }
 
 async function loadRankedSummary() {
+  if (summaryLoadInFlight) return;
+  summaryLoadInFlight = true;
+  clearTimeout(summaryRetryTimer);
   try {
     const s = await fetchCatalogJson("data/ranked-summary.json", Date.now(), true);
     if (s.format !== "osu-skill-lab-summary" || !Array.isArray(s.search_shards))
       throw Error("지원하지 않는 통계 형식");
     catalogSummary = s;
+    summaryRetryCount = 0;
+    try { localStorage.setItem("osl-ranked-summary-backup", JSON.stringify(s)); } catch (_) {}
     indexedYearCache.clear();
     indexedLoadedKey = "";
     renderCatalogSummary(s);
@@ -206,6 +215,16 @@ async function loadRankedSummary() {
     if (document.getElementById("ranked").classList.contains("active"))
       loadRankedSearch();
   } catch (err) {
+    // A transient failed request must not leave the Ranked dashboard blank indefinitely.
+    if (!catalogSummary) {
+      try {
+        const cached = JSON.parse(localStorage.getItem("osl-ranked-summary-backup") || "null");
+        if (cached?.format === "osu-skill-lab-summary" && Array.isArray(cached.search_shards)) {
+          catalogSummary = cached;
+          renderCatalogSummary(cached);
+        }
+      } catch (_) {}
+    }
     $("catalogUpdated").textContent = "공식 Ranked 통계를 아직 불러오지 못했습니다. 배포 및 연결을 확인하세요.";
     $("hostedSyncState").innerHTML = "검색 인덱스 로딩 실패 · " + cx(err.message) + ' <button type="button" class="ghost-btn" id="retryRankedSummary">다시 불러오기 ↻</button>';
     $("retryRankedSummary")?.addEventListener("click",loadRankedSummary);
@@ -222,9 +241,17 @@ async function loadRankedSummary() {
       $("catalogUpdated").textContent = "요약 통계 배포 대기 중 · 기본 DB 목차로 수집량 표시";
     } catch (_) {}
     // Never download the bulky legacy JSON on the landing page.
-    $("indexedYear").innerHTML = '<option value="seed">통계 로딩 실패 · 다시 불러오기</option>';
-    $("recentRankedPreview").innerHTML = '<p class="muted">공식 통계 생성 대기 중입니다. Ranked 검색은 해당 메뉴에서 이용할 수 있습니다.</p>';
-
+    if (catalogSummary) {
+      $("hostedSyncState").textContent = "저장된 통계 표시 중 · 최신 DB 연결 재시도 중 (" + err.message + ")";
+    }
+    if (!catalogSummary) $("indexedYear").innerHTML = '<option value="seed">통계 로딩 실패 · 다시 불러오기</option>';
+    if (!catalogSummary) $("recentRankedPreview").innerHTML = '<p class="muted">공식 통계 연결 대기 중입니다. 자동 재시도 중이며, 계속 실패하면 다시 불러오기를 눌러주세요.</p>';
+    if (summaryRetryCount < 5) {
+      const delay = Math.min(30000, 2000 * Math.pow(2, summaryRetryCount++));
+      summaryRetryTimer = setTimeout(loadRankedSummary, delay);
+    }
+  } finally {
+    summaryLoadInFlight = false;
   }
 }
 
