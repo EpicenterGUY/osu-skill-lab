@@ -39,7 +39,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/ranked/ data/ranked-search/ data/ranked-summary.json data/ranked-manifest.json data/ranked-state.json data/chart-dna/ data/chart-dna-state.json data/chart-dna-manifest.json 2>/dev/null || true
+          git add -A data
           if ! git diff --cached --quiet; then
             git commit -m "Sync osu Ranked metadata catalog"
             git push
