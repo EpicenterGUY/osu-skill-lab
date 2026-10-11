@@ -71,7 +71,15 @@ def main():
     args = parser.parse_args()
     username = os.environ.get("OSU_PROFILE_USERNAME", "").strip()
     if not username:
-        print("No public profile configured; skipping (set repository variable OSU_PROFILE_USERNAME).")
+        # Optional alternative: a reviewed PUBLIC opt-in file committed by the owner.
+        # Never infer a public profile from Gmail, local files, or unrelated accounts.
+        config_file = DEST.parent / "profile-config.json"
+        if config_file.exists():
+            config = json.loads(config_file.read_text(encoding="utf-8"))
+            if config.get("publish_public_stats") is True:
+                username = str(config.get("username") or "").strip()
+    if not username:
+        print("No public profile configured; skipping (set OSU_PROFILE_USERNAME or explicit profile-config.json opt-in).")
         return
     if not 1 <= len(username) <= MAX_NAME_LENGTH or any(ch in username for ch in "\n\r\t\\/"):
         parser.error("Invalid OSU_PROFILE_USERNAME")
