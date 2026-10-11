@@ -62,11 +62,13 @@ jobs:
           ref: main
       - uses: actions/configure-pages@v5
       - name: Build lightweight public statistics and search indexes
-        run: python build_ranked_views.py
+        run: |
+          python -m py_compile build_ranked_views.py build_chart_dna.py
+          python build_ranked_views.py
       - name: Prepare static Skill Lab site
         run: |
           mkdir -p _site
-          cp index.html ranked-catalog.js mobile-analyzer.js manifest.webmanifest sw.js version.json _site/
+          cp index.html app-shell.css ranked-catalog.js mobile-analyzer.js mobile-replay.js manifest.webmanifest sw.js version.json _site/
           cp -R data _site/data
           touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v4
