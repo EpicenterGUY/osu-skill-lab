@@ -132,4 +132,5 @@ const OSLProfile = (() => {
     publishedChecked = false;
     return checkPublished();
   }};
-})();
+})()
+window.OSLProfile = OSLProfile;
