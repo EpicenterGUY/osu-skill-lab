@@ -39,7 +39,7 @@ jobs:
         continue-on-error: true
         # Hourly budget: up to 120 real .osu charts, ~4 minutes of polite pacing.
         # The analyzer checkpoints every 20 attempts and stops gently on 403/429/503.
-        run: python build_chart_dna.py --limit 120 --checkpoint-every 20 --delay 2
+        run: python build_chart_dna.py --limit 300 --checkpoint-every 25 --delay 1
       - name: Build small dashboard summary and lazy search indexes
         if: always()
         run: python build_ranked_views.py
