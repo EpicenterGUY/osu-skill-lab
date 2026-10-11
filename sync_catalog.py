@@ -159,12 +159,12 @@ def persist(maps, state):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pages", type=int, default=20, help="Historical pages per run, 0..20")
+    parser.add_argument("--pages", type=int, default=200, help="Historical pages per run, 0..500")
     parser.add_argument("--fresh-pages", type=int, default=2, help="Newest pages to rescan, 0..10")
     parser.add_argument("--delay", type=float, default=1.5)
     args = parser.parse_args()
-    if not 0 <= args.pages <= 20:
-        parser.error("--pages must be 0..20")
+    if not 0 <= args.pages <= 500:
+        parser.error("--pages must be 0..500")
     if not 0 <= args.fresh_pages <= 10:
         parser.error("--fresh-pages must be 0..10")
     if args.delay < 1:
