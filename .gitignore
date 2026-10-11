@@ -1,3 +1,7 @@
 __pycache__/
 *.py[cod]
 .DS_Store
+
+# Personal osu! profile information must never be published.
+data/osu-profile.json
+data/profile-config.json
