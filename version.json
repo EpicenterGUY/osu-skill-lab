@@ -1,7 +1,7 @@
 {
-  "version": "2.0.1",
+  "version": "2.2.0",
   "channel": "ranked",
-  "name": "Ranked loading repair and map details",
+  "name": "Research Explorer",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -23,6 +23,9 @@
     "Weird Map Observatory and DNA Difficulty Twins",
     "DNA skill leaderboards fed by resumable large backfill",
     "Fixed Ranked summary rendering and loading retry",
-    "Beatmap detail modal with official metadata and optional Chart DNA"
+    "Beatmap detail modal with official metadata and optional Chart DNA",
+    "Interactive Mapper Fingerprint detail explorer",
+    "Interactive Difficulty Twins pairs",
+    "Global similarity neighborhoods with DNA enrichment"
   ]
 }
