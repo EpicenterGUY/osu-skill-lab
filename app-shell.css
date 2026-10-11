@@ -231,3 +231,15 @@ dialog.chart-modal::backdrop{background:#030812ce;backdrop-filter:blur(6px)}
 .dna-era-list>div{display:grid;grid-template-columns:42px minmax(70px,1fr) 48px 92px;gap:8px;align-items:center;font-size:10px}
 .dna-era-list>div>span{font-weight:850;color:#dbe7f6}.dna-era-list>div>b{text-align:right;color:#ff8fbe}.dna-era-list>div>small{text-align:right;color:#91a0b8}
 @media(max-width:500px){.collector-health{align-items:flex-start;flex-direction:column}.collector-health span{text-align:left}.dna-era-list>div{grid-template-columns:38px minmax(60px,1fr) 44px 76px;gap:6px}}
+
+/* v1.6 Observatory Era Compare */
+.era-compare-card{margin:0 0 14px}
+.era-compare-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.era-compare-controls label{display:grid;gap:6px;color:#9aacbf;font-size:10px;font-weight:800}
+.era-compare-result{min-height:84px}
+.era-compare-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.era-compare-kpis>div{padding:12px;border:1px solid #2e4057;border-radius:13px;background:#111a2a;min-width:0}
+.era-compare-kpis span,.era-compare-kpis small{display:block;color:#91a0b8;font-size:9px}
+.era-compare-kpis b{display:block;margin:5px 0 3px;font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.era-compare-kpis>div:nth-child(3) b{color:#ff93c1}
+@media(max-width:700px){.era-compare-controls{grid-template-columns:1fr 1fr}.era-compare-controls label:last-child{grid-column:1/-1}.era-compare-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
