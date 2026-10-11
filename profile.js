@@ -43,7 +43,7 @@ const OSLProfile = (() => {
     const account = matched ? published : null;
     const username = account?.username || chosen;
     const rank = account?.statistics || {};
-    const avatar = validImage(account?.avatar_url);
+    const avatar = validImage(account?.avatar_url || (/^\d+$/.test(chosen) ? "https://a.ppy.sh/" + chosen : ""));
     const cover = validImage(account?.cover_url);
     const link = account?.id ? urlFor(String(account.id)) : urlFor(username);
     const photo = avatar ? '<img class="profile-avatar" src="' + safe(avatar) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' :
