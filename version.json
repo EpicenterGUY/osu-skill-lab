@@ -1,7 +1,7 @@
 {
-  "version": "0.5.2",
+  "version": "0.6.0",
   "channel": "ranked",
-  "name": "Mobile Interaction Fixes",
+  "name": "Ranked Metadata Index",
   "released": "2026-10-11",
   "features": [
     "installable PWA shell",
