@@ -3,12 +3,14 @@
 Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analysis.
 **GitHub Pages:** https://epicenterguy.github.io/osu-skill-lab/
 
-## v1.1 fast load and user profile
+## v1.1 fast load and browser-local profiles
 - The repository contains a pre-seeded `data/ranked-summary.json` (about 25 KB at initial 5,058 difficulties), so first paint never depends on downloading every Ranked map.
 - The summary lists compact month-index files under `data/ranked-search/YYYY-MM.json`. RANKED initially shows 30 recent maps, and fetching a month/year/all-years requires explicitly selecting that scope. Unchanged monthly files have stable content hashes so returning visitors can use HTTP cache.
 - `profile.js` offers a local-only osu! username/ID shortcut and a dedicated profile panel. Merely saving a username is **not** osu! authentication.
-- For the repository owner to opt in to **publishing their already-public osu!standard statistics** (PP, global/country rank, accuracy, play count), go to **Settings → Secrets and variables → Actions → Variables → New repository variable**, set `OSU_PROFILE_USERNAME` to their osu! username (or numeric ID), then manually run the existing sync workflow. The Actions job reads the existing secure osu! Client ID/Secret, writes the allowlisted `data/osu-profile.json`, and refreshes at most once every 12 hours. Anyone visiting this PUBLIC repository can read that output; never use it for a private account.
-- Other visitors can save their own osu! profile link locally. The static site does not fetch their private info, solicit tokens, or masquerade as a multi-user OAuth login.
+- The profile nickname/ID stays **only in the current browser's localStorage**. It is not committed, uploaded, or sent to the GitHub Actions workflow. Other visitors cannot see it through the shared site.
+- No public osu! user profile snapshot is generated. The former `sync_profile.py` action and profile publishing code have been removed.
+- On a shared device, other people who use the same browser profile may see locally stored nicknames. The profile page includes an "이 브라우저에서 삭제" button to erase the saved shortcut.
+- Because the site is static and has no user-specific OAuth session, it does not show live PP/rank statistics for a personal private-browser profile. It provides an explicit official osu! profile link instead; that link is opened only when clicked.
 - Rapid GitHub UI commits now cancel older push-only deployment attempts, rather than queue dozens of redundant deploys. Hourly background sync runs remain separate.
 
 ## Web and mobile
@@ -18,9 +20,9 @@ Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analys
 - Browser `.osu` strain timeline now uses a sliding window rather than scanning every object for every second.
 - HOME loads only the tiny precomputed `data/ranked-summary.json`: collected song/difficulty counts, official SR/BPM averages, collection date range, and backfill state.
 - STATS shows year, month, SR, BPM, mapper, star-rating, and playcount leaderboards, calculated by GitHub Actions rather than every visitor's phone.
-- RANKED loads lightweight `data/ranked-search/YYYY.json` when the tab opens. The newest available year loads by default, and the **All years** selection lets the visitor search every indexed year (larger download).
+- RANKED loads lightweight `data/ranked-search/YYYY-MM.json` when the tab opens. Recent 30 maps render by default, and a selected month/year/**All years** option lets the visitor search every indexed year (larger download).
 - Search by artist, title, mapper, difficulty, and beatmap ID. Sort by official SR, BPM, ranked date, and play count.
-- Full monthly metadata shards are not loaded by the page on entry; only the selected year search index is fetched on demand. Mobile, PWA, and desktop work with no browser OAuth credentials.
+- Full monthly metadata shards are not loaded by the page on entry; only the selected month/year search index is fetched on demand. Mobile, PWA, and desktop work with no browser OAuth credentials.
 - The optional **STATS → Ranked 색인 가져오기** button is only for importing additional local datasets.
 - Each map's official SR/BPM/AR/OD/CS/HP is obtained from osu! API v2. Custom skill heuristics are NOT official ratings.
 
@@ -42,15 +44,15 @@ Every run:
 - Scans the newest ranked-search page independently for new maps.
 - Advances up to 200 historical pages per scheduled run using `data/ranked-state.json` cursor (resuming earlier work).
 - Deduplicates by beatmap ID and groups by ranking month in `data/ranked/YYYY-MM.json`.
-- Publishes the shard manifest `data/ranked-manifest.json` and runs `build_ranked_views.py` to generate a tiny stats JSON + year-split compact search indexes.
-- The static website reads only the stats JSON on first load; opening RANKED lazily fetches the chosen year.
+- Publishes the shard manifest `data/ranked-manifest.json` and runs `build_ranked_views.py` to generate a tiny stats JSON + month-split compact search indexes.
+- The static website reads only the stats JSON on first load; opening RANKED renders the recent 30 immediately and only fetches more when a month/year is selected.
 - The same GitHub Actions workflow explicitly uploads and deploys the site after a successful sync; there is no dependency on branch-source auto-builds.
 
 ### Catalogue files
 - `data/ranked-manifest.json` — public shard index, update time, counts, history pagination status.
 - `data/ranked/*.json` — full official metadata by month, no client secret.
 - `data/ranked-summary.json` — precomputed small public statistics.
-- `data/ranked-search/*.json` — compact year-specific search indexes, downloaded on demand.
+- `data/ranked-search/*.json` — compact month-specific search indexes, downloaded on demand.
 - `build_ranked_views.py` — stats/index generator requiring no API secrets, run by sync and Pages deployments.
 - `build_chart_dna.py` — optional small, rate-limited pilot analysis of real `.osu` object geometry, retaining only derived metrics.
 - `data/chart-dna/*.json` — experimental derived scores (not original `.osu` charts).
