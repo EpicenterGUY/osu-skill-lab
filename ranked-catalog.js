@@ -140,15 +140,16 @@ function renderCatalogSummary(s) {
   const research=s.research||{}, era=research.era_trends||[], fps=research.mapper_fingerprints||[], odds=research.oddities||[], twins=research.difficulty_twins||[];
   const eraEl=$("eraResearch"); if(eraEl) eraEl.innerHTML=era.length ? '<div class="research-table">'+era.slice(-12).map(x=>'<div><b>'+cx(x.year)+'</b><span>★'+Number(x.sr||0).toFixed(2)+'</span><span>'+Number(x.bpm||0).toFixed(0)+' BPM</span><span>AR '+Number(x.ar||0).toFixed(1)+'</span></div>').join('')+'</div>' : '<div class="empty">시대 통계가 없습니다.</div>';
   const mapEl=$("mapperResearch"); if(mapEl) mapEl.innerHTML=fps.length ? fps.slice(0,14).map((x,i)=>'<button type="button" class="research-rank research-rank-btn" data-mapper-fp="'+encodeURIComponent(x.name)+'"><b>'+(i+1)+'</b><span><strong>'+cx(x.name)+'</strong><small>'+ct(x.beatmapsets)+' sets · 평균 ★'+Number(x.avg_sr||0).toFixed(2)+' · '+Number(x.avg_bpm||0).toFixed(0)+' BPM'+(x.dna_sample?' · DNA '+ct(x.dna_sample):'')+'</small></span></button>').join('') : '<div class="empty">맵퍼 통계가 없습니다.</div>';
-  const oddEl=$("oddityResearch"); if(oddEl) oddEl.innerHTML=odds.length ? odds.slice(0,10).map((m,i)=>'<div class="research-rank"><b>'+(i+1)+'</b><span><strong>'+cx(m.artist)+' — '+cx(m.title)+'</strong><small>★'+Number(m.official_sr||0).toFixed(2)+' · '+Number(m.bpm||0).toFixed(0)+' BPM · '+Math.round(Number(m.total_length||0)/60)+'분</small></span></div>').join('') : '<div class="empty">이상치가 없습니다.</div>';
+  const oddEl=$("oddityResearch"); if(oddEl) oddEl.innerHTML=odds.length ? odds.slice(0,10).map((m,i)=>'<button type="button" class="research-rank research-rank-btn" data-ranked-detail="'+encodeURIComponent(String(m.beatmap_id||""))+'"><b>'+(i+1)+'</b><span><strong>'+cx(m.artist)+' — '+cx(m.title)+'</strong><small>★'+Number(m.official_sr||0).toFixed(2)+' · '+Number(m.bpm||0).toFixed(0)+' BPM · '+Math.round(Number(m.total_length||0)/60)+'분</small></span></button>').join('') : '<div class="empty">이상치가 없습니다.</div>';
   const twinEl=$("twinResearch"); if(twinEl) twinEl.innerHTML=twins.length ? twins.slice(0,12).map(x=>'<div class="twin-pair"><button data-ranked-detail="'+encodeURIComponent(String(x.a?.beatmap_id||''))+'">'+cx(x.a?.title)+' ['+cx(x.a?.version)+']</button><b>≈</b><button data-ranked-detail="'+encodeURIComponent(String(x.b?.beatmap_id||''))+'">'+cx(x.b?.title)+' ['+cx(x.b?.version)+']</button><small>DNA 거리 '+Number(x.dna_distance).toFixed(1)+' · SR 차이 '+Number(x.sr_gap).toFixed(2)+'</small></div>').join('') : '<div class="collection-state"><b>DNA 쌍둥이 탐색 준비 중</b><span>실제 Chart DNA 표본이 들어오는 즉시 자동 계산됩니다.</span></div>';
-  const leader=$("dnaSkillLeaderboard"), rankings=research.dna_rankings||{}; if(leader){const skills=["aim","stream","speed","stamina","tech","reading","flow"]; leader.innerHTML=skills.map(k=>{const top=(rankings[k]||[])[0];return '<div class="dna-lead"><span>'+k.toUpperCase()+'</span>'+(top?'<b>'+cx(top.title)+'</b><small>'+Number(top.dna?.skills?.[k]||0).toFixed(1)+' · ★'+Number(top.official_sr||0).toFixed(2)+'</small>':'<b>수집 중</b><small>실제 .osu 분석 대기</small>')+'</div>'}).join('');}
+  const leader=$("dnaSkillLeaderboard"), rankings=research.dna_rankings||{}; if(leader){const skills=["aim","stream","speed","stamina","tech","reading","flow"]; leader.innerHTML=skills.map(k=>{const top=(rankings[k]||[])[0];return top?'<button type="button" class="dna-lead dna-lead-btn" data-ranked-detail="'+encodeURIComponent(String(top.beatmap_id||""))+'"><span>'+k.toUpperCase()+'</span><b>'+cx(top.title)+'</b><small>'+Number(top.dna?.skills?.[k]||0).toFixed(1)+' · ★'+Number(top.official_sr||0).toFixed(2)+'</small></button>':'<div class="dna-lead"><span>'+k.toUpperCase()+'</span><b>수집 중</b><small>실제 .osu 분석 대기</small></div>'}).join('');}
+  renderDnaRanking();
   document.querySelectorAll("[data-research-target]").forEach(b=>{if(!b.dataset.bound){b.dataset.bound="1";b.addEventListener("click",()=>{$("researchObservatory")?.scrollIntoView({behavior:"smooth",block:"start"})})}});
   const yearRows = (s.years || []).filter(x => x.year !== "unknown");
   const mapperRows = (s.top_mappers || []).slice(0, 15).map((m, i) =>
     '<tr><td>' + (i + 1) + '</td><td>' + cx(m.name) + '</td><td>' +
     ct(m.beatmapsets) + '곡 / ' + ct(m.difficulties) + '채보</td></tr>').join("");
-  $("officialStatsArea").innerHTML =
+  const officialStats=$("officialStatsArea"); if(officialStats) officialStats.innerHTML =
     '<div class="grid">' +
     '<div class="card half"><h2>연도별 Ranked 난이도</h2>' +
     '<p class="muted">현재 수집분 기준 · 연도별 비트맵셋은 아래 표기</p>' +
@@ -181,17 +182,10 @@ function renderCatalogSummary(s) {
     '</b><span>전체 수집된 채보</span></div></div>' +
     '<p class="hint-text">Chart DNA는 새로운 Ranked부터 소량씩 시범 분석하며, 원본 .osu 파일을 사이트에 공개하지 않습니다. API 또는 파일 제공처 접근 제한 시 분석이 지연될 수 있습니다.</p></div>' +
     '</div>';
-  $("officialStatsArea").querySelectorAll("[data-year-link]").forEach(b => {
-    b.addEventListener("click", () => {
-      openTab("ranked");
-      $("indexedYear").value = b.dataset.yearLink;
-      loadRankedSearch();
-    });
-  });
-  $("rankedIndexStats").textContent = ct(count.beatmapsets) + "곡 · " +
+  if($("rankedIndexStats")) $("rankedIndexStats").textContent = ct(count.beatmapsets) + "곡 · " +
     ct(count.difficulties) + "채보 · " + current +
     " · 공식 메타데이터만 집계 (채보 DNA는 별도)";
-  $("rankedIndexTop").innerHTML = '<h3>수집된 공식 SR TOP 10</h3>' +
+  if($("rankedIndexTop")) $("rankedIndexTop").innerHTML = '<h3>수집된 공식 SR TOP 10</h3>' +
     (s.top_sr || []).slice(0, 10).map((m, i) =>
       '<div class="dbitem"><b>#' + (i + 1) + ' ' + officialMapLink(m) +
       '</b><div class="muted">★' + Number(m.official_sr || 0).toFixed(2) +
@@ -360,25 +354,26 @@ function scheduleIndexedRender() {
     renderIndexed();
   }, 130);
 }
-$("indexedQuery").addEventListener("input", scheduleIndexedRender);
-$("indexedSort").addEventListener("change", () => {indexedLimit = 20; renderIndexed();});
+$("indexedQuery")?.addEventListener("input", scheduleIndexedRender);
+$("indexedSort")?.addEventListener("change", () => {indexedLimit = 20; renderIndexed();});
 $("indexedMinSr")?.addEventListener("change", () => {indexedLimit = 20; renderIndexed();});
 $("indexedMinBpm")?.addEventListener("change", () => {indexedLimit = 20; renderIndexed();});
 document.querySelectorAll("[data-ranked-jump]").forEach(b => b.addEventListener("click", () => {
-  $("indexedSort").value = b.dataset.rankedJump; indexedLimit = 20; renderIndexed();
+  const sort=$("indexedSort"); if(sort) sort.value=b.dataset.rankedJump;
+  indexedLimit = 20; renderIndexed();
   document.querySelector(".filter-toolbar")?.scrollIntoView({behavior:"smooth",block:"start"});
 }));
 document.querySelectorAll("[data-ranked-preset]").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll("[data-ranked-preset]").forEach(x=>x.classList.toggle("active",x===b));
-  const p=b.dataset.rankedPreset;
-  $("indexedMinSr").value = p==="hard" ? "6" : "0";
-  $("indexedMinBpm").value = p==="fast" ? "200" : "0";
-  $("indexedSort").value = p==="popular" ? "plays" : p==="recent" ? "recent" : p==="fast" ? "bpm_desc" : "sr_desc";
+  const p=b.dataset.rankedPreset, sr=$("indexedMinSr"), bpm=$("indexedMinBpm"), sort=$("indexedSort");
+  if(sr) sr.value = p==="hard" ? "6" : "0";
+  if(bpm) bpm.value = p==="fast" ? "200" : "0";
+  if(sort) sort.value = p==="popular" ? "plays" : p==="recent" ? "recent" : p==="fast" ? "bpm_desc" : "sr_desc";
   indexedLimit=20; renderIndexed();
 }));
-$("dnaOnly").addEventListener("change", () => {indexedLimit = 20; renderIndexed();});
-$("indexedMore").addEventListener("click", () => {indexedLimit += 20; renderIndexed();});
-$("indexedYear").addEventListener("change", () => {indexedLoadedKey = ""; loadRankedSearch();});
+$("dnaOnly")?.addEventListener("change", () => {indexedLimit = 20; renderIndexed();});
+$("indexedMore")?.addEventListener("click", () => {indexedLimit += 20; renderIndexed();});
+$("indexedYear")?.addEventListener("change", () => {indexedLoadedKey = ""; loadRankedSearch();});
 
 async function loadLegacyRanked() {
   if (legacyLoaded) return;
@@ -476,7 +471,7 @@ async function loadRankedSearch() {
 
 window.loadRankedSearch = loadRankedSearch;
 
-$("importRanked").addEventListener("change", async e => {
+$("importRanked")?.addEventListener("change", async e => {
   const f = e.target.files[0];
   if (!f) return;
   try {
@@ -496,6 +491,37 @@ $("importRanked").addEventListener("change", async e => {
   e.target.value = "";
 });
 
+
+function findSummaryMap(id) {
+  id=String(id||"");
+  const s=catalogSummary||{}, r=s.research||{}, candidates=[
+    ...(s.recent||[]), ...(s.top_sr||[]), ...(s.top_bpm||[]), ...(s.top_playcount||[]),
+    ...(s.extremes?.highest_sr||[]), ...(s.extremes?.highest_bpm||[]), ...(s.extremes?.longest||[]),
+    ...(r.oddities||[]), ...Object.values(r.dna_rankings||{}).flat(),
+    ...(r.difficulty_twins||[]).flatMap(x=>[x.a,x.b])
+  ];
+  return candidates.find(m=>String(m?.beatmap_id||"")===id) || null;
+}
+function readLocalDnaRows() {
+  try {
+    const rows=JSON.parse(localStorage.getItem("osl-db")||"[]");
+    return Array.isArray(rows)?rows:[];
+  } catch (_) { return []; }
+}
+function renderDnaRanking() {
+  const host=$("dnaGlobalRanking"); if(!host) return;
+  const metric=$("dnaMetric")?.value||"overall", scope=$("dnaScope")?.value||"all";
+  if(scope==="local"){
+    const rows=readLocalDnaRows().filter(m=>m?.skills && Number.isFinite(Number(m.skills[metric])))
+      .sort((a,b)=>Number(b.skills[metric])-Number(a.skills[metric])).slice(0,30);
+    host.innerHTML=rows.length?rows.map((m,i)=>'<button type="button" class="dna-rank-row" data-local-chart="'+encodeURIComponent(String(m.md5||""))+'"><b>#'+(i+1)+'</b><span><strong>'+cx(m.meta?.Title||m.filename||"로컬 채보")+'</strong><small>'+cx(m.meta?.Artist||"?")+' · '+metric.toUpperCase()+' '+Number(m.skills[metric]||0).toFixed(1)+' · '+Number(m.bpm||0).toFixed(0)+' BPM</small></span></button>').join(""):'<div class="collection-state"><b>내 로컬 DNA가 없습니다</b><span>.osu 파일을 분석하면 이 기기 안에서 스킬별 랭킹을 바로 만들 수 있습니다.</span></div>';
+    return;
+  }
+  const rows=catalogSummary?.research?.dna_rankings?.[metric]||[];
+  host.innerHTML=rows.length?rows.slice(0,30).map((m,i)=>'<button type="button" class="dna-rank-row" data-ranked-detail="'+encodeURIComponent(String(m.beatmap_id||""))+'"><b>#'+(i+1)+'</b><span><strong>'+cx(m.artist||"?")+' — '+cx(m.title||"?")+'</strong><small>'+cx(m.creator||"?")+' · '+metric.toUpperCase()+' '+Number(m.dna?.skills?.[metric]||0).toFixed(1)+' · ★'+Number(m.official_sr||0).toFixed(2)+'</small></span></button>').join(""):'<div class="collection-state"><b>'+metric.toUpperCase()+' 랭킹 수집 중</b><span>실제 .osu Chart DNA 분석분이 쌓이면 자동으로 채워집니다.</span></div>';
+}
+$("dnaMetric")?.addEventListener("change",renderDnaRanking);
+$("dnaScope")?.addEventListener("change",renderDnaRanking);
 
 /* Actual-chart experimental DNA viewer; never label the scores as official SR/pp. */
 function mapDistance(a,b){
@@ -520,7 +546,7 @@ function showRankedDetails(map) {
     ["플레이 수",ct(map.playcount)],["Ranked 날짜",String(map.ranked_date||"—").slice(0,10)]
   ];
   const mini=m=>'<button type="button" class="detail-neighbor" data-ranked-detail="'+encodeURIComponent(String(m.beatmap_id))+'"><b>'+cx(m.title)+' ['+cx(m.version)+']</b><small>'+cx(m.creator)+' · ★'+Number(m.official_sr||0).toFixed(2)+' · '+Number(m.bpm||0).toFixed(0)+' BPM</small></button>';
-  const area=$("chartModalBody");
+  const area=$("chartModalBody"); if(!area) return;
   area.innerHTML='<span class="chart-dna-badge">Ranked Explorer · 공식 메타데이터</span>'+
     '<h2>'+cx(map.artist||"?")+' — '+cx(map.title||"?")+'</h2>'+
     '<p class="muted">['+cx(map.version||"?")+'] · '+cx(map.creator||"?")+'</p>'+
@@ -531,7 +557,7 @@ function showRankedDetails(map) {
     '<section><h3>같은 맵퍼 더 보기</h3><div class="detail-neighbors">'+(sameMapper.length?sameMapper.map(mini).join(""):'<div class="empty">현재 불러온 범위에 다른 채보 없음</div>')+'</div></section></div>'+
     '<div class="ranked-detail-actions"><a class="ghost-btn" href="https://osu.ppy.sh/beatmaps/'+encodeURIComponent(map.beatmap_id)+'" target="_blank" rel="noopener noreferrer">osu! 채보 페이지 ↗</a>'+
     '<a class="ghost-btn" href="https://osu.ppy.sh/beatmapsets/'+encodeURIComponent(map.beatmapset_id)+'" target="_blank" rel="noopener noreferrer">비트맵셋 보기 ↗</a></div>';
-  const dialog=$("chartModal");if(typeof dialog.showModal==="function"&&!dialog.open)dialog.showModal();else dialog.setAttribute("open","");
+  const dialog=$("chartModal");if(!dialog)return;if(typeof dialog.showModal==="function"&&!dialog.open)dialog.showModal();else dialog.setAttribute("open","");
 }
 function showChartDna(map) {
   if (!map?.dna?.skills) return;
@@ -549,7 +575,8 @@ function showChartDna(map) {
     ["2초 Peak 밀도", ct(dna.peak_density_2s) + " notes"],
     ["중앙 노트 간격", Number(dna.median_gap_ms || 0).toFixed(0) + "ms"],
   ];
-  $("chartModalBody").innerHTML =
+  const body=$("chartModalBody"); if(!body) return;
+  body.innerHTML =
     '<span class="chart-dna-badge">실제 .osu 채보 기반 · 시범 분석</span>' +
     '<h2>' + cx(map.artist || "?") + ' — ' + cx(map.title || "?") + '</h2>' +
     '<p class="muted">' + cx(map.version || "?") + ' · ' + cx(map.creator || "?") +
@@ -562,8 +589,8 @@ function showChartDna(map) {
     '<p class="hint-text">슬라이더 세부 처리, 연타 기술, 플레이어 실력은 온전히 반영하지 못할 수 있습니다. osu! 공식 난이도/pp와 직접 비교하는 수치가 아닙니다.</p>' +
     '<a class="ghost-btn" target="_blank" rel="noopener noreferrer" href="https://osu.ppy.sh/beatmaps/' +
     encodeURIComponent(map.beatmap_id) + '">osu! 원본 채보 페이지 ↗</a>';
-  const dialog = $("chartModal");
-  if (typeof dialog.showModal === "function") dialog.showModal();
+  const dialog = $("chartModal"); if(!dialog) return;
+  if (typeof dialog.showModal === "function"&&!dialog.open) dialog.showModal();
   else {dialog.setAttribute("open","");}
 }
 document.addEventListener("click", event => {
@@ -574,90 +601,89 @@ document.addEventListener("click", event => {
   area.innerHTML='<span class="chart-dna-badge">Mapper Fingerprint</span><h2>'+cx(fp.name)+'</h2>'+
     '<div class="ranked-detail-grid"><div><small>비트맵셋</small><b>'+ct(fp.beatmapsets)+'</b></div><div><small>난이도</small><b>'+ct(fp.difficulties)+'</b></div><div><small>평균 SR</small><b>★'+Number(fp.avg_sr||0).toFixed(2)+'</b></div><div><small>평균 BPM</small><b>'+Number(fp.avg_bpm||0).toFixed(1)+'</b></div><div><small>DNA 표본</small><b>'+ct(fp.dna_sample||0)+'</b></div></div>'+
     (Object.keys(skills).length?'<h3>분석된 채보의 평균 DNA</h3><div class="dna-leaderboard">'+Object.entries(skills).map(([k,v])=>'<div class="dna-lead"><span>'+cx(k.toUpperCase())+'</span><b>'+Number(v).toFixed(1)+'</b></div>').join("")+'</div>':'<div class="collection-state"><b>DNA 표본 수집 중</b><span>맵퍼의 실제 Chart DNA가 분석되면 스타일 축이 자동으로 추가됩니다.</span></div>')+
-    '<p class="muted">메타데이터 통계는 현재 수집된 Ranked/Approved 카탈로그 기준이며, DNA 값은 분석 완료된 채보 표본만 사용합니다.</p>';
+    '<p class="muted">메타데이터 통계는 현재 수집된 Ranked/Approved 카탈로그 기준이며, DNA 값은 분석 완료된 채보 표본만 사용합니다.</p>'+
+    '<div class="ranked-detail-actions"><button type="button" class="ghost-btn" data-mapper-search="'+encodeURIComponent(fp.name)+'">이 맵퍼 Ranked 검색 ↗</button></div>';
   const d=$("chartModal");if(typeof d.showModal==="function"&&!d.open)d.showModal();else d.setAttribute("open","");
 });
 document.addEventListener("click", event => {
   const button=event.target.closest("[data-ranked-detail]");
   if(!button)return;
   const id=decodeURIComponent(button.dataset.rankedDetail||"");
-  const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||catalogSummary?.recent?.find(m=>String(m.beatmap_id)===id);
+  const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id);
   showRankedDetails(map);
 });
 document.addEventListener("click", event => {
   const button = event.target.closest("[data-dna-id]");
   if (!button) return;
   const id = decodeURIComponent(button.dataset.dnaId || "");
-  const map = rankedIndex.find(m => String(m.beatmap_id) === id) ||
-    catalogSummary?.recent?.find(m => String(m.beatmap_id) === id);
+  const map = rankedIndex.find(m => String(m.beatmap_id) === id) || findSummaryMap(id);
   showChartDna(map);
 });
-$("chartModalClose").addEventListener("click", () => {
+$("chartModalClose")?.addEventListener("click", () => {
   const dialog = $("chartModal");
   if (typeof dialog.close === "function") dialog.close();
   else dialog.removeAttribute("open");
 });
-$("chartModal").addEventListener("click", event => {
-  if (event.target === $("chartModal")) $("chartModalClose").click();
+$("chartModal")?.addEventListener("click", event => {
+  if (event.target === $("chartModal")) $("chartModalClose")?.click();
 });
 
 
-// Observatory controls: make every visible research/tab button perform an obvious action.
+// Interaction layer: delegated handlers work for dynamically rendered cards without double-firing.
 function bindInteractiveCatalogueControls() {
   document.addEventListener("click", event => {
-    const year = event.target.closest("[data-year-link]");
-    if (year) {
-      event.preventDefault();
-      openTab?.("ranked");
-      const select=$("indexedYear"); if(select){ select.value=year.dataset.yearLink; select.dispatchEvent(new Event("change",{bubbles:true})); }
-      $("indexedQuery")?.focus();
+    const year=event.target.closest("[data-year-link]");
+    if(year){
+      event.preventDefault(); openTab("ranked");
+      const select=$("indexedYear"); if(select){select.value=year.dataset.yearLink; indexedLoadedKey=""; loadRankedSearch();}
+      document.querySelector(".filter-toolbar")?.scrollIntoView({behavior:"smooth",block:"start"});
       return;
     }
-    const mapper = event.target.closest("[data-mapper-fp]");
-    if (mapper) {
+    const mapperSearch=event.target.closest("[data-mapper-search]");
+    if(mapperSearch){
       event.preventDefault();
-      const name=decodeURIComponent(mapper.dataset.mapperFp||"");
-      openTab?.("ranked");
+      const name=decodeURIComponent(mapperSearch.dataset.mapperSearch||"");
+      const dialog=$("chartModal"); if(dialog?.open&&typeof dialog.close==="function") dialog.close();
+      openTab("ranked");
       const q=$("indexedQuery"); if(q){q.value=name;q.dispatchEvent(new Event("input",{bubbles:true}));q.focus();}
       return;
     }
-    const detail = event.target.closest("[data-ranked-detail]");
-    if (detail) {
+    const local=event.target.closest("[data-local-chart]");
+    if(local){
       event.preventDefault();
-      const id=decodeURIComponent(detail.dataset.rankedDetail||"");
-      openTab?.("ranked");
-      const q=$("indexedQuery"); if(q){q.value=id;q.dispatchEvent(new Event("input",{bubbles:true}));q.focus();}
+      const id=decodeURIComponent(local.dataset.localChart||"");
+      if(typeof window.choose==="function"){window.choose(id); openTab("skills");}
     }
   });
+
+  document.querySelectorAll("[data-stats-view]").forEach(btn=>btn.addEventListener("click",()=>{
+    document.querySelectorAll("[data-stats-view]").forEach(x=>{x.classList.toggle("active",x===btn);x.setAttribute("aria-selected",String(x===btn));});
+    const view=btn.dataset.statsView;
+    const target=view==="history"?$("eraResearch"):view==="mapper"?$("mapperResearch"):view==="extreme"?$("oddityResearch"):view==="difficulty"?$("officialStatsArea"):$("statsHeroKpis");
+    target?.closest(".card")?.scrollIntoView({behavior:"smooth",block:"start"}) || target?.scrollIntoView({behavior:"smooth",block:"start"});
+  }));
+  document.querySelectorAll("[data-research-target]").forEach(btn=>btn.addEventListener("click",()=>{
+    const target=btn.dataset.researchTarget;
+    const box=target==="era"?$("eraResearch"):target==="mapper"?$("mapperResearch"):target==="odd"?$("oddityResearch"):$("twinResearch");
+    document.querySelectorAll("[data-research-target]").forEach(x=>{x.classList.toggle("active",x===btn);x.setAttribute("aria-pressed",String(x===btn));});
+    box?.closest(".card")?.scrollIntoView({behavior:"smooth",block:"center"});
+  }));
+  document.querySelectorAll("[data-dna-view]").forEach(btn=>btn.addEventListener("click",()=>{
+    document.querySelectorAll("[data-dna-view]").forEach(x=>{x.classList.toggle("active",x===btn);x.setAttribute("aria-selected",String(x===btn));});
+    const view=btn.dataset.dnaView, scope=$("dnaScope");
+    if(view==="local"&&scope){scope.value="local";renderDnaRanking();}
+    if(view==="ranking"&&scope){scope.value="all";renderDnaRanking();}
+    const target=view==="ranking"?$("dnaGlobalRanking"):view==="local"?$("skillBars"):$("dnaCoverage");
+    target?.closest(".card")?.scrollIntoView({behavior:"smooth",block:"start"}) || target?.scrollIntoView({behavior:"smooth",block:"start"});
+  }));
+  document.querySelectorAll("[data-training-view]").forEach(btn=>btn.addEventListener("click",()=>{
+    document.querySelectorAll("[data-training-view]").forEach(x=>{x.classList.toggle("active",x===btn);x.setAttribute("aria-selected",String(x===btn));});
+    const view=btn.dataset.trainingView;
+    const target=view==="ladder"?$("skillLadder"):view==="weakness"?$("weaknessRadar"):view==="goal"?document.querySelector(".feature-roadmap"):$("trainingFocus");
+    target?.closest(".card")?.scrollIntoView({behavior:"smooth",block:"center"}) || target?.scrollIntoView({behavior:"smooth",block:"center"});
+  }));
 }
 bindInteractiveCatalogueControls();
-
-function bindObservatoryControls() {
-  // Generic navigation delegation also covers buttons injected after startup.
-  document.addEventListener("click", event => {
-    const nav = event.target.closest("[data-tab]");
-    if (nav && typeof openTab === "function") {
-      event.preventDefault();
-      openTab(nav.dataset.tab);
-      document.querySelector("main")?.scrollIntoView({behavior:"smooth", block:"start"});
-    }
-  });
-  const viewToTarget = {overview:"era", difficulty:"odd", history:"era", mapper:"mapper", extreme:"odd"};
-  document.querySelectorAll("[data-stats-view]").forEach(btn => btn.addEventListener("click", () => {
-    document.querySelectorAll("[data-stats-view]").forEach(x => x.classList.toggle("active", x === btn));
-    const target = viewToTarget[btn.dataset.statsView] || "era";
-    const node = document.querySelector('[data-research-target="'+target+'"]');
-    const box = target==="era" ? $("eraResearch") : target==="mapper" ? $("mapperResearch") : target==="odd" ? $("oddityResearch") : $("twinResearch");
-    box?.scrollIntoView({behavior:"smooth", block:"center"});
-  }));
-  document.querySelectorAll("[data-research-target]").forEach(btn => btn.addEventListener("click", () => {
-    const target=btn.dataset.researchTarget;
-    const box = target==="era" ? $("eraResearch") : target==="mapper" ? $("mapperResearch") : target==="odd" ? $("oddityResearch") : $("twinResearch");
-    document.querySelectorAll("[data-research-target]").forEach(x=>x.classList.toggle("active",x===btn));
-    box?.closest(".card")?.scrollIntoView({behavior:"smooth", block:"center"});
-  }));
-}
-bindObservatoryControls();
 
 // Optional first list paint. The summary boot was already scheduled near the top of this file.
 try { renderIndexed(); } catch (err) {
