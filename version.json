@@ -1,7 +1,7 @@
 {
-  "version": "1.3.0",
+  "version": "1.4.0",
   "channel": "ranked",
-  "name": "Dense Ranked, Stats and Skill DNA dashboards",
+  "name": "Adaptive Training Lab",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -16,6 +16,8 @@
     "Optional server-secret Worker for on-demand osu! public stats, stored only in browser",
     "Six-hour local cache, manual refresh and JSON import fallback",
     "Dense mobile Ranked discovery dashboard with presets, filters and live result metrics",
-    "Expanded Stats dashboard and honest Chart DNA coverage indicators"
+    "Expanded Stats dashboard and honest Chart DNA coverage indicators",
+    "Adaptive local weakness exposure dashboard and Skill Ladder",
+    "Training data confidence that avoids claiming unobserved player skill"
   ]
 }
