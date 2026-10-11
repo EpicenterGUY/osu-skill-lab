@@ -8,6 +8,7 @@
 <button type="button" data-tab="analyze"><span class="nav-symbol" aria-hidden="true">◎</span><span>채보 분석</span></button>
 <button type="button" data-tab="skills"><span class="nav-symbol" aria-hidden="true">◇</span><span>Skill DNA</span></button>
 <button type="button" data-tab="stats"><span class="nav-symbol" aria-hidden="true">▥</span><span>통계</span></button>
+<button type="button" data-tab="profile"><span class="nav-symbol" aria-hidden="true">♙</span><span>프로필</span></button>
 <button type="button" data-tab="train"><span class="nav-symbol" aria-hidden="true">↗</span><span>트레이닝</span></button>
 </nav>
 <div class="sidebar-note"><b><span class="live-dot"></span>LIVE CATALOGUE</b>osu!standard · Ranked/Approved<br>신규 맵은 자동으로 확인됩니다.<br><a href="https://github.com/EpicenterGUY/osu-skill-lab" target="_blank" rel="noopener noreferrer">프로젝트 소스 ↗</a></div>
@@ -27,6 +28,7 @@
 <div class="card full elevated"><div class="card-header"><h2>공식 Ranked 카탈로그</h2><span class="pill">자동 동기화</span></div>
 <div id="catalogHeadline" class="metrics"><div class="metric"><b>—</b><span>수집된 비트맵셋</span></div><div class="metric"><b>—</b><span>수집된 난이도</span></div><div class="metric"><b>—</b><span>평균 공식 SR</span></div><div class="metric"><b>—</b><span>평균 BPM</span></div></div><p id="catalogUpdated" class="muted">공식 DB 현황 불러오는 중…</p></div>
 <div class="card half"><div class="card-header"><h2>최근 Ranked</h2><button type="button" class="ghost-btn" data-tab="ranked">전체 탐색 ↗</button></div><div id="recentRankedPreview" class="muted">공식 카탈로그 로딩 중…</div></div>
+<div class="card half"><div class="card-header"><h2>내 osu! 프로필</h2><span class="pill">내 계정</span></div><div id="profileHomePreview" class="muted">계정 정보를 확인하는 중…</div></div>
 <div class="card half"><h2>내 분석실</h2><p class="card-lead">공식 Ranked 통계와 별도인, 내 기기에서 분석한 실제 .osu 채보 데이터입니다.</p>
 <div class="metrics"><div class="metric"><b id="dbCount">0</b><span>내 채보</span></div><div class="metric"><b id="played">0</b><span>리플레이</span></div><div class="metric"><b id="peakSkill">—</b><span>주요 스킬</span></div><div class="metric"><b id="peakVal">—</b><span>Peak</span></div></div>
 <div class="hr"></div><div class="home-quick"><button type="button" class="ghost-btn" data-tab="analyze">채보 분석 열기 ↗</button><button type="button" class="ghost-btn" data-tab="train">트레이닝 ↗</button></div></div>
@@ -35,6 +37,18 @@
 <div class="card full"><div class="card-header"><h2>무엇을 분석할 수 있나요?</h2><span class="pill">데이터 출처 구분</span></div>
 <div class="grid"><div class="half"><h3>01 · 공식 osu! API 메타데이터</h3><p class="muted">곡, 맵퍼, Ranked 날짜, 공식 SR, BPM, 플레이 수를 공용 DB에서 확인합니다. 모든 방문자가 같은 데이터를 사용합니다.</p></div>
 <div class="half"><h3>02 · 실제 .osu 채보 기반 Skill DNA</h3><p class="muted">노트 간격·좌표·시간으로 Aim, Stream, Speed 등을 추정합니다. 자체 휴리스틱으로, 공식 SR·pp가 아닙니다.</p></div></div></div></div></section>
+<section id="profile" class="panel"><div class="section-heading"><div><h2>My osu! Profile</h2><p>내 osu!standard 계정을 이 브라우저에 저장하고, 공개 통계와 연결합니다.</p></div><span class="pill">공개 정보만 · 비밀번호 불필요</span></div>
+<div class="grid">
+<div class="card full elevated"><div class="card-header"><h2>계정 연결</h2><span class="pill">osu!standard</span></div>
+<p class="card-lead">osu! 닉네임이나 숫자 유저 ID를 입력해 주세요. 이 설정은 현재 브라우저에만 저장되며 로그인이 아닙니다.</p>
+<form id="profileForm" class="profile-form"><div class="field"><label for="profileUserInput">osu! 닉네임 / ID</label><input id="profileUserInput" type="text" maxlength="60" placeholder="예: 사용자 이름 또는 숫자 ID" autocomplete="off" required></div>
+<button class="action" type="submit">프로필 연결하기 ↗</button></form>
+<p id="profileStatus" class="hint-text">계정을 연결하면 공식 프로필 링크가 저장됩니다.</p></div>
+<div class="card full" id="profileResult"><div class="empty">계정 연결 대기 중…</div></div>
+<div class="card full"><details class="details-advanced"><summary>프로필 통계 자동 갱신은 어떻게 동작하나요?</summary><div class="details-body">
+<p>osu! API는 인증이 필요하므로 정적 GitHub Pages에서 비밀키를 직접 사용할 수 없습니다. 개인 프로필의 PP·세계 순위 등은 사이트 운영자가 GitHub 저장소의 <code>OSU_PROFILE_USERNAME</code> 변수를 설정해 공개에 동의한 계정에 한해 GitHub Actions가 안전하게 가져옵니다.</p>
+<p class="muted">설정하지 않은 계정은 osu! 공식 프로필 링크만 제공합니다. 친구 계정 등 여러 명의 실시간 연동은 별도 인증 서버를 마련해야 합니다.</p>
+</div></details></div></div></section>
 <section id="ranked" class="panel">
 <div class="section-heading"><div><h2>Ranked Explorer</h2><p>곡명·아티스트·맵퍼를 검색하고 공식 난이도를 비교해 보세요.</p></div><span class="pill">공식 메타데이터</span></div>
 <div class="grid">
@@ -88,7 +102,7 @@
 <div class="card half"><h2>현재 선택한 채보</h2><div id="practice" class="empty">아직 선택한 채보가 없습니다.</div></div></div></section>
 <p class="footer">비공식 개인용 도구 · 자체 휴리스틱은 osu! 공식 Star Rating/pp가 아닙니다.</p></main><script src="./mobile-analyzer.js?v=100"></script><script src="./mobile-replay.js?v=100"></script><script>
 const $=x=>document.getElementById(x),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));let db=[];try{db=JSON.parse(localStorage.getItem('osl-db')||'[]');if(!Array.isArray(db))db=[]}catch(e){db=[]}let selected=null,replays=0;
-function openTab(id){document.body.dataset.view=id;document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('active',x.dataset.tab===id));document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id===id));location.hash=id==='home'?'':id;if(id==='ranked')window.loadRankedSearch?.()}
+function openTab(id){document.body.dataset.view=id;document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('active',x.dataset.tab===id));document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id===id));location.hash=id==='home'?'':id;if(id==='ranked')window.loadRankedSearch?.();if(id==='profile')window.OSLProfile?.open()}
 document.addEventListener('click',e=>{let b=e.target.closest('[data-tab]');if(!b)return;e.preventDefault();openTab(b.dataset.tab)});
 window.addEventListener('hashchange',()=>{let id=location.hash.slice(1);if(document.getElementById(id)?.classList.contains('panel'))openTab(id)});
 setTimeout(()=>{let id=location.hash.slice(1);openTab(id&&document.getElementById(id)?.classList.contains('panel')?id:'home')},0);
@@ -113,5 +127,5 @@ render();
 async function initOfficial(){try{let d=await fetch('/api/osu/status').then(r=>{if(!r.ok)throw Error();return r.json()});$('apiState').textContent=d.configured?'PC 서버 · osu! API 연결됨':'PC 서버 연결 · osu! API 미설정'}catch(e){$('apiState').textContent='모바일 단독 모드 · 로컬 .osu 분석 가능 / 공식 검색은 PC 서버 필요'}}
 $('officialSearch').onclick=async()=>{let q=$('officialQuery').value.trim();if(!q)return;$('officialResults').textContent='공식 데이터 검색 중…';try{let r=await fetch('/api/osu/search?q='+encodeURIComponent(q));let d=await r.json();if(!r.ok||!Array.isArray(d.beatmapsets))throw Error(d.error||'PC 서버에서만 공식 검색을 지원합니다');$('officialResults').innerHTML=d.beatmapsets.length?d.beatmapsets.map(x=>'<div class="dbitem"><b>'+esc(x.artist)+' — '+esc(x.title)+'</b><div class="muted">Mapper: '+esc(x.creator)+' · '+x.maps.length+' difficulties</div>'+x.maps.map(b=>'<span class="chip">'+esc(b.version)+' ★'+(b.official_sr??'—')+' · '+esc(b.status)+' · #'+b.beatmap_id+'</span>').join('')+'</div>').join(''):'<div class="empty">검색 결과 없음</div>'}catch(e){$('officialResults').textContent='검색 실패: '+e.message}};
 initOfficial();if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('./sw.js').catch(()=>{});
-</script><script src="./ranked-catalog.js?v=100"></script>
+</script><script src="./ranked-catalog.js?v=110"></script><script src="./profile.js?v=110"></script>
 <dialog id="chartModal" class="chart-modal" aria-label="실제 채보 Chart DNA 자세히 보기"><button id="chartModalClose" class="modal-close" type="button" aria-label="닫기">×</button><div id="chartModalBody"></div></dialog></body></html>
