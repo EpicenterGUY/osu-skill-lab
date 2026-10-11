@@ -145,6 +145,32 @@ async function loadRankedSummary() {
     $("hostedSyncState").textContent = "검색 인덱스 배포 대기 중 · " + err.message;
     $("officialStatsArea").innerHTML = '<p class="muted">통계 데이터 배포 또는 네트워크 연결을 기다리는 중입니다.</p>';
     console.warn("Ranked summary unavailable", err);
+    // Graceful migration: earlier public releases provide a seeded official index.
+    try {
+      const m = await fetchCatalogJson("data/ranked-manifest.json", Date.now(), true);
+      $("catalogHeadline").innerHTML =
+        '<div class="metric"><b>' + ct(m.indexed_sets) + '</b><span>수집된 비트맵셋</span></div>' +
+        '<div class="metric"><b>' + ct(m.indexed_difficulties) + '</b><span>수집된 난이도</span></div>' +
+        '<div class="metric"><b>—</b><span>평균 공식 SR</span></div>' +
+        '<div class="metric"><b>—</b><span>평균 BPM</span></div>';
+      $("catalogUpdated").textContent = "요약 통계 배포 대기 중 · 기본 DB 목차로 수집량 표시";
+    } catch (_) {}
+    try {
+      const legacy = await fetchCatalogJson("data/ranked-index.json", Date.now(), true);
+      if (Array.isArray(legacy.maps)) {
+        rankedIndex = legacy.maps.filter(m => m?.beatmap_id && m.source === "osu! API v2");
+        $("indexedYear").innerHTML = '<option value="seed">초기 공식 색인 (임시)</option>';
+        renderIndexed();
+        $("hostedSyncState").textContent = "예비 공식 색인 " + ct(rankedIndex.length) +
+          "개 표시 중 · 통계/연도별 검색 배포 대기";
+        $("recentRankedPreview").innerHTML = rankedIndex.slice(0, 5).map((m, i) =>
+          '<div class="recent-item"><span class="recent-num">' + (i + 1) +
+          '</span><div class="recent-copy"><a class="recent-title" href="https://osu.ppy.sh/beatmaps/' +
+          encodeURIComponent(m.beatmap_id) + '" target="_blank" rel="noopener noreferrer">' +
+          cx(m.artist || "?") + ' — ' + cx(m.title || "?") + '</a></div></div>').join("");
+      }
+    } catch (_) {}
+
   }
 }
 
