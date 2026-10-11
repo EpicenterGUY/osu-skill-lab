@@ -1,13 +1,7 @@
 name: Fast osu! Ranked history backfill
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/fast-ranked-backfill.yml'
+  # Historical traversal is complete. Keep this as a manual recovery tool only.
   workflow_dispatch:
-  # Resume after a runner's time budget until the API cursor reaches the end.
-  schedule:
-    - cron: '7 */3 * * *'
 
 permissions:
   contents: write
