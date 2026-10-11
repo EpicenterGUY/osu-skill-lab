@@ -162,7 +162,8 @@ def read_json(path, default):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--limit", type=int, default=10, help="max individual .osu files to request per run")
+    parser.add_argument("--limit", type=int, default=100, help="max individual .osu files to request per run")
+    parser.add_argument("--checkpoint-every", type=int, default=25, help="persist derived metrics every N attempts")
     parser.add_argument("--delay", type=float, default=5.0, help="minimum seconds between chart fetch attempts")
     args = parser.parse_args()
     if not 0 <= args.limit <= 30 or args.delay < 3:
@@ -237,33 +238,7 @@ def main():
             print("Source requested a pause; stopping the pilot for this run.", flush=True)
             break
 
-    # Persist derived metrics only, split by the map's Ranked year.
-    groups = {}
-    for entry in dna.values():
-        year = str(entry.get("ranked_date") or "unknown")[:4]
-        if not year.isdigit():
-            year = "unknown"
-        groups.setdefault(year, []).append(entry)
-    shards = []
-    for year in sorted(groups, reverse=True):
-        values = sorted(groups[year], key=lambda x: x["beatmap_id"])
-        dump(DNA_DIR / (year + ".json"), values)
-        shards.append({"year": year, "path": f"data/chart-dna/{year}.json", "count": len(values)})
-    state["updated_at"] = now.isoformat()
-    state["blocked_on_last_run"] = blocked
-    state["succeeded_last_run"] = succeeded
-    dump(DNA_STATE, state)
-    dump(DNA_MANIFEST, {
-        "format": "osu-skill-lab-chart-dna",
-        "version": 1,
-        "analyzed_difficulties": len(dna),
-        "method": "chart-dna-pilot-v1",
-        "status": "experimental partial coverage",
-        "source": "official public osu! beatmap text; metrics only",
-        "updated_at": now.isoformat(),
-        "shards": shards,
-    })
-    print(f"Chart DNA pilot: {succeeded}/{attempted} newly analyzed, {len(dna)} stored. No raw charts published.", flush=True)
+    # Final checkpoint. Raw .osu content is never written to disk.\n    persist(datetime.now(timezone.utc), blocked)\n    print(f"Chart DNA pilot: {succeeded}/{attempted} newly analyzed, {len(dna)} stored. No raw charts published.", flush=True)
 
 
 if __name__ == "__main__":
