@@ -6,8 +6,9 @@ on:
   schedule:
     - cron: '23 * * * *'
 concurrency:
-  group: osu-ranked-sync-and-deploy
-  cancel-in-progress: false
+  # Collapse rapid UI commits into the newest deploy, without interrupting hourly data sync.
+  group: osu-ranked-${{ github.event_name == 'push' && 'site-push' || 'scheduled-sync' }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 jobs:
   sync:
     if: github.event_name != 'push'
