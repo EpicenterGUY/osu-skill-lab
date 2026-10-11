@@ -1,5 +1,28 @@
-const CACHE="osu-skill-lab-v0.8";
-const CORE=["./","./index.html","./manifest.webmanifest","./mobile-analyzer.js","./version.json"];
-self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting())));
-self.addEventListener("activate",e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
-self.addEventListener("fetch",e=>{if(e.request.method!=="GET")return;let u=new URL(e.request.url);if(u.pathname.includes("/api/"))return;if(u.origin!==self.location.origin)return;e.respondWith(fetch(e.request).then(r=>{let x=r.clone();caches.open(CACHE).then(c=>c.put(e.request,x));return r}).catch(()=>caches.match(e.request).then(r=>r||caches.match("./index.html"))))});
+const CACHE="osu-skill-lab-v0.9";
+const CORE=["./","./index.html","./ranked-catalog.js","./manifest.webmanifest","./mobile-analyzer.js","./version.json"];
+self.addEventListener("install",event=>{
+  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting()));
+});
+self.addEventListener("activate",event=>{
+  event.waitUntil(caches.keys().then(keys=>Promise.all(
+    keys.filter(key=>key!==CACHE).map(key=>caches.delete(key))
+  )).then(()=>self.clients.claim()));
+});
+self.addEventListener("fetch",event=>{
+  const request=event.request;
+  if(request.method!=="GET")return;
+  const url=new URL(request.url);
+  if(url.origin!==self.location.origin || url.pathname.includes("/api/"))return;
+  // Public data have independent HTTP caching and update frequently.
+  // Never store a full Ranked catalogue in the PWA shell cache.
+  if(url.pathname.includes("/data/"))return;
+  event.respondWith(
+    fetch(request).then(response=>{
+      if(response.ok){
+        const copy=response.clone();
+        caches.open(CACHE).then(cache=>cache.put(request,copy)).catch(()=>{});
+      }
+      return response;
+    }).catch(()=>caches.match(request).then(cached=>cached||caches.match("./index.html")))
+  );
+});
