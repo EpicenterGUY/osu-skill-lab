@@ -244,9 +244,12 @@ def main():
             seen.add(bid);targets.append(m)
     # Bounded candidate windows across SR bands avoids quadratic 144k x 144k work.
     sr_sorted=sorted(values,key=lambda m:number(m.get("official_sr")))
+    import bisect
+    sr_axis=[number(m.get("official_sr")) for m in sr_sorted]
     for target in targets[:1200]:
         tsr=number(target.get("official_sr"))
-        candidates=[m for m in sr_sorted if abs(number(m.get("official_sr"))-tsr)<=.8 and m.get("beatmap_id")!=target.get("beatmap_id")]
+        lo=bisect.bisect_left(sr_axis,tsr-.8); hi=bisect.bisect_right(sr_axis,tsr+.8)
+        candidates=[m for m in sr_sorted[lo:hi] if m.get("beatmap_id")!=target.get("beatmap_id")]
         if len(candidates)>1800:
             step=max(1,len(candidates)//1800);candidates=candidates[::step][:1800]
         nearest=sorted(((sim_dist(target,m),m) for m in candidates),key=lambda x:x[0])[:8]
