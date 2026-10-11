@@ -1,9 +1,13 @@
-# osu! Skill Lab — Ranked Catalog v0.9
+# osu! Skill Lab — Rhythm Intelligence v1.0
 
 Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analysis.
 **GitHub Pages:** https://epicenterguy.github.io/osu-skill-lab/
 
 ## Web and mobile
+- Desktop uses a left sidebar, mobile uses a fixed bottom dock. Official Ranked data, per-device .osu analysis and local replay header results are explicitly separated.
+- HOME includes a recent Ranked feed, the public index counts, and personal chart-analysis shortcuts.
+- Browser-only `.osr` support reads basic replay headers (score, judgments, combo, player, accuracy); LZMA input-frame parsing still requires the PC server.
+- Browser `.osu` strain timeline now uses a sliding window rather than scanning every object for every second.
 - HOME loads only the tiny precomputed `data/ranked-summary.json`: collected song/difficulty counts, official SR/BPM averages, collection date range, and backfill state.
 - STATS shows year, month, SR, BPM, mapper, star-rating, and playcount leaderboards, calculated by GitHub Actions rather than every visitor's phone.
 - RANKED loads lightweight `data/ranked-search/YYYY.json` when the tab opens. The newest available year loads by default, and the **All years** selection lets the visitor search every indexed year (larger download).
@@ -26,6 +30,7 @@ Workflow: `.github/workflows/sync-ranked.yml`.
 6. Subsequent syncs are scheduled hourly (GitHub may delay or suspend scheduled runs). The same workflow deploys the refreshed site; code pushes also deploy it.
 
 Every run:
+- Tries up to 10 recent actual `.osu` charts through the public osu! map-file endpoint, spaced at least 5 seconds apart. Stops on 403/429/503 and tolerates temporary unavailability. This is **experimental partial Chart DNA coverage**; no chart files are redistributed, and the resulting custom scores are NOT official SR or pp.
 - Scans the newest ranked-search page independently for new maps.
 - Advances up to 200 historical pages per scheduled run using `data/ranked-state.json` cursor (resuming earlier work).
 - Deduplicates by beatmap ID and groups by ranking month in `data/ranked/YYYY-MM.json`.
@@ -39,6 +44,10 @@ Every run:
 - `data/ranked-summary.json` — precomputed small public statistics.
 - `data/ranked-search/*.json` — compact year-specific search indexes, downloaded on demand.
 - `build_ranked_views.py` — stats/index generator requiring no API secrets, run by sync and Pages deployments.
+- `build_chart_dna.py` — optional small, rate-limited pilot analysis of real `.osu` object geometry, retaining only derived metrics.
+- `data/chart-dna/*.json` — experimental derived scores (not original `.osu` charts).
+- `app-shell.css` — adaptive desktop/sidebar and mobile/dock UI.
+- `mobile-replay.js` — browser-only `.osr` header reader.
 - `ranked-catalog.js` — browser-side summary and lazy search UI.
 - `data/ranked-state.json` — historical pagination cursor (non-secret).
 - `data/ranked-index.json` — original 832-difficulty seed and browser fallback.
@@ -65,3 +74,6 @@ The **catalogue currently targets osu!standard Ranked/Approved**. It does not ye
 The public catalogue contains **metadata only**. Downloading original `.osu` note/timing files and calculating full Chart DNA for all entries requires a separate pipeline, subject to source availability, bandwidth, copyright, and osu! API/rate-limit rules. Entire replay datasets are not collected.
 
 GitHub Pages cannot safely hold osu! OAuth client secrets and cannot run Python API calls by itself. The scheduled private GitHub Actions job handles authentication; public pages load only generated JSON.
+
+## v1.0 validation notes
+The public chart pipeline depends on official map-file endpoint availability. Individual map downloads may fail because of missing files, permission, server policy, or checksum changes. Failures never produce fabricated Chart DNA and do not prevent official metadata display. An `analyzed_difficulties` count of zero is valid. API policy: https://osu.ppy.sh/docs/.
