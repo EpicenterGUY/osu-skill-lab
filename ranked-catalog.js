@@ -137,6 +137,16 @@ function renderCatalogSummary(s) {
       '개 확보 · 실제 노트 분석이 들어오면 스킬 랭킹이 자동 활성화됩니다.</span><div class="coverage-track"><i style="width:' + Math.max(.3,pct) + '%"></i></div></div>';
   }
 
+  const dnaMeta=s.chart_dna||{}, dnaYears=dnaMeta.coverage_by_year||[], lastBatch=dnaMeta.last_batch||{};
+  const dnaDist=$("dnaDistribution");
+  if(dnaDist){
+    const elapsed=Number(lastBatch.elapsed_seconds||0), success=Number(lastBatch.succeeded||0), attempts=Number(lastBatch.attempted||0);
+    const perMin=elapsed>0?success/(elapsed/60):0;
+    dnaDist.innerHTML=
+      '<div class="collector-health"><b>'+ct(success)+' / '+ct(attempts)+' 성공</b><span>최근 자동 배치'+(perMin?' · '+perMin.toFixed(1)+'채보/분':'')+(lastBatch.blocked?' · 소스 제한 감지 후 자동 중지':' · 정상 체크포인트')+'</span></div>'+
+      '<div class="dna-era-list">'+dnaYears.map(x=>'<div><span>'+cx(x.year)+'</span><div class="coverage-track"><i style="width:'+Math.max(.25,Math.min(100,Number(x.coverage_percent||0)))+'%"></i></div><b>'+Number(x.coverage_percent||0).toFixed(Number(x.coverage_percent||0)<1?2:1)+'%</b><small>'+ct(x.analyzed)+' / '+ct(x.candidates)+'</small></div>').join('')+'</div>';
+  }
+
   const research=s.research||{}, era=research.era_trends||[], fps=research.mapper_fingerprints||[], odds=research.oddities||[], twins=research.difficulty_twins||[];
   const eraEl=$("eraResearch"); if(eraEl) eraEl.innerHTML=era.length ? '<div class="research-table">'+era.slice(-12).map(x=>'<div><b>'+cx(x.year)+'</b><span>★'+Number(x.sr||0).toFixed(2)+'</span><span>'+Number(x.bpm||0).toFixed(0)+' BPM</span><span>AR '+Number(x.ar||0).toFixed(1)+'</span></div>').join('')+'</div>' : '<div class="empty">시대 통계가 없습니다.</div>';
   const mapEl=$("mapperResearch"); if(mapEl) mapEl.innerHTML=fps.length ? fps.slice(0,14).map((x,i)=>'<button type="button" class="research-rank research-rank-btn" data-mapper-fp="'+encodeURIComponent(x.name)+'"><b>'+(i+1)+'</b><span><strong>'+cx(x.name)+'</strong><small>'+ct(x.beatmapsets)+' sets · 평균 ★'+Number(x.avg_sr||0).toFixed(2)+' · '+Number(x.avg_bpm||0).toFixed(0)+' BPM'+(x.dna_sample?' · DNA '+ct(x.dna_sample):'')+'</small></span></button>').join('') : '<div class="empty">맵퍼 통계가 없습니다.</div>';
@@ -144,7 +154,6 @@ function renderCatalogSummary(s) {
   const twinEl=$("twinResearch"); if(twinEl) twinEl.innerHTML=twins.length ? twins.slice(0,12).map(x=>'<div class="twin-pair"><button data-ranked-detail="'+encodeURIComponent(String(x.a?.beatmap_id||''))+'">'+cx(x.a?.title)+' ['+cx(x.a?.version)+']</button><b>≈</b><button data-ranked-detail="'+encodeURIComponent(String(x.b?.beatmap_id||''))+'">'+cx(x.b?.title)+' ['+cx(x.b?.version)+']</button><small>DNA 거리 '+Number(x.dna_distance).toFixed(1)+' · SR 차이 '+Number(x.sr_gap).toFixed(2)+'</small></div>').join('') : '<div class="collection-state"><b>DNA 쌍둥이 탐색 준비 중</b><span>실제 Chart DNA 표본이 들어오는 즉시 자동 계산됩니다.</span></div>';
   const leader=$("dnaSkillLeaderboard"), rankings=research.dna_rankings||{}; if(leader){const skills=["aim","stream","speed","stamina","tech","reading","flow"]; leader.innerHTML=skills.map(k=>{const top=(rankings[k]||[])[0];return top?'<button type="button" class="dna-lead dna-lead-btn" data-ranked-detail="'+encodeURIComponent(String(top.beatmap_id||""))+'"><span>'+k.toUpperCase()+'</span><b>'+cx(top.title)+'</b><small>'+Number(top.dna?.skills?.[k]||0).toFixed(1)+' · ★'+Number(top.official_sr||0).toFixed(2)+'</small></button>':'<div class="dna-lead"><span>'+k.toUpperCase()+'</span><b>수집 중</b><small>실제 .osu 분석 대기</small></div>'}).join('');}
   renderDnaRanking();
-  document.querySelectorAll("[data-research-target]").forEach(b=>{if(!b.dataset.bound){b.dataset.bound="1";b.addEventListener("click",()=>{$("researchObservatory")?.scrollIntoView({behavior:"smooth",block:"start"})})}});
   const yearRows = (s.years || []).filter(x => x.year !== "unknown");
   const mapperRows = (s.top_mappers || []).slice(0, 15).map((m, i) =>
     '<tr><td>' + (i + 1) + '</td><td>' + cx(m.name) + '</td><td>' +
