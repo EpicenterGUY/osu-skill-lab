@@ -138,6 +138,7 @@ td{overflow-wrap:anywhere}
 
 /* Keep the large landing hero exclusive to HOME; inner tools use their own headings. */
 body[data-view="ranked"] .hero,
+body[data-view="profile"] .hero,
 body[data-view="analyze"] .hero,
 body[data-view="skills"] .hero,
 body[data-view="stats"] .hero,
