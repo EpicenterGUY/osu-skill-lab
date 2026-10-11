@@ -235,6 +235,7 @@ def main():
     attempted = succeeded = 0
     blocked = False
     dirty_years = set()
+    last_request_started = None
 
     def persist(current_now, current_blocked=False):
         # Only rewrite year shards that actually changed during this checkpoint.
@@ -285,9 +286,15 @@ def main():
                     continue
             except (TypeError, ValueError, KeyError):
                 pass
-        if attempted:
-            time.sleep(args.delay)
+        # Rate-limit request *starts* instead of sleeping a full delay after each
+        # completed response. Slow network time therefore does not get counted twice,
+        # while request frequency still never exceeds 1 / --delay.
+        if last_request_started is not None:
+            wait = args.delay - (time.monotonic() - last_request_started)
+            if wait > 0:
+                time.sleep(wait)
         attempted += 1
+        last_request_started = time.monotonic()
         try:
             request = Request(API_URL + str(beatmap_id), headers={"User-Agent": USER_AGENT, "Accept": "text/plain"})
             with urlopen(request, timeout=18) as response:
