@@ -73,10 +73,15 @@ jobs:
         with:
           ref: main
       - uses: actions/configure-pages@v5
+      - name: Validate deploy-critical source
+        run: |
+          python -m py_compile build_ranked_views.py
+          python -m unittest discover -s tests -q
+          node --check ranked-catalog.js
       - name: Build lightweight public statistics and search indexes
         run: |
-          # A UI-only push must not be blocked from Pages by unrelated test failures.
-          # Keep the already committed public summary if regeneration fails.
+          # A UI-only push may still deploy the last committed DB if only data
+          # regeneration fails; syntax/contract failures above remain hard errors.
           if ! python build_ranked_views.py; then
             echo "::warning::Ranked summary rebuild failed; deploying committed data."
             test -s data/ranked-summary.json
