@@ -49,13 +49,40 @@ const statsTable = (header, rows, extra = "") =>
   '<table><thead><tr><th>#</th><th>' + header + '</th><th>' +
   (extra || "기록") + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
 
-async function fetchCatalogJson(path, version, fresh = false) {
+function setRankedLoadState(stage, detail = "", percent = null) {
+  const host = $("hostedSyncState");
+  if (!host) return;
+  const pct = percent == null ? "" : Math.max(0, Math.min(100, Number(percent))).toFixed(0);
+  host.innerHTML = '<div class="ranked-loader"><div class="ranked-loader-head"><b>' + cx(stage) +
+    '</b><span>' + cx(detail) + '</span></div><div class="ranked-loader-track"><i style="width:' +
+    (pct || "7") + '%"></i></div>' + (pct ? '<small>' + pct + '%</small>' : '<small>연결 중…</small>') + '</div>';
+}
+async function fetchCatalogJson(path, version, fresh = false, progress = null) {
   if (path.includes("..") || !path.startsWith("data/") || !path.endsWith(".json"))
     throw Error("허용되지 않은 DB 경로");
   const url = "./" + path + "?v=" + encodeURIComponent(String(version || "1"));
-  const response = await fetch(url, {cache: fresh ? "no-store" : "default"});
-  if (!response.ok) throw Error("HTTP " + response.status + " · " + path);
-  return response.json();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(url, {cache: fresh ? "no-store" : "default", signal: controller.signal});
+    if (!response.ok) throw Error("HTTP " + response.status + " · " + path);
+    const total = Number(response.headers.get("content-length") || 0);
+    if (!response.body || !progress) return response.json();
+    const reader = response.body.getReader(), chunks = [];
+    let loaded = 0;
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      chunks.push(value); loaded += value.byteLength;
+      progress(loaded, total);
+    }
+    const bytes = new Uint8Array(loaded);
+    let offset = 0; for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch (e) {
+    if (e?.name === "AbortError") throw Error("15초 응답 시간 초과");
+    throw e;
+  } finally { clearTimeout(timeout); }
 }
 
 function renderCatalogSummary(s) {
@@ -171,8 +198,15 @@ async function loadRankedSummary() {
   if (summaryLoadInFlight) return;
   summaryLoadInFlight = true;
   clearTimeout(summaryRetryTimer);
+  const started = performance.now();
+  setRankedLoadState("DB 연결 중", "Ranked 요약 통계 요청", 5);
   try {
-    const s = await fetchCatalogJson("data/ranked-summary.json", Date.now(), true);
+    const s = await fetchCatalogJson("data/ranked-summary.json", Date.now(), true, (loaded,total) => {
+      const kb = n => (n / 1024).toFixed(n > 1024 * 100 ? 0 : 1) + " KB";
+      const pct = total ? 10 + loaded / total * 70 : Math.min(78, 10 + loaded / 4096);
+      setRankedLoadState("요약 통계 다운로드", total ? kb(loaded) + " / " + kb(total) : kb(loaded) + " 수신", pct);
+    });
+    setRankedLoadState("데이터 검증", "응답 형식 확인", 88);
     if (s.format !== "osu-skill-lab-summary" || !Array.isArray(s.search_shards))
       throw Error("지원하지 않는 통계 형식");
     catalogSummary = s;
@@ -181,6 +215,7 @@ async function loadRankedSummary() {
     indexedYearCache.clear();
     indexedLoadedKey = "";
     renderCatalogSummary(s);
+    setRankedLoadState("Ranked 인덱스 준비", ct(s.counts?.difficulties) + "채보 · " + ((performance.now()-started)/1000).toFixed(1) + "초", 96);
     const progress = $("backfillProgress");
     if (progress) {
       const oldest = s.date_range?.oldest || "—";
@@ -210,7 +245,7 @@ async function loadRankedSummary() {
       '<option value="all">전체 연도 검색 (데이터 다운로드 많음)</option>';
     const validValues = ["recent","all",...months.map(sh => "month:" + sh.month),...yearCounts.keys()].map(x=>x.startsWith("year:")||x==="recent"||x==="all"||x.startsWith("month:")?x:"year:"+x);
     select.value = validValues.includes(prev) ? prev : "recent";
-    $("hostedSyncState").textContent = "최근 Ranked는 즉시 표시됩니다. 월·연도 검색만 필요한 데이터를 받아요.";
+    $("hostedSyncState").innerHTML = '<div class="ranked-loader ranked-loader-done"><div class="ranked-loader-head"><b>✓ 최신 DB 준비 완료</b><span>' + ct(s.counts?.difficulties) + '채보 · ' + ((performance.now()-started)/1000).toFixed(1) + '초</span></div><div class="ranked-loader-track"><i style="width:100%"></i></div><small>월·연도 데이터는 선택할 때만 받습니다.</small></div>';
     renderRecentPreview();
     if (document.getElementById("ranked").classList.contains("active"))
       loadRankedSearch();
