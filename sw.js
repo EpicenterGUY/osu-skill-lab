@@ -1,4 +1,4 @@
-const CACHE="osu-skill-lab-v2.0.0";
+const CACHE="osu-skill-lab-v2.0.1";
 const CORE=["./","./index.html","./ranked-catalog.js","./profile.js","./app-shell.css","./mobile-replay.js","./manifest.webmanifest","./mobile-analyzer.js","./version.json"];
 self.addEventListener("install",event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting()));
