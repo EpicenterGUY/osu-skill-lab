@@ -104,7 +104,7 @@ function renderCatalogSummary(s) {
 
   const research=s.research||{}, era=research.era_trends||[], fps=research.mapper_fingerprints||[], odds=research.oddities||[], twins=research.difficulty_twins||[];
   const eraEl=$("eraResearch"); if(eraEl) eraEl.innerHTML=era.length ? '<div class="research-table">'+era.slice(-12).map(x=>'<div><b>'+cx(x.year)+'</b><span>★'+Number(x.sr||0).toFixed(2)+'</span><span>'+Number(x.bpm||0).toFixed(0)+' BPM</span><span>AR '+Number(x.ar||0).toFixed(1)+'</span></div>').join('')+'</div>' : '<div class="empty">시대 통계가 없습니다.</div>';
-  const mapEl=$("mapperResearch"); if(mapEl) mapEl.innerHTML=fps.length ? fps.slice(0,10).map((x,i)=>'<div class="research-rank"><b>'+(i+1)+'</b><span><strong>'+cx(x.name)+'</strong><small>'+ct(x.beatmapsets)+' sets · 평균 ★'+Number(x.avg_sr||0).toFixed(2)+' · '+Number(x.avg_bpm||0).toFixed(0)+' BPM'+(x.dna_sample?' · DNA '+ct(x.dna_sample):'')+'</small></span></div>').join('') : '<div class="empty">맵퍼 통계가 없습니다.</div>';
+  const mapEl=$("mapperResearch"); if(mapEl) mapEl.innerHTML=fps.length ? fps.slice(0,14).map((x,i)=>'<button type="button" class="research-rank research-rank-btn" data-mapper-fp="'+encodeURIComponent(x.name)+'"><b>'+(i+1)+'</b><span><strong>'+cx(x.name)+'</strong><small>'+ct(x.beatmapsets)+' sets · 평균 ★'+Number(x.avg_sr||0).toFixed(2)+' · '+Number(x.avg_bpm||0).toFixed(0)+' BPM'+(x.dna_sample?' · DNA '+ct(x.dna_sample):'')+'</small></span></button>').join('') : '<div class="empty">맵퍼 통계가 없습니다.</div>';
   const oddEl=$("oddityResearch"); if(oddEl) oddEl.innerHTML=odds.length ? odds.slice(0,10).map((m,i)=>'<div class="research-rank"><b>'+(i+1)+'</b><span><strong>'+cx(m.artist)+' — '+cx(m.title)+'</strong><small>★'+Number(m.official_sr||0).toFixed(2)+' · '+Number(m.bpm||0).toFixed(0)+' BPM · '+Math.round(Number(m.total_length||0)/60)+'분</small></span></div>').join('') : '<div class="empty">이상치가 없습니다.</div>';
   const twinEl=$("twinResearch"); if(twinEl) twinEl.innerHTML=twins.length ? twins.slice(0,8).map(x=>'<div class="twin-pair"><span>'+cx(x.a?.title)+' ['+cx(x.a?.version)+']</span><b>≈</b><span>'+cx(x.b?.title)+' ['+cx(x.b?.version)+']</span><small>DNA 거리 '+Number(x.dna_distance).toFixed(1)+' · SR 차이 '+Number(x.sr_gap).toFixed(2)+'</small></div>').join('') : '<div class="collection-state"><b>DNA 쌍둥이 탐색 준비 중</b><span>실제 Chart DNA 표본이 들어오는 즉시 자동 계산됩니다.</span></div>';
   const leader=$("dnaSkillLeaderboard"), rankings=research.dna_rankings||{}; if(leader){const skills=["aim","stream","speed","stamina","tech","reading","flow"]; leader.innerHTML=skills.map(k=>{const top=(rankings[k]||[])[0];return '<div class="dna-lead"><span>'+k.toUpperCase()+'</span>'+(top?'<b>'+cx(top.title)+'</b><small>'+Number(top.dna?.skills?.[k]||0).toFixed(1)+' · ★'+Number(top.official_sr||0).toFixed(2)+'</small>':'<b>수집 중</b><small>실제 .osu 분석 대기</small>')+'</div>'}).join('');}
@@ -499,6 +499,17 @@ function showChartDna(map) {
   if (typeof dialog.showModal === "function") dialog.showModal();
   else {dialog.setAttribute("open","");}
 }
+document.addEventListener("click", event => {
+  const b=event.target.closest("[data-mapper-fp]"); if(!b)return;
+  const name=decodeURIComponent(b.dataset.mapperFp||"");
+  const fp=(catalogSummary?.research?.mapper_fingerprints||[]).find(x=>x.name===name); if(!fp)return;
+  const skills=fp.skills||{}, area=$("chartModalBody");
+  area.innerHTML='<span class="chart-dna-badge">Mapper Fingerprint</span><h2>'+cx(fp.name)+'</h2>'+
+    '<div class="ranked-detail-grid"><div><small>비트맵셋</small><b>'+ct(fp.beatmapsets)+'</b></div><div><small>난이도</small><b>'+ct(fp.difficulties)+'</b></div><div><small>평균 SR</small><b>★'+Number(fp.avg_sr||0).toFixed(2)+'</b></div><div><small>평균 BPM</small><b>'+Number(fp.avg_bpm||0).toFixed(1)+'</b></div><div><small>DNA 표본</small><b>'+ct(fp.dna_sample||0)+'</b></div></div>'+
+    (Object.keys(skills).length?'<h3>분석된 채보의 평균 DNA</h3><div class="dna-leaderboard">'+Object.entries(skills).map(([k,v])=>'<div class="dna-lead"><span>'+cx(k.toUpperCase())+'</span><b>'+Number(v).toFixed(1)+'</b></div>').join("")+'</div>':'<div class="collection-state"><b>DNA 표본 수집 중</b><span>맵퍼의 실제 Chart DNA가 분석되면 스타일 축이 자동으로 추가됩니다.</span></div>')+
+    '<p class="muted">메타데이터 통계는 현재 수집된 Ranked/Approved 카탈로그 기준이며, DNA 값은 분석 완료된 채보 표본만 사용합니다.</p>';
+  const d=$("chartModal");if(typeof d.showModal==="function"&&!d.open)d.showModal();else d.setAttribute("open","");
+});
 document.addEventListener("click", event => {
   const button=event.target.closest("[data-ranked-detail]");
   if(!button)return;
