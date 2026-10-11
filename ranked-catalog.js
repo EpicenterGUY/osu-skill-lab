@@ -73,6 +73,15 @@ function renderCatalogSummary(s) {
     " · 시범 Chart DNA " + ct(count.chart_dna_analyzed || 0) + "채보" +
     " · 수치는 현재 수집된 DB 기준이며 전 세계 Ranked 전체 합계가 아닙니다.";
 
+  const rankedKpis = $("rankedHeroKpis");
+  if (rankedKpis) {
+    const oldest = String(s.date_range?.oldest || "").slice(0,4), newest = String(s.date_range?.newest || "").slice(0,4);
+    rankedKpis.innerHTML =
+      '<div class="dash-kpi"><span>Ranked 채보</span><b>' + ct(count.difficulties) + '</b><small>공식 DB</small></div>' +
+      '<div class="dash-kpi"><span>비트맵셋</span><b>' + ct(count.beatmapsets) + '</b><small>공식 DB</small></div>' +
+      '<div class="dash-kpi"><span>맵퍼</span><b>' + ct(count.mappers) + '</b><small>수집 DB</small></div>' +
+      '<div class="dash-kpi"><span>수집 범위</span><b>' + cx(oldest) + '–' + cx(newest) + '</b><small>Ranked 날짜</small></div>';
+  }
   const kpis = $("statsHeroKpis");
   if (kpis) kpis.innerHTML =
     '<div class="dash-kpi"><span>Ranked 채보</span><b>' + ct(count.difficulties) + '</b><small>수집 DB</small></div>' +
@@ -232,7 +241,9 @@ function renderRecentPreview() {
 }
 function renderIndexed() {
   const q = $("indexedQuery").value.trim().toLocaleLowerCase();
-  const rows = rankedIndex.filter(m => (!$('dnaOnly').checked || Boolean(m.dna?.skills)) && (!q ||
+  const minSr = Number($("indexedMinSr")?.value || 0), minBpm = Number($("indexedMinBpm")?.value || 0);
+  const rows = rankedIndex.filter(m => (!$('dnaOnly').checked || Boolean(m.dna?.skills)) &&
+    Number(m.official_sr || 0) >= minSr && Number(m.bpm || 0) >= minBpm && (!q ||
     [m.artist, m.title, m.creator, m.version, m.beatmap_id].some(v =>
       String(v ?? "").toLocaleLowerCase().includes(q))));
   const sort = $("indexedSort").value;
@@ -247,6 +258,13 @@ function renderIndexed() {
   });
   $("indexedCount").textContent = ct(rows.length) + " / " + ct(rankedIndex.length) +
     "채보 · 현재 로드한 연도/미리보기 기준";
+  const rs = $("rankedResultSummary");
+  if (rs) {
+    const avgSr = rows.length ? rows.reduce((n,m)=>n+Number(m.official_sr||0),0)/rows.length : 0;
+    const avgBpm = rows.length ? rows.reduce((n,m)=>n+Number(m.bpm||0),0)/rows.length : 0;
+    rs.innerHTML = '<span><b>' + ct(rows.length) + '</b> 결과</span><span>평균 <b>★' +
+      avgSr.toFixed(2) + '</b></span><span>평균 <b>' + avgBpm.toFixed(0) + ' BPM</b></span>';
+  }
   $("indexedList").innerHTML = rows.slice(0, indexedLimit).map(m =>
     '<div class="dbitem"><b>' + officialMapLink(m) + '</b><div class="muted">' +
     cx(m.creator) + ' · ★' + Number(m.official_sr || 0).toFixed(2) +
@@ -268,6 +286,20 @@ function scheduleIndexedRender() {
 }
 $("indexedQuery").addEventListener("input", scheduleIndexedRender);
 $("indexedSort").addEventListener("change", () => {indexedLimit = 20; renderIndexed();});
+$("indexedMinSr")?.addEventListener("change", () => {indexedLimit = 20; renderIndexed();});
+$("indexedMinBpm")?.addEventListener("change", () => {indexedLimit = 20; renderIndexed();});
+document.querySelectorAll("[data-ranked-jump]").forEach(b => b.addEventListener("click", () => {
+  $("indexedSort").value = b.dataset.rankedJump; indexedLimit = 20; renderIndexed();
+  document.querySelector(".filter-toolbar")?.scrollIntoView({behavior:"smooth",block:"start"});
+}));
+document.querySelectorAll("[data-ranked-preset]").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("[data-ranked-preset]").forEach(x=>x.classList.toggle("active",x===b));
+  const p=b.dataset.rankedPreset;
+  $("indexedMinSr").value = p==="hard" ? "6" : "0";
+  $("indexedMinBpm").value = p==="fast" ? "200" : "0";
+  $("indexedSort").value = p==="popular" ? "plays" : p==="recent" ? "recent" : p==="fast" ? "bpm_desc" : "sr_desc";
+  indexedLimit=20; renderIndexed();
+}));
 $("dnaOnly").addEventListener("change", () => {indexedLimit = 20; renderIndexed();});
 $("indexedMore").addEventListener("click", () => {indexedLimit += 20; renderIndexed();});
 $("indexedYear").addEventListener("change", () => {indexedLoadedKey = ""; loadRankedSearch();});
