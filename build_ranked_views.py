@@ -124,6 +124,7 @@ def main():
     status_counts = Counter()
     mapper_maps = Counter()
     mapper_sets = defaultdict(set)
+    mapper_rows = defaultdict(list)
     sr_values = []
     bpm_values = []
     ar_values, od_values, cs_values, length_values = [], [], [], []
@@ -142,6 +143,7 @@ def main():
         status_counts[str(m.get("status") or "unknown")] += 1
         mapper = str(m.get("creator") or "Unknown")
         mapper_maps[mapper] += 1
+        mapper_rows[mapper].append(m)
         if sid:
             mapper_sets[mapper].add(sid)
         if m.get("official_sr") is not None:
@@ -268,7 +270,7 @@ def main():
     for r in dna_rows:
         dna_by_mapper[str(r.get("creator") or "Unknown")].append(r)
     for name in mappers[:250]:
-        rows = [m for m in values if str(m.get("creator") or "Unknown") == name]
+        rows = mapper_rows.get(name, [])
         drows = dna_by_mapper.get(name, [])
         skill_avg = {}
         for skill in skill_names[:-1]:
