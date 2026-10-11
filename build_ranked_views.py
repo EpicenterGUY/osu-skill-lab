@@ -219,6 +219,38 @@ def main():
         if best:
             twin_pairs.append({"a":a,"b":best[3],"dna_distance":round(best[1],2),"sr_gap":round(best[2],2)})
     twin_pairs = sorted(twin_pairs, key=lambda x:(x["dna_distance"],x["sr_gap"]))[:20]
+    # Global similarity neighborhoods: precompute candidates so phones do not need the full catalogue.
+    # Use normalized metadata dimensions; enrich with DNA distance when both sides have it.
+    sim_pool = sorted(values, key=lambda m: str(m.get("ranked_date") or ""), reverse=True)
+    def sim_vector(m):
+        return (number(m.get("official_sr"))/1.5, number(m.get("bpm"))/80, number(m.get("ar"))/2,
+                number(m.get("od"))/2, number(m.get("cs"))/1.5, number(m.get("total_length"))/180)
+    def sim_dist(a,b):
+        va,vb=sim_vector(a),sim_vector(b)
+        base=(sum((x-y)**2 for x,y in zip(va,vb))/len(va))**.5
+        da,db=dna.get(int(a.get("beatmap_id") or 0)),dna.get(int(b.get("beatmap_id") or 0))
+        if da and db:
+            ka=("aim","stream","speed","stamina","tech","reading","flow")
+            dd=(sum(((number(da.get("skills",{}).get(k))-number(db.get("skills",{}).get(k)))/25)**2 for k in ka)/len(ka))**.5
+            return base*.55+dd*.45
+        return base
+    # Keep a compact neighborhood for featured/recent/DNA charts; search shards can expose these IDs lazily.
+    similarity_targets = {}
+    targets=[]
+    seen=set()
+    for m in list(sim_pool[:120]) + [maps[x] for x in dna if x in maps]:
+        bid=int(m.get("beatmap_id") or 0)
+        if bid and bid not in seen:
+            seen.add(bid);targets.append(m)
+    # Bounded candidate windows across SR bands avoids quadratic 144k x 144k work.
+    sr_sorted=sorted(values,key=lambda m:number(m.get("official_sr")))
+    for target in targets[:1200]:
+        tsr=number(target.get("official_sr"))
+        candidates=[m for m in sr_sorted if abs(number(m.get("official_sr"))-tsr)<=.8 and m.get("beatmap_id")!=target.get("beatmap_id")]
+        if len(candidates)>1800:
+            step=max(1,len(candidates)//1800);candidates=candidates[::step][:1800]
+        nearest=sorted(((sim_dist(target,m),m) for m in candidates),key=lambda x:x[0])[:8]
+        similarity_targets[str(target["beatmap_id"])]=[{"beatmap_id":m.get("beatmap_id"),"distance":round(d,3)} for d,m in nearest]
     # Metadata oddities are useful before full DNA coverage exists.
     oddities = []
     for m in values:
@@ -320,6 +352,7 @@ def main():
             "oddities": oddities,
             "mapper_fingerprints": mapper_fingerprints,
             "era_trends": era_trends,
+            "similarity_index": similarity_targets,
         },
         "statuses": simple_counter(status_counts),
         "top_mappers": [
