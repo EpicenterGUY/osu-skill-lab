@@ -267,7 +267,7 @@ def main():
     dna_by_mapper = defaultdict(list)
     for r in dna_rows:
         dna_by_mapper[str(r.get("creator") or "Unknown")].append(r)
-    for name in mappers[:60]:
+    for name in mappers[:250]:
         rows = [m for m in values if str(m.get("creator") or "Unknown") == name]
         drows = dna_by_mapper.get(name, [])
         skill_avg = {}
@@ -356,6 +356,7 @@ def main():
             "mapper_fingerprints": mapper_fingerprints,
             "era_trends": era_trends,
             "similarity_index": similarity_targets,
+            "similarity_scope": {"targets": len(similarity_targets), "candidate_catalog": len(values), "dimensions": ["sr","bpm","ar","od","cs","length","dna_when_available"]},
         },
         "statuses": simple_counter(status_counts),
         "top_mappers": [
