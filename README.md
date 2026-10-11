@@ -19,16 +19,17 @@ Workflow: `.github/workflows/sync-ranked.yml`.
    - `OSU_CLIENT_ID`
    - `OSU_CLIENT_SECRET`
    Use your already issued osu! OAuth application's values. **Never** share the secret in chat, source, README, commit history, or browser.
-3. Visit **Settings → Actions → General → Workflow permissions** and enable **Read and write permissions**.
-4. Visit **Actions → Sync osu Ranked catalogue → Run workflow** and select `main` to run it once.
-5. Subsequent runs are scheduled every six hours (GitHub may delay or suspend scheduled runs).
+3. Visit **Settings → Pages → Build and deployment → Source** and select **GitHub Actions**. This is required: pushes made by GitHub's Actions token do **not** trigger branch-source Pages rebuilds.
+4. Visit **Settings → Actions → General → Workflow permissions** and enable **Read and write permissions** if offered (the workflow also requests its required permissions explicitly).
+5. Visit **Actions → Sync osu Ranked catalogue + publish Pages → Run workflow** and select `main` to run it once.
+6. Subsequent syncs are scheduled every six hours (GitHub may delay or suspend scheduled runs). The same workflow deploys the refreshed site; code pushes also deploy it.
 
 Every run:
 - Scans the newest two ranked-search pages independently for new maps.
 - Advances up to 20 historical pages using `data/ranked-state.json` cursor (resuming earlier work).
 - Deduplicates by beatmap ID and groups by ranking month in `data/ranked/YYYY-MM.json`.
 - Publishes the shard manifest `data/ranked-manifest.json`; the static website reads it on the next visit.
-- GitHub Pages rebuild may take a few minutes after an Actions commit.
+- The same GitHub Actions workflow explicitly uploads and deploys the site after a successful sync; there is no dependency on branch-source auto-builds.
 
 ### Catalogue files
 - `data/ranked-manifest.json` — public shard index, update time, counts, history pagination status.
