@@ -170,12 +170,13 @@ function renderRecentPreview() {
 }
 function renderIndexed() {
   const q = $("indexedQuery").value.trim().toLocaleLowerCase();
-  const rows = rankedIndex.filter(m => !q ||
+  const rows = rankedIndex.filter(m => (!$('dnaOnly').checked || Boolean(m.dna?.skills)) && (!q ||
     [m.artist, m.title, m.creator, m.version, m.beatmap_id].some(v =>
-      String(v ?? "").toLocaleLowerCase().includes(q)));
+      String(v ?? "").toLocaleLowerCase().includes(q))));
   const sort = $("indexedSort").value;
   const numeric = (m, field) => Number(m[field]) || 0;
   rows.sort((a, b) => {
+    if (sort.startsWith("dna_")) {const k=sort.slice(4);return numeric(b.dna?.skills||{},k)-numeric(a.dna?.skills||{},k);}
     if (sort === "sr_asc") return numeric(a, "official_sr") - numeric(b, "official_sr");
     if (sort === "recent") return String(b.ranked_date || "").localeCompare(String(a.ranked_date || ""));
     if (sort === "bpm_desc") return numeric(b, "bpm") - numeric(a, "bpm");
@@ -205,6 +206,7 @@ function scheduleIndexedRender() {
 }
 $("indexedQuery").addEventListener("input", scheduleIndexedRender);
 $("indexedSort").addEventListener("change", () => {indexedLimit = 20; renderIndexed();});
+$("dnaOnly").addEventListener("change", () => {indexedLimit = 20; renderIndexed();});
 $("indexedMore").addEventListener("click", () => {indexedLimit += 20; renderIndexed();});
 $("indexedYear").addEventListener("change", () => {indexedLoadedKey = ""; loadRankedSearch();});
 
