@@ -3,6 +3,7 @@
 No OAuth keys are used. The public site loads only the summary on entry.
 Run after sync_catalog.py and also before a direct GitHub Pages deployment.
 """
+import argparse
 import json
 import hashlib
 import re
@@ -79,6 +80,10 @@ def bucket_bpm(bpm):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--skip-search", action="store_true",
+                        help="reuse committed search shard descriptors; useful for DNA-only rebuilds")
+    args = parser.parse_args()
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     maps = {}
     for shard in manifest.get("shards", []):
@@ -91,11 +96,22 @@ def main():
     values = list(maps.values())
     # Optional actual-chart heuristics. Keep the original metadata independent.
     dna = {}
+    dna_shards = []
     for source in sorted((DATA / "chart-dna").glob("*.json")):
         try:
-            for record in json.loads(source.read_text(encoding="utf-8")):
+            records = json.loads(source.read_text(encoding="utf-8"))
+            valid = 0
+            for record in records:
                 if record.get("beatmap_id") and isinstance(record.get("skills"), dict):
                     dna[int(record["beatmap_id"])] = record
+                    valid += 1
+            digest = hashlib.sha256(source.read_bytes()).hexdigest()[:12]
+            dna_shards.append({
+                "year": source.stem,
+                "path": f"data/chart-dna/{source.name}",
+                "count": valid,
+                "version": digest,
+            })
         except (ValueError, TypeError) as exc:
             print(f"Skipping damaged experimental Chart DNA shard {source.name}: {exc}", flush=True)
 
@@ -133,8 +149,10 @@ def main():
         year = date_year(m)
         month = str(m.get("ranked_date") or "")[:7] if year != "unknown" else "unknown"
         sid = m.get("beatmapset_id")
-        by_year[year].append(searchable(m))
-        by_month[month].append(searchable(m))
+        # Search shards are metadata-only. Chart DNA is a separate lazy overlay so
+        # hourly DNA growth does not rewrite every historical search JSON.
+        by_year[year].append(mini(m))
+        by_month[month].append(mini(m))
         year_counts[year] += 1
         if sid:
             year_sets[year].add(sid)
@@ -160,28 +178,40 @@ def main():
         if m.get("ranked_date"):
             ranked_dates.append(str(m["ranked_date"]))
 
-    # Small independent monthly search files; unchanged months keep their content hash.
-    # A visitor loads only a selected month by default (not a whole year).
-    SEARCH.mkdir(parents=True, exist_ok=True)
-    search_shards = []
-    for month in sorted(by_month, reverse=True):
-        rows = sorted(by_month[month], key=lambda m: str(m.get("ranked_date") or ""), reverse=True)
-        safe_month = month if re.fullmatch(r"\d{4}-\d{2}", month) else "unknown"
-        path = SEARCH / (safe_month + ".json")
-        publish(path, rows)
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()[:12]
-        search_shards.append({
-            "month": month,
-            "year": month[:4] if safe_month != "unknown" else "unknown",
-            "path": f"data/ranked-search/{safe_month}.json",
-            "count": len(rows),
-            "version": digest,
-        })
+    # Small independent monthly metadata files. DNA is intentionally excluded and
+    # overlaid lazily from data/chart-dna/<year>.json in the browser.
+    if args.skip_search:
+        previous = {}
+        if SUMMARY.exists():
+            try:
+                previous = json.loads(SUMMARY.read_text(encoding="utf-8"))
+            except (ValueError, TypeError):
+                previous = {}
+        search_shards = previous.get("search_shards") or []
+        if not search_shards:
+            raise RuntimeError("--skip-search requested but no committed search shard manifest exists")
+    else:
+        SEARCH.mkdir(parents=True, exist_ok=True)
+        search_shards = []
+        for month in sorted(by_month, reverse=True):
+            rows = sorted(by_month[month], key=lambda m: str(m.get("ranked_date") or ""), reverse=True)
+            safe_month = month if re.fullmatch(r"\d{4}-\d{2}", month) else "unknown"
+            path = SEARCH / (safe_month + ".json")
+            publish(path, rows)
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()[:12]
+            search_shards.append({
+                "month": month,
+                "year": month[:4] if safe_month != "unknown" else "unknown",
+                "path": f"data/ranked-search/{safe_month}.json",
+                "count": len(rows),
+                "version": digest,
+                "payload": "metadata-only-v2",
+            })
 
-    active = {sh["path"].split("/")[-1] for sh in search_shards}
-    for stale in SEARCH.glob("*.json"):
-        if stale.name not in active:
-            stale.unlink()
+        active = {sh["path"].split("/")[-1] for sh in search_shards}
+        for stale in SEARCH.glob("*.json"):
+            if stale.name not in active:
+                stale.unlink()
 
     ranked_sets = {m.get("beatmapset_id") for m in values if m.get("beatmapset_id")}
     mappers = sorted(
@@ -338,6 +368,8 @@ def main():
             "coverage_percent": round(len(set(maps).intersection(dna)) / max(1, len(values)) * 100, 4),
             "coverage_by_year": dna_coverage_by_year,
             "selection_strategy": "coverage-balanced by ranked year; newest first within year",
+            "overlay": "lazy year shard keyed by beatmap_id",
+            "shards": dna_shards,
             "last_batch": {
                 "attempted": int(dna_state.get("attempted_last_run") or 0),
                 "succeeded": int(dna_state.get("succeeded_last_run") or 0),
@@ -405,11 +437,12 @@ def main():
         "recent": [
             searchable(m) for m in sorted(values, key=lambda m: str(m.get("ranked_date") or ""), reverse=True)[:30]
         ],
+        "search_payload": "metadata-only-v2",
         "search_shards": search_shards,
     }
     publish(SUMMARY, summary)
     print(
-        f"Published summary and {len(search_shards)} monthly search indexes:"
+        f"Published summary and {len(search_shards)} monthly metadata indexes:"
         f" {len(values)} difficulties / {len(ranked_sets)} sets"
         " (collected catalogue only)", flush=True
     )
