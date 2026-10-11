@@ -290,6 +290,28 @@ def main():
             return round(sum(vals)/len(vals),2) if vals else None
         era_trends.append({"year":year,"count":len(rows),"sr":av("official_sr"),"bpm":av("bpm"),"ar":av("ar"),"od":av("od"),"cs":av("cs")})
 
+    dna_year_counts = Counter()
+    for beatmap_id in dna:
+        meta_row = maps.get(beatmap_id)
+        if meta_row:
+            dna_year_counts[date_year(meta_row)] += 1
+    dna_coverage_by_year = [
+        {
+            "year": year,
+            "analyzed": dna_year_counts.get(year, 0),
+            "candidates": len(by_year[year]),
+            "coverage_percent": round(dna_year_counts.get(year, 0) / max(1, len(by_year[year])) * 100, 3),
+        }
+        for year in sorted(by_year, reverse=True) if year != "unknown"
+    ]
+    dna_state = {}
+    dna_state_path = DATA / "chart-dna-state.json"
+    if dna_state_path.exists():
+        try:
+            dna_state = json.loads(dna_state_path.read_text(encoding="utf-8"))
+        except (ValueError, TypeError):
+            dna_state = {}
+
     summary = {
         "format": "osu-skill-lab-summary",
         "version": 2,
@@ -311,6 +333,15 @@ def main():
             "method": "chart-dna-pilot-v1",
             "status": "experimental partial coverage",
             "note": "Real .osu object geometry; heuristic scores are NOT official SR/pp.",
+            "coverage_percent": round(len(set(maps).intersection(dna)) / max(1, len(values)) * 100, 4),
+            "coverage_by_year": dna_coverage_by_year,
+            "selection_strategy": "coverage-balanced by ranked year; newest first within year",
+            "last_batch": {
+                "attempted": int(dna_state.get("attempted_last_run") or 0),
+                "succeeded": int(dna_state.get("succeeded_last_run") or 0),
+                "elapsed_seconds": number(dna_state.get("elapsed_seconds_last_run")),
+                "blocked": bool(dna_state.get("blocked_on_last_run")),
+            },
         },
         "date_range": {
             "oldest": min(ranked_dates) if ranked_dates else None,
