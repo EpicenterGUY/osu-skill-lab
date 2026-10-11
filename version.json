@@ -1,17 +1,16 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "channel": "ranked",
-  "name": "Skill Lab redesign + experimental Chart DNA",
+  "name": "Fast-start Ranked Explorer and opt-in osu! profile",
   "released": "2026-10-12",
   "features": [
-    "Responsive desktop sidebar, mobile bottom dock and consistent UI",
-    "Distinct official Ranked catalogue vs on-device beatmap analysis",
-    "HOME recent Ranked feed and lightweight catalogue overview",
-    "RANKED quick year searching and experimental Chart DNA details",
-    "STATS official distributions, popularity and mapper leaderboards",
-    "Progressive rate-limited real .osu Chart DNA pilot; heuristic numbers only",
-    "Standalone .osr header reader for score, combo and accuracy",
-    "Linear-time mobile .osu strain timeline and more compact local storage",
-    "Hourly Ranked refresh and resumable backfill"
+    "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
+    "2026 June–October compact month search shards pre-seeded with content-addressable caching",
+    "Recent 30 maps render immediately; month/year/all search is opt-in and progressive",
+    "GitHub Pages profile nickname shortcut saved locally; never requires browser OAuth secrets",
+    "Optional Actions opt-in public user stats via OSU_PROFILE_USERNAME repository variable",
+    "Homepage personal profile card, 7-section navigation",
+    "GitHub Actions push deployments collapse old runs without canceling scheduled data collection",
+    "Experimental real-chart DNA and .osr local parsing remain available"
   ]
 }
