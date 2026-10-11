@@ -139,5 +139,32 @@ render();
 async function initOfficial(){if(location.hostname.endsWith('.github.io')){$('apiState').textContent='정적 GitHub Pages · PC 전용 API 검색을 사용하지 않습니다.';return}try{let d=await fetch('/api/osu/status').then(r=>{if(!r.ok)throw Error();return r.json()});$('apiState').textContent=d.configured?'PC 서버 · osu! API 연결됨':'PC 서버 연결 · osu! API 미설정'}catch(e){$('apiState').textContent='모바일 단독 모드 · 로컬 .osu 분석 가능 / 공식 검색은 PC 서버 필요'}}
 $('officialSearch').onclick=async()=>{if(location.hostname.endsWith('.github.io')){$('officialResults').textContent='웹에서는 위 공식 Ranked DB 검색을 사용하세요. PC 서버 검색은 로컬 실행에서만 가능합니다.';return}let q=$('officialQuery').value.trim();if(!q)return;$('officialResults').textContent='공식 데이터 검색 중…';try{let r=await fetch('/api/osu/search?q='+encodeURIComponent(q));let d=await r.json();if(!r.ok||!Array.isArray(d.beatmapsets))throw Error(d.error||'PC 서버에서만 공식 검색을 지원합니다');$('officialResults').innerHTML=d.beatmapsets.length?d.beatmapsets.map(x=>'<div class="dbitem"><b>'+esc(x.artist)+' — '+esc(x.title)+'</b><div class="muted">Mapper: '+esc(x.creator)+' · '+x.maps.length+' difficulties</div>'+x.maps.map(b=>'<span class="chip">'+esc(b.version)+' ★'+(b.official_sr??'—')+' · '+esc(b.status)+' · #'+b.beatmap_id+'</span>').join('')+'</div>').join(''):'<div class="empty">검색 결과 없음</div>'}catch(e){$('officialResults').textContent='검색 실패: '+e.message}};
 initOfficial();if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('./sw.js').catch(()=>{});
-</script><script>window.__rankedScriptStarted=false;setTimeout(()=>{if(!window.__rankedScriptStarted){const e=document.getElementById("hostedSyncState");if(e)e.innerHTML="<b>⚠ Ranked 스크립트 시작 실패</b> · 최신 파일 재요청 중…";const s=document.createElement("script");s.src="./ranked-catalog.js?recovery="+Date.now();document.body.appendChild(s)}},3500)</script><script src="./ranked-catalog.js?v=223" onload="window.__rankedScriptStarted=true"></script><script src="./profile.js?v=115"></script>
+</script><script>
+/* Independent emergency summary loader: runs even when the main Ranked module crashes. */
+(function(){
+  const state=document.getElementById("hostedSyncState"), hero=document.getElementById("rankedHeroKpis");
+  if(!state||!hero)return;
+  const safe=n=>Number(n||0).toLocaleString("ko-KR");
+  const show=(label)=>{if(state.textContent.includes("통계 확인")||state.dataset.emergency==="1"){state.dataset.emergency="1";state.textContent=label;}};
+  show("공식 Ranked DB 연결 중…");
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),12000);
+  fetch("./data/ranked-summary.json?startup="+Date.now(),{cache:"no-store",signal:controller.signal})
+    .then(r=>{if(!r.ok)throw Error("HTTP "+r.status);show("Ranked 통계 수신 · 검증 중…");return r.json()})
+    .then(s=>{
+      if(s.format!=="osu-skill-lab-summary"||!s.counts)throw Error("DB 형식 오류");
+      if(!window.__rankedSummaryReady){
+        const c=s.counts,range=s.date_range||{};
+        hero.innerHTML='<div class="dash-kpi"><span>Ranked 채보</span><b>'+safe(c.difficulties)+'</b><small>공식 DB</small></div>'+
+          '<div class="dash-kpi"><span>비트맵셋</span><b>'+safe(c.beatmapsets)+'</b><small>공식 DB</small></div>'+
+          '<div class="dash-kpi"><span>맵퍼</span><b>'+safe(c.mappers)+'</b><small>수집 DB</small></div>'+
+          '<div class="dash-kpi"><span>수집 범위</span><b>'+String(range.oldest||"").slice(0,4)+'–'+String(range.newest||"").slice(0,4)+'</b><small>Ranked 날짜</small></div>';
+        show("✓ 기본 통계 "+safe(c.difficulties)+"채보 표시 완료 · 상세 검색 초기화 확인 중");
+      }
+    }).catch(e=>show("⚠ 공식 DB 연결 오류: "+(e.name==="AbortError"?"12초 시간 초과":e.message)))
+    .finally(()=>clearTimeout(timer));
+  window.addEventListener("error",e=>{if(e.filename&&e.filename.includes("ranked-catalog"))show("⚠ Ranked 스크립트 오류: "+e.message);});
+  window.addEventListener("unhandledrejection",e=>{if(!window.__rankedSummaryReady)show("⚠ Ranked 초기화 오류: "+String(e.reason?.message||e.reason).slice(0,110));});
+})();
+</script><script src="./ranked-catalog.js?v=224" onerror="document.getElementById('hostedSyncState').textContent='⚠ Ranked JS 파일 다운로드 실패'"></script><script src="./profile.js?v=115"></script>
 <dialog id="chartModal" class="chart-modal" aria-label="실제 채보 Chart DNA 자세히 보기"><button id="chartModalClose" class="modal-close" type="button" aria-label="닫기">×</button><div id="chartModalBody"></div></dialog></body></html>
