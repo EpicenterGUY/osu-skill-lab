@@ -126,6 +126,7 @@ def main():
     mapper_sets = defaultdict(set)
     sr_values = []
     bpm_values = []
+    ar_values, od_values, cs_values, length_values = [], [], [], []
     ranked_dates = []
     for m in values:
         year = date_year(m)
@@ -151,6 +152,9 @@ def main():
             bpm = number(m["bpm"])
             bpm_values.append(bpm)
             bpm_counts[bucket_bpm(bpm)] += 1
+        for field, target in (("ar", ar_values), ("od", od_values), ("cs", cs_values), ("total_length", length_values)):
+            if m.get(field) is not None:
+                target.append(number(m[field]))
         if m.get("ranked_date"):
             ranked_dates.append(str(m["ranked_date"]))
 
@@ -224,6 +228,23 @@ def main():
             {"label": label, "count": bpm_counts[label]}
             for label in ["<100", "100–139", "140–179", "180–219", "220–259", "260–299", "300+"]
         ],
+        "attribute_buckets": {
+            "ar": [{"label": f"{i}–{i+1}", "count": sum(1 for v in ar_values if i <= v < i+1)} for i in range(0, 11)],
+            "od": [{"label": f"{i}–{i+1}", "count": sum(1 for v in od_values if i <= v < i+1)} for i in range(0, 11)],
+            "cs": [{"label": f"{i}–{i+1}", "count": sum(1 for v in cs_values if i <= v < i+1)} for i in range(0, 10)],
+            "length": [
+                {"label":"<1m","count":sum(1 for v in length_values if v < 60)},
+                {"label":"1–2m","count":sum(1 for v in length_values if 60 <= v < 120)},
+                {"label":"2–3m","count":sum(1 for v in length_values if 120 <= v < 180)},
+                {"label":"3–5m","count":sum(1 for v in length_values if 180 <= v < 300)},
+                {"label":"5m+","count":sum(1 for v in length_values if v >= 300)},
+            ],
+        },
+        "extremes": {
+            "highest_sr": [searchable(m) for m in sorted(values, key=lambda m:number(m.get("official_sr")), reverse=True)[:8]],
+            "highest_bpm": [searchable(m) for m in sorted(values, key=lambda m:number(m.get("bpm")), reverse=True)[:8]],
+            "longest": [searchable(m) for m in sorted(values, key=lambda m:number(m.get("total_length")), reverse=True)[:8]],
+        },
         "statuses": simple_counter(status_counts),
         "top_mappers": [
             {"name": name, "beatmapsets": len(mapper_sets[name]), "difficulties": mapper_maps[name]}
