@@ -603,6 +603,35 @@ $("chartModal").addEventListener("click", event => {
 
 
 // Observatory controls: make every visible research/tab button perform an obvious action.
+function bindInteractiveCatalogueControls() {
+  document.addEventListener("click", event => {
+    const year = event.target.closest("[data-year-link]");
+    if (year) {
+      event.preventDefault();
+      openTab?.("ranked");
+      const select=$("indexedYear"); if(select){ select.value=year.dataset.yearLink; select.dispatchEvent(new Event("change",{bubbles:true})); }
+      $("indexedQuery")?.focus();
+      return;
+    }
+    const mapper = event.target.closest("[data-mapper-fp]");
+    if (mapper) {
+      event.preventDefault();
+      const name=decodeURIComponent(mapper.dataset.mapperFp||"");
+      openTab?.("ranked");
+      const q=$("indexedQuery"); if(q){q.value=name;q.dispatchEvent(new Event("input",{bubbles:true}));q.focus();}
+      return;
+    }
+    const detail = event.target.closest("[data-ranked-detail]");
+    if (detail) {
+      event.preventDefault();
+      const id=decodeURIComponent(detail.dataset.rankedDetail||"");
+      openTab?.("ranked");
+      const q=$("indexedQuery"); if(q){q.value=id;q.dispatchEvent(new Event("input",{bubbles:true}));q.focus();}
+    }
+  });
+}
+bindInteractiveCatalogueControls();
+
 function bindObservatoryControls() {
   // Generic navigation delegation also covers buttons injected after startup.
   document.addEventListener("click", event => {
@@ -618,12 +647,12 @@ function bindObservatoryControls() {
     document.querySelectorAll("[data-stats-view]").forEach(x => x.classList.toggle("active", x === btn));
     const target = viewToTarget[btn.dataset.statsView] || "era";
     const node = document.querySelector('[data-research-target="'+target+'"]');
-    const box = target==="era" ? $("eraResearch") : target==="mapper" ? $("mapperResearch") : target==="odd" ? $("oddResearch") : $("twinResearch");
+    const box = target==="era" ? $("eraResearch") : target==="mapper" ? $("mapperResearch") : target==="odd" ? $("oddityResearch") : $("twinResearch");
     box?.scrollIntoView({behavior:"smooth", block:"center"});
   }));
   document.querySelectorAll("[data-research-target]").forEach(btn => btn.addEventListener("click", () => {
     const target=btn.dataset.researchTarget;
-    const box = target==="era" ? $("eraResearch") : target==="mapper" ? $("mapperResearch") : target==="odd" ? $("oddResearch") : $("twinResearch");
+    const box = target==="era" ? $("eraResearch") : target==="mapper" ? $("mapperResearch") : target==="odd" ? $("oddityResearch") : $("twinResearch");
     document.querySelectorAll("[data-research-target]").forEach(x=>x.classList.toggle("active",x===btn));
     box?.closest(".card")?.scrollIntoView({behavior:"smooth", block:"center"});
   }));
