@@ -597,5 +597,8 @@ $("chartModal").addEventListener("click", event => {
   if (event.target === $("chartModal")) $("chartModalClose").click();
 });
 
-renderIndexed();
+// Boot summary first. renderIndexed() needs DOM controls that may not exist in older cached shells.
 loadRankedSummary();
+try { renderIndexed(); } catch (err) {
+  console.warn("Initial Ranked list render deferred", err);
+}
