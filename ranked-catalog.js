@@ -601,6 +601,26 @@ $("chartModal").addEventListener("click", event => {
   if (event.target === $("chartModal")) $("chartModalClose").click();
 });
 
+
+// Observatory controls: make every visible research/tab button perform an obvious action.
+function bindObservatoryControls() {
+  const viewToTarget = {overview:"era", difficulty:"odd", history:"era", mapper:"mapper", extreme:"odd"};
+  document.querySelectorAll("[data-stats-view]").forEach(btn => btn.addEventListener("click", () => {
+    document.querySelectorAll("[data-stats-view]").forEach(x => x.classList.toggle("active", x === btn));
+    const target = viewToTarget[btn.dataset.statsView] || "era";
+    const node = document.querySelector('[data-research-target="'+target+'"]');
+    const box = target==="era" ? $("eraResearch") : target==="mapper" ? $("mapperResearch") : target==="odd" ? $("oddResearch") : $("twinResearch");
+    box?.scrollIntoView({behavior:"smooth", block:"center"});
+  }));
+  document.querySelectorAll("[data-research-target]").forEach(btn => btn.addEventListener("click", () => {
+    const target=btn.dataset.researchTarget;
+    const box = target==="era" ? $("eraResearch") : target==="mapper" ? $("mapperResearch") : target==="odd" ? $("oddResearch") : $("twinResearch");
+    document.querySelectorAll("[data-research-target]").forEach(x=>x.classList.toggle("active",x===btn));
+    box?.closest(".card")?.scrollIntoView({behavior:"smooth", block:"center"});
+  }));
+}
+bindObservatoryControls();
+
 // Optional first list paint. The summary boot was already scheduled near the top of this file.
 try { renderIndexed(); } catch (err) {
   console.warn("Initial Ranked list render deferred", err);
