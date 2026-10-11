@@ -54,7 +54,9 @@ jobs:
 
   deploy:
     needs: sync
-    if: always() && (github.event_name == 'push' || needs.sync.result == 'success')
+    # Scheduled collectors commit to main; that push starts the one canonical deploy.
+    # Avoid packaging/deploying the same data twice from the parent scheduled run.
+    if: always() && github.event_name == 'push'
     runs-on: ubuntu-latest
     concurrency:
       group: osu-ranked-pages-deploy
