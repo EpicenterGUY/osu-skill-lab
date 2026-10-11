@@ -26,7 +26,7 @@
 <div class="section-heading"><div><h2>Overview</h2><p>Ranked 수집 현황과 내 채보 분석을 한눈에</p></div><span class="pill">osu!standard · Ranked DB</span></div>
 <div class="grid">
 <div class="card full elevated"><div class="card-header"><h2>공식 Ranked 카탈로그</h2><span class="pill">자동 동기화</span></div>
-<div id="catalogHeadline" class="metrics"><div class="metric"><b>—</b><span>수집된 비트맵셋</span></div><div class="metric"><b>—</b><span>수집된 난이도</span></div><div class="metric"><b>—</b><span>평균 공식 SR</span></div><div class="metric"><b>—</b><span>평균 BPM</span></div></div><p id="catalogUpdated" class="muted">공식 DB 현황 불러오는 중…</p></div>
+<div id="catalogHeadline" class="metrics"><div class="metric"><b>—</b><span>수집된 비트맵셋</span></div><div class="metric"><b>—</b><span>수집된 난이도</span></div><div class="metric"><b>—</b><span>평균 공식 SR</span></div><div class="metric"><b>—</b><span>평균 BPM</span></div></div><p id="catalogUpdated" class="muted">공식 DB 현황 불러오는 중…</p><div id="backfillProgress" class="subtle-panel"><b>역대 Ranked 수집 현황</b><p class="hint-text">수집 상태를 불러오는 중…</p></div></div>
 <div class="card half"><div class="card-header"><h2>최근 Ranked</h2><button type="button" class="ghost-btn" data-tab="ranked">전체 탐색 ↗</button></div><div id="recentRankedPreview" class="muted">공식 카탈로그 로딩 중…</div></div>
 <div class="card half"><div class="card-header"><h2>내 osu! 프로필</h2><span class="pill">내 계정</span></div><div id="profileHomePreview" class="muted">계정 정보를 확인하는 중…</div></div>
 <div class="card half"><h2>내 분석실</h2><p class="card-lead">공식 Ranked 통계와 별도인, 내 기기에서 분석한 실제 .osu 채보 데이터입니다.</p>
@@ -44,7 +44,7 @@
 <form id="profileForm" class="profile-form"><div class="field"><label for="profileUserInput">osu! 닉네임 / ID</label><input id="profileUserInput" type="text" maxlength="60" placeholder="예: 사용자 이름 또는 숫자 ID" autocomplete="off" required></div>
 <button class="action" type="submit">이 브라우저에 저장</button></form>
 <p id="profileStatus" class="hint-text">현재 브라우저에만 저장되며 GitHub 저장소나 공개 DB에 게시되지 않습니다.</p></div>
-<div class="card full" id="profileResult"><div class="empty">계정 연결 대기 중…</div></div>
+<div class="card full" id="profileResult"><div class="empty">계정 연결 대기 중…</div></div><div class="card full"><div class="card-header"><h2>내 프로필 통계 가져오기</h2><span class="pill">이 브라우저에만 저장</span></div><p class="card-lead">osu! 공식 API의 사용자 응답 JSON을 직접 선택하면 PP·세계 순위·국가 순위·정확도·플레이 수 등을 로컬에서 표시합니다. 파일은 서버로 전송하지 않습니다.</p><label class="btn">osu! 사용자 JSON 선택<input id="profileJsonFile" type="file" accept=".json,application/json" hidden></label><p id="profileImportStatus" class="hint-text">자동 갱신은 아직 지원하지 않습니다. 비밀번호나 액세스 토큰이 담긴 파일은 선택하지 마세요.</p></div>
 <div class="card full"><details class="details-advanced"><summary>프로필 정보는 어디에 저장되나요?</summary><div class="details-body">
 <p>계정 이름 또는 ID는 <b>현재 브라우저의 로컬 저장 공간(localStorage)</b>에만 저장됩니다. 서버에 업로드하거나 GitHub 저장소·공개 통계 DB에 게시하지 않습니다. 기기마다 별도로 입력해야 합니다.</p>
 <p class="muted">공용 기기에서는 다른 브라우저 사용자가 같은 프로필에 접근할 수 있습니다. ‘이 브라우저에서 삭제’ 버튼으로 직접 지울 수 있습니다. PP·랭크를 비공개로 자동 불러오는 기능은 아직 지원하지 않습니다.</p>
@@ -127,5 +127,5 @@ render();
 async function initOfficial(){if(location.hostname.endsWith('.github.io')){$('apiState').textContent='정적 GitHub Pages · PC 전용 API 검색을 사용하지 않습니다.';return}try{let d=await fetch('/api/osu/status').then(r=>{if(!r.ok)throw Error();return r.json()});$('apiState').textContent=d.configured?'PC 서버 · osu! API 연결됨':'PC 서버 연결 · osu! API 미설정'}catch(e){$('apiState').textContent='모바일 단독 모드 · 로컬 .osu 분석 가능 / 공식 검색은 PC 서버 필요'}}
 $('officialSearch').onclick=async()=>{if(location.hostname.endsWith('.github.io')){$('officialResults').textContent='웹에서는 위 공식 Ranked DB 검색을 사용하세요. PC 서버 검색은 로컬 실행에서만 가능합니다.';return}let q=$('officialQuery').value.trim();if(!q)return;$('officialResults').textContent='공식 데이터 검색 중…';try{let r=await fetch('/api/osu/search?q='+encodeURIComponent(q));let d=await r.json();if(!r.ok||!Array.isArray(d.beatmapsets))throw Error(d.error||'PC 서버에서만 공식 검색을 지원합니다');$('officialResults').innerHTML=d.beatmapsets.length?d.beatmapsets.map(x=>'<div class="dbitem"><b>'+esc(x.artist)+' — '+esc(x.title)+'</b><div class="muted">Mapper: '+esc(x.creator)+' · '+x.maps.length+' difficulties</div>'+x.maps.map(b=>'<span class="chip">'+esc(b.version)+' ★'+(b.official_sr??'—')+' · '+esc(b.status)+' · #'+b.beatmap_id+'</span>').join('')+'</div>').join(''):'<div class="empty">검색 결과 없음</div>'}catch(e){$('officialResults').textContent='검색 실패: '+e.message}};
 initOfficial();if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('./sw.js').catch(()=>{});
-</script><script src="./ranked-catalog.js?v=110"></script><script src="./profile.js?v=112"></script>
+</script><script src="./ranked-catalog.js?v=110"></script><script src="./profile.js?v=113"></script>
 <dialog id="chartModal" class="chart-modal" aria-label="실제 채보 Chart DNA 자세히 보기"><button id="chartModalClose" class="modal-close" type="button" aria-label="닫기">×</button><div id="chartModalBody"></div></dialog></body></html>
