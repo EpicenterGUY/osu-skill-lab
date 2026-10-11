@@ -1,16 +1,17 @@
 {
-  "version": "0.9.0",
+  "version": "1.0.0",
   "channel": "ranked",
-  "name": "Fast Ranked dashboard and on-demand search",
+  "name": "Skill Lab redesign + experimental Chart DNA",
   "released": "2026-10-12",
   "features": [
-    "Precomputed light public Ranked statistics on startup",
-    "Official summary: collected beatmapsets, difficulties, mapper count, date range, SR and BPM distributions",
-    "Mapper and popularity leaderboards",
-    "Lazily download yearly compact Ranked search indexes only on RANKED tab",
-    "All-years search optional on mobile",
-    "Hourly newer Ranked scan and resumable faster historical backfill",
-    "Original monthly detailed shards stay available but do not block page startup",
-    "Local browser .osu chart skill heuristics remain separate from official metadata"
+    "Responsive desktop sidebar, mobile bottom dock and consistent UI",
+    "Distinct official Ranked catalogue vs on-device beatmap analysis",
+    "HOME recent Ranked feed and lightweight catalogue overview",
+    "RANKED quick year searching and experimental Chart DNA details",
+    "STATS official distributions, popularity and mapper leaderboards",
+    "Progressive rate-limited real .osu Chart DNA pilot; heuristic numbers only",
+    "Standalone .osr header reader for score, combo and accuracy",
+    "Linear-time mobile .osu strain timeline and more compact local storage",
+    "Hourly Ranked refresh and resumable backfill"
   ]
 }
