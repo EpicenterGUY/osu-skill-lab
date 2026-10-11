@@ -20,22 +20,39 @@ def configured():
     return bool(client_id and secret)
 
 def _request(url, method="GET", payload=None, bearer=None):
-    headers = {"Accept": "application/json", "User-Agent": "osu-skill-lab/0.4 (local app)"}
+    """Use modest retries for transient errors, respecting Retry-After and osu! service health."""
+    headers = {"Accept": "application/json", "User-Agent": "osu-skill-lab/1.2 (Ranked metadata catalogue)"}
     data = None
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
     if bearer:
         headers["Authorization"] = "Bearer " + bearer
-    req = Request(url, data=data, headers=headers, method=method)
-    try:
-        with urlopen(req, timeout=15) as resp:
-            return json.loads(resp.read(5_000_000))
-    except HTTPError as exc:
-        detail = exc.read(512).decode("utf-8", "replace")
-        raise ValueError(f"osu! API HTTP {exc.code}: {detail[:180]}") from exc
-    except URLError as exc:
-        raise ValueError(f"osu! API connection failed: {exc.reason}") from exc
+
+    for attempt in range(6):
+        req = Request(url, data=data, headers=headers, method=method)
+        try:
+            with urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read(5_000_000))
+        except HTTPError as exc:
+            code = exc.code
+            body = exc.read(512).decode("utf-8", "replace")
+            if code not in (429, 500, 502, 503, 504) or attempt == 5:
+                raise ValueError(f"osu! API HTTP {code}: {body[:180]}") from exc
+            retry_after = exc.headers.get("Retry-After", "")
+            try:
+                seconds = max(1.0, min(180.0, float(retry_after)))
+            except (TypeError, ValueError):
+                seconds = min(90.0, 3.0 * (2 ** attempt))
+            print(f"osu! API {code}; retry {attempt + 1}/5 after {seconds:.0f}s", flush=True)
+            time.sleep(seconds)
+        except (URLError, TimeoutError) as exc:
+            if attempt == 5:
+                raise ValueError(f"osu! API connection failed after retries: {exc}") from exc
+            seconds = min(90.0, 3.0 * (2 ** attempt))
+            print(f"osu! API connection retry {attempt + 1}/5 after {seconds:.0f}s", flush=True)
+            time.sleep(seconds)
+    raise RuntimeError("unreachable osu! API retry state")
 
 def token():
     if not configured():
