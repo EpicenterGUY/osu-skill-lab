@@ -1,6 +1,6 @@
 """Build a sharded, resumable osu!standard Ranked metadata catalogue for GitHub Pages.
 
-GitHub Actions usage: python sync_catalog.py --pages 20 --fresh-pages 2
+GitHub Actions usage: python sync_catalog.py --pages 150 --fresh-pages 1
 Requires OSU_CLIENT_ID and OSU_CLIENT_SECRET environment variables (GitHub Secrets).
 Does not download .osu, beatmap archives, or replays.
 """
@@ -94,7 +94,7 @@ def add_response(maps, data):
     return added
 
 
-def scan(maps, pages, cursor=None, delay=1.5, label="backfill"):
+def scan(maps, pages, cursor=None, delay=1.5, label="backfill", checkpoint=None, checkpoint_every=50):
     completed = False
     added_total = 0
     for page in range(pages):
@@ -102,16 +102,28 @@ def scan(maps, pages, cursor=None, delay=1.5, label="backfill"):
         if cursor:
             params["cursor_string"] = cursor
         data = osu_api.get("/beatmapsets/search", params)
-        sets = data.get("beatmapsets", [])
+        sets = data.get("beatmapsets")
+        if not isinstance(sets, list):
+            raise RuntimeError(f"{label}: malformed osu! API response")
         added = add_response(maps, data)
         added_total += added
         next_cursor = data.get("cursor_string") or None
         print(f"{label} {page + 1}/{pages}: {len(sets)} sets, +{added} maps, total {len(maps)}", flush=True)
-        if not sets or not next_cursor or next_cursor == cursor:
+        if not isinstance(sets, list):
+            raise RuntimeError(f"{label}: osu! API returned non-list beatmapsets; refusing to mark complete")
+        if next_cursor == cursor and next_cursor is not None:
+            raise RuntimeError(f"{label}: osu! search cursor stopped advancing; refusing false completion")
+        if not sets and next_cursor:
+            raise RuntimeError(f"{label}: empty page while more cursor data exists")
+        if not next_cursor:
             completed = True
             cursor = None
+        else:
+            cursor = next_cursor
+        if checkpoint and ((page + 1) % checkpoint_every == 0 or completed):
+            checkpoint(cursor, completed)
+        if completed:
             break
-        cursor = next_cursor
         if page + 1 < pages:
             time.sleep(delay)
     return cursor, completed, added_total
@@ -162,13 +174,16 @@ def main():
     parser.add_argument("--pages", type=int, default=200, help="Historical pages per run, 0..500")
     parser.add_argument("--fresh-pages", type=int, default=2, help="Newest pages to rescan, 0..10")
     parser.add_argument("--delay", type=float, default=1.5)
+    parser.add_argument("--checkpoint-every", type=int, default=50, help="Save history cursor every N API pages")
     args = parser.parse_args()
     if not 0 <= args.pages <= 500:
         parser.error("--pages must be 0..500")
     if not 0 <= args.fresh_pages <= 10:
         parser.error("--fresh-pages must be 0..10")
     if args.delay < 1:
-        parser.error("--delay must be >= 1")
+        parser.error("--delay must be >= 1 (avoid excessive osu! API polling)")
+    if not 1 <= args.checkpoint_every <= 500:
+        parser.error("--checkpoint-every must be 1..500")
     if not osu_api.configured():
         parser.error("Set OSU_CLIENT_ID and OSU_CLIENT_SECRET via environment/secrets")
 
@@ -181,9 +196,16 @@ def main():
             if args.pages and not state.get("backfill_complete"):
                 time.sleep(args.delay)
         if args.pages and not state.get("backfill_complete"):
+            def checkpoint(cursor, done):
+                state["backfill_cursor"] = cursor
+                state["backfill_complete"] = done
+                persist(maps, state)
+                print(f"Checkpoint committed locally: {len(maps)} maps", flush=True)
+
             cursor, done, _ = scan(
                 maps, args.pages, cursor=state.get("backfill_cursor"),
-                delay=args.delay, label="history"
+                delay=args.delay, label="history",
+                checkpoint=checkpoint, checkpoint_every=args.checkpoint_every,
             )
             state["backfill_cursor"] = cursor
             state["backfill_complete"] = done
