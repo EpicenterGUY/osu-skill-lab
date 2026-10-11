@@ -1,4 +1,4 @@
-name: Sync osu Ranked metadata
+name: Sync osu Ranked catalogue
 on:
   workflow_dispatch:
   schedule:
@@ -14,23 +14,23 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-        with:
-          persist-credentials: true
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Collect Ranked pages
+      - name: Validate Python source
+        run: python -m py_compile osu_api.py sync_catalog.py
+      - name: Refresh newest maps and continue historical backfill
         env:
           OSU_CLIENT_ID: ${{ secrets.OSU_CLIENT_ID }}
           OSU_CLIENT_SECRET: ${{ secrets.OSU_CLIENT_SECRET }}
-        run: |
-          python collect_ranked.py --pages 20
-      - name: Commit refreshed index
+        run: python sync_catalog.py --pages 20 --fresh-pages 2
+      - name: Publish catalog even if a later API page failed
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/ranked-index.json
+          git add data/ranked/ data/ranked-manifest.json data/ranked-state.json 2>/dev/null || true
           if ! git diff --cached --quiet; then
-            git commit -m "Update Ranked metadata index"
+            git commit -m "Sync osu Ranked metadata catalog"
             git push
           fi
