@@ -39,7 +39,7 @@ const officialMapLink = m => '<a href="https://osu.ppy.sh/beatmaps/' +
   cx(m.artist || "?") + ' — ' + cx(m.title || "?") + ' [' + cx(m.version || "?") + ']</a>';
 const topRows = (list, kind) => (list || []).slice(0, 10).map((m, i) =>
   '<tr><td>' + (i + 1) + '</td><td>' + officialMapLink(m) + '</td><td>' +
-  (kind === "sr" ? "★" + Number(m.official_sr || 0).toFixed(2) : ct(m.playcount)) +
+  (kind === "sr" ? "★" + Number(m.official_sr || 0).toFixed(2) : kind === "bpm" ? Number(m.bpm || 0).toFixed(0) : ct(m.playcount)) +
   '</td></tr>').join("");
 const statsTable = (header, rows, extra = "") =>
   '<table><thead><tr><th>#</th><th>' + header + '</th><th>' +
@@ -56,6 +56,7 @@ async function fetchCatalogJson(path, version, fresh = false) {
 
 function renderCatalogSummary(s) {
   const count = s.counts || {};
+  const avg = s.averages || {};
   const oldest = (s.date_range?.oldest || "").slice(0, 10);
   const newest = (s.date_range?.newest || "").slice(0, 10);
   const current = s.backfill_complete ? "과거 검색 순회 종료 · 누락 검증 별도" : "과거 Ranked 수집 중";
@@ -135,7 +136,7 @@ function renderCatalogSummary(s) {
     '<div class="card half"><h2>공식 SR TOP 10</h2>' +
     statsTable("채보", topRows(s.top_sr, "sr"), "SR") + '</div>' +
     '<div class="card half"><h2>최고 BPM</h2>' + statsTable("채보", topRows(s.extremes?.highest_bpm, "bpm"), "BPM") + '</div>' +
-    '<div class="card half"><h2>최장 채보</h2>' + statsTable("채보", (s.extremes?.longest || []).slice(0,8).map((m,i)=>'<tr><td>'+(i+1)+' '+officialMapLink(m)+'</td><td>'+Math.floor(Number(m.total_length||0)/60)+'m '+Math.round(Number(m.total_length||0)%60)+'s</td></tr>').join(""), "길이") + '</div>' +
+    '<div class="card half"><h2>최장 채보</h2>' + statsTable("채보", (s.extremes?.longest || []).slice(0,8).map((m,i)=>'<tr><td>'+(i+1)+'</td><td>'+officialMapLink(m)+'</td><td>'+Math.floor(Number(m.total_length||0)/60)+'m '+Math.round(Number(m.total_length||0)%60)+'s</td></tr>').join(""), "길이") + '</div>' +
     '<div class="card full"><h2>플레이카운트 TOP 10 · 현재 수집분</h2>' +
     statsTable("채보", topRows(s.top_playcount, "plays"), "플레이 수") + '</div>' +
     '<div class="card full"><h2>실제 채보 기반 Chart DNA · 시범 운영</h2>' +
@@ -278,7 +279,7 @@ function renderIndexed() {
     ' · ' + Number(m.bpm || 0).toFixed(0) + ' BPM · AR' +
     cx(m.ar) + ' OD' + cx(m.od) + ' · ' +
     cx((m.ranked_date || "").slice(0, 10)) + '</div>' +
-    (m.dna?.skills ? '<button type="button" class="ghost-btn" data-dna-id="' +
+    '<button type="button" class="ghost-btn" data-ranked-detail="'+encodeURIComponent(String(m.beatmap_id))+'">상세 분석 ↗</button>' + (m.dna?.skills ? '<button type="button" class="ghost-btn" data-dna-id="' +
       encodeURIComponent(String(m.beatmap_id)) + '">Chart DNA 자세히 ↗</button>' :
       '<span class="chip">공식 메타데이터</span>') + '</div>').join("") ||
     '<div class="empty">검색 결과 없음</div>';
@@ -429,6 +430,26 @@ $("importRanked").addEventListener("change", async e => {
 
 
 /* Actual-chart experimental DNA viewer; never label the scores as official SR/pp. */
+function showRankedDetails(map) {
+  if(!map) return;
+  const dna=map.dna?.skills, fields=[
+    ["공식 SR","★"+Number(map.official_sr||0).toFixed(2)],["BPM",Number(map.bpm||0).toFixed(1)],
+    ["AR",map.ar??"—"],["OD",map.od??"—"],["CS",map.cs??"—"],
+    ["HP",map.hp??"—"],["길이",Math.floor(Number(map.total_length||0)/60)+"분 "+Math.round(Number(map.total_length||0)%60)+"초"],
+    ["플레이 수",ct(map.playcount)],["Ranked 날짜",String(map.ranked_date||"—").slice(0,10)]
+  ];
+  const area=$("chartModalBody");
+  area.innerHTML='<span class="chart-dna-badge">Ranked Explorer · 공식 메타데이터</span>'+
+    '<h2>'+cx(map.artist||"?")+' — '+cx(map.title||"?")+'</h2>'+
+    '<p class="muted">['+cx(map.version||"?")+'] · '+cx(map.creator||"?")+'</p>'+
+    '<div class="ranked-detail-grid">'+fields.map(([k,v])=>'<div><small>'+cx(k)+'</small><b>'+cx(v)+'</b></div>').join("")+'</div>'+
+    (dna?'<h3>Chart DNA · 자체 분석</h3><div class="dna-leaderboard">'+
+      Object.entries(dna).map(([k,v])=>'<div class="dna-lead"><span>'+cx(k.toUpperCase())+'</span><b>'+Number(v||0).toFixed(1)+'</b></div>').join("")+'</div>':
+      '<div class="collection-state"><b>Chart DNA 분석 대기 중</b><span>이 채보의 실제 노트 데이터가 아직 분석되지 않았습니다. 공식 메타데이터만 표시합니다.</span></div>')+
+    '<div class="ranked-detail-actions"><a class="ghost-btn" href="https://osu.ppy.sh/beatmaps/'+encodeURIComponent(map.beatmap_id)+'" target="_blank" rel="noopener noreferrer">osu! 채보 페이지 ↗</a>'+
+    '<a class="ghost-btn" href="https://osu.ppy.sh/beatmapsets/'+encodeURIComponent(map.beatmapset_id)+'" target="_blank" rel="noopener noreferrer">비트맵셋 보기 ↗</a></div>';
+  const dialog=$("chartModal");if(typeof dialog.showModal==="function")dialog.showModal();else dialog.setAttribute("open","");
+}
 function showChartDna(map) {
   if (!map?.dna?.skills) return;
   const dna = map.dna;
@@ -462,6 +483,13 @@ function showChartDna(map) {
   if (typeof dialog.showModal === "function") dialog.showModal();
   else {dialog.setAttribute("open","");}
 }
+document.addEventListener("click", event => {
+  const button=event.target.closest("[data-ranked-detail]");
+  if(!button)return;
+  const id=decodeURIComponent(button.dataset.rankedDetail||"");
+  const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||catalogSummary?.recent?.find(m=>String(m.beatmap_id)===id);
+  showRankedDetails(map);
+});
 document.addEventListener("click", event => {
   const button = event.target.closest("[data-dna-id]");
   if (!button) return;
