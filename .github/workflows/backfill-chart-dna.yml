@@ -1,13 +1,14 @@
 name: Backfill Ranked Chart DNA
+
 on:
-  push:
-    paths: ['.github/workflows/backfill-chart-dna.yml', 'build_chart_dna.py']
   workflow_dispatch:
   schedule:
-    - cron: '41 */3 * * *'
+    - cron: "41 */3 * * *"
+
 concurrency:
   group: osu-chart-dna-backfill
   cancel-in-progress: false
+
 jobs:
   dna:
     runs-on: ubuntu-latest
@@ -18,41 +19,22 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - name: Validate analyzer
-        run: python -m py_compile build_chart_dna.py build_ranked_views.py
-      - name: Analyze Chart DNA in recoverable batches
-        shell: bash
         run: |
-          set -u
+          python -m py_compile build_chart_dna.py build_ranked_views.py
+          python build_chart_dna.py --help
+      - name: Analyze one recoverable DNA batch
+        run: python build_chart_dna.py --limit 100 --delay 1.5 --checkpoint-every 25
+      - name: Rebuild derived views
+        run: python build_ranked_views.py
+      - name: Commit derived DNA only
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          deadline=$(( $(date +%s) + 12300 ))
-          failures=0
-          while [ "$(date +%s)" -lt "$deadline" ]; do
-            if python build_chart_dna.py --limit 100 --delay 1.5 --checkpoint-every 25; then
-              failures=0
-            else
-              failures=$((failures+1))
-            fi
-            python build_ranked_views.py || true
-            git add -A -- data/chart-dna data/chart-dna-manifest.json data/chart-dna-state.json data/ranked-summary.json data/ranked-search
-            if ! git diff --cached --quiet; then
-              git commit -m "Backfill derived Ranked Chart DNA"
-              git pull --rebase origin main
-              git push
-            fi
-            if [ "$failures" -ge 3 ]; then
-              echo "Three failed batches; leaving recovery state for the next scheduled run."
-              break
-            fi
-            # Stop once manifest says every current candidate has derived DNA.
-            python - <<'PY' && break || true
-import json
-from pathlib import Path
-p=Path("data/chart-dna-manifest.json")
-m=json.loads(p.read_text()) if p.exists() else {}
-raise SystemExit(0 if m.get("candidate_difficulties",1) and m.get("analyzed_difficulties",0)>=m.get("candidate_difficulties",1) else 1)
-PY
-            sleep 5
-          done
+          git add -A -- data/chart-dna data/chart-dna-manifest.json data/chart-dna-state.json data/ranked-summary.json data/ranked-search
+          if ! git diff --cached --quiet; then
+            git commit -m "Backfill derived Ranked Chart DNA"
+            git pull --rebase origin main
+            git push
+          fi
