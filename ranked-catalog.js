@@ -169,8 +169,54 @@ async function ensureDnaForCurrentSelection() {
   await loadDnaOverlayYears(years,indexedGeneration,true);
 }
 
+function renderEraComparison() {
+  const host=$("obsCompareResult"), aSel=$("obsYearA"), bSel=$("obsYearB"), metricSel=$("obsMetric");
+  if(!host||!aSel||!bSel||!metricSel||!catalogSummary)return;
+  const era=catalogSummary.research?.era_trends||[];
+  const eraMap=new Map(era.map(x=>[String(x.year),x]));
+  const dnaMap=new Map((catalogSummary.chart_dna?.coverage_by_year||[]).map(x=>[String(x.year),x]));
+  const metric=metricSel.value||"sr", a=eraMap.get(aSel.value), b=eraMap.get(bSel.value);
+  if(!a||!b){host.innerHTML='<div class="empty">비교할 시대 통계가 없습니다.</div>';return;}
+  const defs={
+    sr:["평균 공식 SR",x=>Number(x?.sr||0),"★",2],
+    bpm:["평균 BPM",x=>Number(x?.bpm||0)," BPM",1],
+    ar:["평균 AR",x=>Number(x?.ar||0),"",2],
+    od:["평균 OD",x=>Number(x?.od||0),"",2],
+    cs:["평균 CS",x=>Number(x?.cs||0),"",2],
+    count:["Ranked 채보 수",x=>Number(x?.count||0),"",0],
+    dna:["Chart DNA 커버리지",x=>Number(dnaMap.get(String(x?.year))?.coverage_percent||0),"%",2],
+  };
+  const [label,get,unit,digits]=defs[metric]||defs.sr;
+  const av=get(a), bv=get(b), delta=av-bv;
+  const format=v=>metric==="count"?ct(v):v.toFixed(digits)+unit;
+  const sign=delta>0?"+":"";
+  const pct=bv?delta/Math.abs(bv)*100:null;
+  host.innerHTML='<div class="era-compare-kpis">'+
+    '<div><span>'+cx(a.year)+'</span><b>'+cx(format(av))+'</b><small>'+cx(label)+'</small></div>'+
+    '<div><span>'+cx(b.year)+'</span><b>'+cx(format(bv))+'</b><small>'+cx(label)+'</small></div>'+
+    '<div><span>차이 A−B</span><b>'+cx(sign+format(delta))+'</b><small>'+(pct==null?'기준값 0':cx((pct>=0?"+":"")+pct.toFixed(1)+"%"))+'</small></div>'+
+    '<div><span>표본</span><b>'+ct(a.count)+' / '+ct(b.count)+'</b><small>각 연도 Ranked difficulties</small></div></div>'+
+    '<p class="hint-text">'+cx(a.year)+'와 '+cx(b.year)+'의 수집 DB 평균을 비교한 값입니다. Chart DNA는 분석 완료 표본의 커버리지이며 실력이나 공식 난이도 지표가 아닙니다.</p>';
+}
+function setupEraComparison(s) {
+  const aSel=$("obsYearA"), bSel=$("obsYearB"); if(!aSel||!bSel)return;
+  const years=(s.research?.era_trends||[]).map(x=>String(x.year));
+  if(!years.length)return;
+  const options=years.slice().reverse().map(y=>'<option value="'+cx(y)+'">'+cx(y)+'</option>').join("");
+  const oldA=aSel.value, oldB=bSel.value;
+  aSel.innerHTML=options; bSel.innerHTML=options;
+  const latest=years[years.length-1], target=String(Number(latest)-10);
+  aSel.value=years.includes(oldA)?oldA:latest;
+  bSel.value=years.includes(oldB)?oldB:(years.includes(target)?target:years[0]);
+  renderEraComparison();
+}
+$("obsYearA")?.addEventListener("change",renderEraComparison);
+$("obsYearB")?.addEventListener("change",renderEraComparison);
+$("obsMetric")?.addEventListener("change",renderEraComparison);
+
 function renderCatalogSummary(s) {
   const count = s.counts || {};
+  setupEraComparison(s);
   const avg = s.averages || {};
   const oldest = (s.date_range?.oldest || "").slice(0, 10);
   const newest = (s.date_range?.newest || "").slice(0, 10);
