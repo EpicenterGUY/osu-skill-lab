@@ -1,7 +1,7 @@
 {
-  "version": "1.4.0",
+  "version": "2.0.0",
   "channel": "ranked",
-  "name": "Adaptive Training Lab",
+  "name": "Research Observatory",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -18,6 +18,9 @@
     "Dense mobile Ranked discovery dashboard with presets, filters and live result metrics",
     "Expanded Stats dashboard and honest Chart DNA coverage indicators",
     "Adaptive local weakness exposure dashboard and Skill Ladder",
-    "Training data confidence that avoids claiming unobserved player skill"
+    "Training data confidence that avoids claiming unobserved player skill",
+    "Meta Time Machine and Mapper Fingerprints",
+    "Weird Map Observatory and DNA Difficulty Twins",
+    "DNA skill leaderboards fed by resumable large backfill"
   ]
 }
