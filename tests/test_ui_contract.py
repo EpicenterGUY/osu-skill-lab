@@ -17,7 +17,7 @@ class UiContractTests(unittest.TestCase):
         for element_id in ("eraResearch", "mapperResearch", "oddityResearch", "twinResearch",
                            "dnaGlobalRanking", "dnaSkillLeaderboard", "skillLadder", "weaknessRadar"):
             self.assertRegex(HTML, rf'id="{re.escape(element_id)}"')
-            self.assertIn(f'$("{"%s" % element_id}")', RANKED)
+            self.assertIn('$("' + element_id + '")', RANKED)
         self.assertNotIn("oddResearch", RANKED)
 
     def test_optional_ranked_controls_cannot_abort_startup(self):
