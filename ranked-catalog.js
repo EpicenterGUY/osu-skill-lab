@@ -12,6 +12,8 @@ let rankedIndex = [];
 let indexedLimit = 20;
 const indexedImported = new Map();
 const indexedYearCache = new Map();
+const dnaOverlayCache = new Map();
+let dnaOverlayLoadPromise = null;
 let legacyLoaded = false;
 let indexedGeneration = 0;
 let indexedLoadedKey = "";
@@ -87,6 +89,84 @@ async function fetchCatalogJson(path, version, fresh = false, progress = null) {
     if (e?.name === "AbortError") throw Error("15초 응답 시간 초과");
     throw e;
   } finally { clearTimeout(timeout); }
+}
+
+function compactOverlayDna(record) {
+  if (!record?.skills) return null;
+  return {
+    skills: record.skills,
+    objects: record.objects,
+    duration_s: record.duration_s,
+    max_stream: record.max_stream,
+    peak_density_2s: record.peak_density_2s,
+    median_gap_ms: record.median_gap_ms,
+    analysis_method: record.analysis_method,
+  };
+}
+function mergeCachedDna(rows) {
+  if (!Array.isArray(rows) || !rows.length) return rows;
+  for (const m of rows) {
+    const year=String(m.ranked_date||"").slice(0,4);
+    const overlay=dnaOverlayCache.get(year)?.get(String(m.beatmap_id));
+    if (overlay) m.dna=overlay;
+  }
+  return rows;
+}
+function dnaYearsForSelection(selection) {
+  const shards=catalogSummary?.chart_dna?.shards||[];
+  if (selection==="recent") return [];
+  if (selection==="all") return shards.map(x=>String(x.year)).filter(x=>/^\d{4}$/.test(x));
+  const value=selection.replace("year:","").replace("month:","");
+  const year=value.slice(0,4);
+  return /^\d{4}$/.test(year)?[year]:[];
+}
+async function loadDnaOverlayYears(years, generation=indexedGeneration, explicit=false) {
+  const unique=[...new Set((years||[]).filter(y=>/^\d{4}$/.test(String(y))))];
+  if (!unique.length || !catalogSummary) return;
+  const manifest=new Map((catalogSummary.chart_dna?.shards||[]).map(x=>[String(x.year),x]));
+  const wanted=unique.filter(y=>manifest.has(y)&&!dnaOverlayCache.has(y));
+  if (!wanted.length) {mergeCachedDna(rankedIndex);return;}
+  const key=wanted.join(",")+"@"+String(catalogSummary.chart_dna?.coverage_percent||catalogSummary.updated_at||"1");
+  if (dnaOverlayLoadPromise?.key===key) return dnaOverlayLoadPromise.promise;
+  const task=(async()=>{
+    let files=0, records=0, failed=0;
+    for(let i=0;i<wanted.length;i+=2){
+      const batchYears=wanted.slice(i,i+2);
+      if(explicit) setRankedLoadState("Chart DNA overlay", (files)+"/"+wanted.length+" 연도 · 메타데이터는 이미 사용 가능", wanted.length?files/wanted.length*100:0);
+      const batch=await Promise.allSettled(batchYears.map(async year=>{
+        const sh=manifest.get(year);
+        const rows=await fetchCatalogJson(sh.path,sh.version||catalogSummary.updated_at);
+        if(!Array.isArray(rows)) throw Error("손상된 DNA overlay · "+sh.path);
+        const mapped=new Map();
+        for(const row of rows){
+          const dna=compactOverlayDna(row);
+          if(row?.beatmap_id&&dna)mapped.set(String(row.beatmap_id),dna);
+        }
+        dnaOverlayCache.set(year,mapped);
+        return mapped.size;
+      }));
+      if(generation!==indexedGeneration&&!explicit)return;
+      for(const result of batch){
+        files++;
+        if(result.status==="fulfilled") records+=result.value;
+        else{failed++;console.warn("Chart DNA overlay unavailable",result.reason);}
+      }
+      mergeCachedDna(rankedIndex);
+      indexedLimit=Math.max(20,indexedLimit);
+      renderIndexed();
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+    const state=$("hostedSyncState");
+    if(state) state.textContent="Chart DNA overlay "+ct(records)+"개 연결 · "+files+"/"+wanted.length+" 연도"+(failed?" · 실패 "+failed:"")+" · 메타데이터와 분리 로딩";
+  })();
+  dnaOverlayLoadPromise={key,promise:task};
+  try{await task;}finally{if(dnaOverlayLoadPromise?.promise===task)dnaOverlayLoadPromise=null;}
+}
+async function ensureDnaForCurrentSelection() {
+  const selection=$("indexedYear")?.value||"recent";
+  const years=dnaYearsForSelection(selection);
+  if(selection==="recent"){renderIndexed();return;}
+  await loadDnaOverlayYears(years,indexedGeneration,true);
 }
 
 function renderCatalogSummary(s) {
@@ -301,7 +381,7 @@ async function loadRankedSummary() {
 function renderRecentPreview() {
   if (!catalogSummary) return;
   const recent = (catalogSummary.recent || []).slice();
-  rankedIndex = recent;
+  rankedIndex = mergeCachedDna(recent);
   indexedLimit = 20;
   renderIndexed();
   $("indexedCount").textContent = "최근 Ranked 미리보기 " + ct(recent.length) +
@@ -364,7 +444,11 @@ function scheduleIndexedRender() {
   }, 130);
 }
 $("indexedQuery")?.addEventListener("input", scheduleIndexedRender);
-$("indexedSort")?.addEventListener("change", () => {indexedLimit = 20; renderIndexed();});
+$("indexedSort")?.addEventListener("change", async () => {
+  indexedLimit = 20;
+  if(String($("indexedSort")?.value||"").startsWith("dna_")) await ensureDnaForCurrentSelection();
+  renderIndexed();
+});
 $("indexedMinSr")?.addEventListener("change", () => {indexedLimit = 20; renderIndexed();});
 $("indexedMinBpm")?.addEventListener("change", () => {indexedLimit = 20; renderIndexed();});
 document.querySelectorAll("[data-ranked-jump]").forEach(b => b.addEventListener("click", () => {
@@ -380,7 +464,11 @@ document.querySelectorAll("[data-ranked-preset]").forEach(b => b.addEventListene
   if(sort) sort.value = p==="popular" ? "plays" : p==="recent" ? "recent" : p==="fast" ? "bpm_desc" : "sr_desc";
   indexedLimit=20; renderIndexed();
 }));
-$("dnaOnly")?.addEventListener("change", () => {indexedLimit = 20; renderIndexed();});
+$("dnaOnly")?.addEventListener("change", async () => {
+  indexedLimit = 20;
+  if($("dnaOnly")?.checked) await ensureDnaForCurrentSelection();
+  renderIndexed();
+});
 $("indexedMore")?.addEventListener("click", () => {indexedLimit += 20; renderIndexed();});
 $("indexedYear")?.addEventListener("change", () => {indexedLoadedKey = ""; loadRankedSearch();});
 
@@ -448,7 +536,7 @@ async function loadRankedSearch() {
         }
       }
       // Progressively show results: the visitor doesn't wait for all years.
-      rankedIndex = [...gathered.values()];
+      rankedIndex = mergeCachedDna([...gathered.values()]);
       indexedLimit = 20;
       renderIndexed();
       $("hostedSyncState").textContent = "검색 데이터 " + ct(loaded) + "개 로드 · " +
@@ -464,13 +552,17 @@ async function loadRankedSearch() {
           (selection.startsWith("month:") && date.startsWith(selection.slice(6))))
         gathered.set(String(m.beatmap_id),m);
     }
-    rankedIndex = [...gathered.values()];
+    rankedIndex = mergeCachedDna([...gathered.values()]);
     indexedLoadedKey = failed ? "" : key;
     indexedLimit = 20;
     renderIndexed();
     $("hostedSyncState").textContent = range + " · " + ct(rankedIndex.length) +
       "채보 검색 가능" + (failed ? " · 일부 파일 실패 (범위를 바꿔 다시 시도)" : "") +
-      " · 현재 수집된 DB 기준";
+      " · 메타데이터 준비 완료";
+    if(selection!=="all"){
+      const years=dnaYearsForSelection(selection);
+      loadDnaOverlayYears(years,generation,false).catch(err=>console.warn("Optional DNA overlay failed",err));
+    }
   })();
   indexedLoadPromise = {key,promise:task};
   try {await task;} finally {
@@ -494,7 +586,7 @@ $("importRanked")?.addEventListener("change", async e => {
     catch (_) {console.info("Optional local index exceeds browser storage");}
     indexedLoadedKey = "";
     if (catalogSummary) await loadRankedSearch();
-    else {rankedIndex = [...indexedImported.values()]; renderIndexed();}
+    else {rankedIndex = mergeCachedDna([...indexedImported.values()]); renderIndexed();}
     alert("개인 색인 " + ct(data.maps.length) + "개 가져옴");
   } catch (err) {alert("가져오기 실패: " + err.message);}
   e.target.value = "";
