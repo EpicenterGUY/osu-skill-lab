@@ -186,6 +186,75 @@ def main():
         mapper_maps,
         key=lambda name: (-len(mapper_sets[name]), -mapper_maps[name], name.lower())
     )
+    # v2 research layer: every result below is derived only from collected metadata / actual Chart DNA.
+    skill_names = ("aim","stream","speed","stamina","tech","reading","flow","overall")
+    dna_rows = []
+    for bid, chart in dna.items():
+        meta_row = maps.get(bid)
+        if not meta_row:
+            continue
+        row = searchable(meta_row)
+        row["dna"] = row.get("dna") or {"skills": chart.get("skills", {})}
+        dna_rows.append(row)
+    dna_rankings = {}
+    for skill in skill_names:
+        dna_rankings[skill] = sorted(
+            dna_rows, key=lambda r: number((r.get("dna") or {}).get("skills", {}).get(skill)), reverse=True
+        )[:20]
+    # Nearest-neighbour pairs in the current analyzed sample. Limit work to a recent/representative window.
+    pair_pool = dna_rows[:1500]
+    twin_pairs = []
+    for i, a in enumerate(pair_pool):
+        sa = (a.get("dna") or {}).get("skills", {})
+        best = None
+        for b in pair_pool[i+1:min(len(pair_pool), i+180)]:
+            sb = (b.get("dna") or {}).get("skills", {})
+            if not sa or not sb:
+                continue
+            dist = sum((number(sa.get(k))-number(sb.get(k)))**2 for k in skill_names[:-1]) ** .5
+            sr_gap = abs(number(a.get("official_sr"))-number(b.get("official_sr")))
+            score = dist + sr_gap * 2
+            if best is None or score < best[0]:
+                best = (score, dist, sr_gap, b)
+        if best:
+            twin_pairs.append({"a":a,"b":best[3],"dna_distance":round(best[1],2),"sr_gap":round(best[2],2)})
+    twin_pairs = sorted(twin_pairs, key=lambda x:(x["dna_distance"],x["sr_gap"]))[:20]
+    # Metadata oddities are useful before full DNA coverage exists.
+    oddities = []
+    for m in values:
+        sr, bpm, length = number(m.get("official_sr")), number(m.get("bpm")), number(m.get("total_length"))
+        score = max(0,bpm-240)/20 + max(0,sr-7)*1.4 + max(0,length-420)/120
+        if score > 0:
+            oddities.append((score, searchable(m)))
+    oddities = [m for _,m in sorted(oddities,key=lambda x:x[0],reverse=True)[:30]]
+    # Mapper fingerprints from metadata; DNA averages are added whenever analyzed charts exist.
+    mapper_fingerprints = []
+    dna_by_mapper = defaultdict(list)
+    for r in dna_rows:
+        dna_by_mapper[str(r.get("creator") or "Unknown")].append(r)
+    for name in mappers[:60]:
+        rows = [m for m in values if str(m.get("creator") or "Unknown") == name]
+        drows = dna_by_mapper.get(name, [])
+        skill_avg = {}
+        for skill in skill_names[:-1]:
+            vals=[number((r.get("dna") or {}).get("skills",{}).get(skill)) for r in drows]
+            vals=[v for v in vals if v]
+            if vals: skill_avg[skill]=round(sum(vals)/len(vals),1)
+        mapper_fingerprints.append({
+            "name":name,"beatmapsets":len(mapper_sets[name]),"difficulties":mapper_maps[name],
+            "avg_sr":round(sum(number(x.get("official_sr")) for x in rows)/max(1,len(rows)),2),
+            "avg_bpm":round(sum(number(x.get("bpm")) for x in rows)/max(1,len(rows)),1),
+            "dna_sample":len(drows),"skills":skill_avg,
+        })
+    # Era averages make long-term meta shifts visible without loading every search shard.
+    era_trends=[]
+    for year, rows in sorted(by_year.items()):
+        if year=="unknown": continue
+        def av(field):
+            vals=[number(x.get(field)) for x in rows if x.get(field) is not None]
+            return round(sum(vals)/len(vals),2) if vals else None
+        era_trends.append({"year":year,"count":len(rows),"sr":av("official_sr"),"bpm":av("bpm"),"ar":av("ar"),"od":av("od"),"cs":av("cs")})
+
     summary = {
         "format": "osu-skill-lab-summary",
         "version": 2,
@@ -244,6 +313,13 @@ def main():
             "highest_sr": [searchable(m) for m in sorted(values, key=lambda m:number(m.get("official_sr")), reverse=True)[:8]],
             "highest_bpm": [searchable(m) for m in sorted(values, key=lambda m:number(m.get("bpm")), reverse=True)[:8]],
             "longest": [searchable(m) for m in sorted(values, key=lambda m:number(m.get("total_length")), reverse=True)[:8]],
+        },
+        "research": {
+            "dna_rankings": dna_rankings,
+            "difficulty_twins": twin_pairs,
+            "oddities": oddities,
+            "mapper_fingerprints": mapper_fingerprints,
+            "era_trends": era_trends,
         },
         "statuses": simple_counter(status_counts),
         "top_mappers": [
