@@ -54,3 +54,9 @@ v0.5부터 정적 웹 호스팅에서도 `.osu` 파일을 브라우저에서 직
 ### GitHub Pages
 이 저장소가 Private인 경우 계정/플랜 설정에 따라 Pages 사용 가능 여부가 달라질 수 있습니다.
 Pages를 사용할 경우 배포 소스는 main 브랜치의 루트(/)로 설정합니다.
+
+### v0.5.1 Mobile Statistics
+- PC와 모바일에서 동일한 분석 DB 통계 UI 사용
+- Skill 평균 / BPM 구간 / 패턴 / 검증 상태 통계
+- JSON DB 내보내기/가져오기로 기기간 기록 이동
+- 브라우저 localStorage는 기기별 저장이므로 자동 동기화는 아직 지원하지 않음
