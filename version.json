@@ -1,13 +1,16 @@
 {
-  "version": "0.5.0",
+  "version": "0.5.1",
   "channel": "ranked",
-  "name": "Mobile/PWA Edition",
+  "name": "Mobile Statistics",
   "released": "2026-10-11",
   "features": [
     "installable PWA shell",
     "offline app cache",
     "browser-only .osu beatmap analysis",
     "responsive phone and foldable UI",
-    "PC server fallback for official osu! API and replay analysis"
+    "PC server fallback for official osu! API and replay analysis",
+    "mobile statistics center",
+    "PC-mobile JSON database export/import",
+    "BPM bucket and verification statistics"
   ]
 }
