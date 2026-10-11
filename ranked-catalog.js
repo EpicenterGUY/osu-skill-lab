@@ -69,6 +69,7 @@ function renderCatalogSummary(s) {
     new Date(s.updated_at).toLocaleString("ko-KR", {timeZone: "Asia/Seoul"}) : "—";
   $("catalogUpdated").textContent = current + " · 수집 기간 " + (oldest || "—") +
     " ~ " + (newest || "—") + " · DB 갱신 " + time +
+    " · 시범 Chart DNA " + ct(count.chart_dna_analyzed || 0) + "채보" +
     " · 수치는 현재 수집된 DB 기준이며 전 세계 Ranked 전체 합계가 아닙니다.";
 
   const yearRows = (s.years || []).filter(x => x.year !== "unknown");
@@ -95,6 +96,12 @@ function renderCatalogSummary(s) {
     statsTable("채보", topRows(s.top_sr, "sr"), "SR") + '</div>' +
     '<div class="card full"><h2>플레이카운트 TOP 10 · 현재 수집분</h2>' +
     statsTable("채보", topRows(s.top_playcount, "plays"), "플레이 수") + '</div>' +
+    '<div class="card full"><h2>실제 채보 기반 Chart DNA · 시범 운영</h2>' +
+    '<p class="muted">실제 .osu 노트 데이터를 읽어 계산한 자체 Aim / Stream / Speed 등의 점수입니다. 공식 SR 또는 pp가 아닙니다.</p>' +
+    '<div class="metrics"><div class="metric"><b>' + ct(count.chart_dna_analyzed || 0) +
+    '</b><span>실제 채보 분석 완료</span></div><div class="metric"><b>' + ct(count.difficulties) +
+    '</b><span>전체 수집된 채보</span></div></div>' +
+    '<p class="hint-text">Chart DNA는 새로운 Ranked부터 소량씩 시범 분석하며, 원본 .osu 파일을 사이트에 공개하지 않습니다. API 또는 파일 제공처 접근 제한 시 분석이 지연될 수 있습니다.</p></div>' +
     '</div>';
   $("officialStatsArea").querySelectorAll("[data-year-link]").forEach(b => {
     b.addEventListener("click", () => {
@@ -143,11 +150,23 @@ async function loadRankedSummary() {
 
 function renderRecentPreview() {
   if (!catalogSummary) return;
-  rankedIndex = (catalogSummary.recent || []).slice();
+  const recent = (catalogSummary.recent || []).slice();
+  rankedIndex = recent;
   indexedLimit = 20;
   renderIndexed();
-  $("indexedCount").textContent = "최근 Ranked 미리보기 " + ct(rankedIndex.length) +
+  $("indexedCount").textContent = "최근 Ranked 미리보기 " + ct(recent.length) +
     "개 · 전체 검색은 위 연도를 선택해서 불러옵니다.";
+  const items = recent.slice(0, 7);
+  $("recentRankedPreview").innerHTML = items.length ? items.map((m, i) =>
+    '<div class="recent-item"><span class="recent-num">' +
+    String(i + 1).padStart(2, "0") + '</span><span class="recent-copy">' +
+    '<a class="recent-title" href="https://osu.ppy.sh/beatmaps/' +
+    encodeURIComponent(m.beatmap_id) + '" target="_blank" rel="noopener noreferrer">' +
+    cx(m.artist || "?") + ' — ' + cx(m.title || "?") + '</a>' +
+    '<span class="recent-sub">' + cx(m.creator || "Unknown") +
+    ' · ' + cx((m.ranked_date || "").slice(0, 10)) + '</span></span>' +
+    '<span class="recent-sr">★' + Number(m.official_sr || 0).toFixed(2) +
+    '</span></div>').join("") : '<div class="empty">최근 Ranked 데이터가 아직 없습니다.</div>';
 }
 function renderIndexed() {
   const q = $("indexedQuery").value.trim().toLocaleLowerCase();
@@ -170,7 +189,10 @@ function renderIndexed() {
     cx(m.creator) + ' · ★' + Number(m.official_sr || 0).toFixed(2) +
     ' · ' + Number(m.bpm || 0).toFixed(0) + ' BPM · AR' +
     cx(m.ar) + ' OD' + cx(m.od) + ' · ' +
-    cx((m.ranked_date || "").slice(0, 10)) + '</div></div>').join("") ||
+    cx((m.ranked_date || "").slice(0, 10)) + '</div>' +
+    (m.dna?.skills ? '<button type="button" class="ghost-btn" data-dna-id="' +
+      encodeURIComponent(String(m.beatmap_id)) + '">Chart DNA 자세히 ↗</button>' :
+      '<span class="chip">공식 메타데이터</span>') + '</div>').join("") ||
     '<div class="empty">검색 결과 없음</div>';
   $("indexedMore").style.display = rows.length > indexedLimit ? "block" : "none";
 }
@@ -264,6 +286,58 @@ $("importRanked").addEventListener("change", async e => {
     alert("개인 색인 " + ct(data.maps.length) + "개 가져옴");
   } catch (err) {alert("가져오기 실패: " + err.message);}
   e.target.value = "";
+});
+
+
+/* Actual-chart experimental DNA viewer; never label the scores as official SR/pp. */
+function showChartDna(map) {
+  if (!map?.dna?.skills) return;
+  const dna = map.dna;
+  const labels = {aim:"Aim",stream:"Stream",speed:"Speed",stamina:"Stamina",tech:"Tech",
+                  reading:"Reading",flow:"Flow Aim"};
+  const bars = Object.entries(labels).map(([key, label]) => {
+    const val = Math.max(0, Math.min(100, Number(dna.skills[key]) || 0));
+    return '<div class="skill"><span>' + label +
+      '</span><div class="bar"><i style="width:' + val + '%"></i></div>' +
+      '<b>' + val.toFixed(1) + '</b></div>';
+  }).join("");
+  const details = [
+    ["노트 수", ct(dna.objects)], ["최대 Stream 후보", ct(dna.max_stream) + " notes"],
+    ["2초 Peak 밀도", ct(dna.peak_density_2s) + " notes"],
+    ["중앙 노트 간격", Number(dna.median_gap_ms || 0).toFixed(0) + "ms"],
+  ];
+  $("chartModalBody").innerHTML =
+    '<span class="chart-dna-badge">실제 .osu 채보 기반 · 시범 분석</span>' +
+    '<h2>' + cx(map.artist || "?") + ' — ' + cx(map.title || "?") + '</h2>' +
+    '<p class="muted">' + cx(map.version || "?") + ' · ' + cx(map.creator || "?") +
+    ' · 공식 ★' + Number(map.official_sr || 0).toFixed(2) + '</p>' +
+    '<div class="metric"><b>' + Number(dna.skills.overall || 0).toFixed(1) +
+    ' / 100</b><span>Chart DNA 종합 (비공식 · 자체 휴리스틱)</span></div>' +
+    '<div style="margin:19px 0">' + bars + '</div>' +
+    '<div class="metrics">' + details.map(x => '<div class="metric"><b>' +
+      cx(x[1]) + '</b><span>' + cx(x[0]) + '</span></div>').join("") + '</div>' +
+    '<p class="hint-text">슬라이더 세부 처리, 연타 기술, 플레이어 실력은 온전히 반영하지 못할 수 있습니다. osu! 공식 난이도/pp와 직접 비교하는 수치가 아닙니다.</p>' +
+    '<a class="ghost-btn" target="_blank" rel="noopener noreferrer" href="https://osu.ppy.sh/beatmaps/' +
+    encodeURIComponent(map.beatmap_id) + '">osu! 원본 채보 페이지 ↗</a>';
+  const dialog = $("chartModal");
+  if (typeof dialog.showModal === "function") dialog.showModal();
+  else {dialog.setAttribute("open","");}
+}
+document.addEventListener("click", event => {
+  const button = event.target.closest("[data-dna-id]");
+  if (!button) return;
+  const id = decodeURIComponent(button.dataset.dnaId || "");
+  const map = rankedIndex.find(m => String(m.beatmap_id) === id) ||
+    catalogSummary?.recent?.find(m => String(m.beatmap_id) === id);
+  showChartDna(map);
+});
+$("chartModalClose").addEventListener("click", () => {
+  const dialog = $("chartModal");
+  if (typeof dialog.close === "function") dialog.close();
+  else dialog.removeAttribute("open");
+});
+$("chartModal").addEventListener("click", event => {
+  if (event.target === $("chartModal")) $("chartModalClose").click();
 });
 
 renderIndexed();
