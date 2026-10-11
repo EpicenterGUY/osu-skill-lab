@@ -1,7 +1,7 @@
 {
-  "version": "0.5.1",
+  "version": "0.5.2",
   "channel": "ranked",
-  "name": "Mobile Statistics",
+  "name": "Mobile Interaction Fixes",
   "released": "2026-10-11",
   "features": [
     "installable PWA shell",
