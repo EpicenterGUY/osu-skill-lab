@@ -1,0 +1,129 @@
+name: Fast osu! Ranked history backfill
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fast-ranked-backfill.yml'
+  workflow_dispatch:
+  # Resume after a runner's time budget until the API cursor reaches the end.
+  schedule:
+    - cron: '7 */3 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: osu-ranked-fast-backfill-controller
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 245
+    concurrency:
+      group: osu-ranked-data-writer
+      cancel-in-progress: false
+    outputs:
+      updated: ${{ steps.collect.outputs.updated }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate crawler and offline unit tests
+        run: |
+          python -m py_compile osu_api.py sync_catalog.py build_ranked_views.py
+          python -m unittest discover -s tests -q
+      - name: Sustained backfill with committed recovery points
+        id: collect
+        env:
+          OSU_CLIENT_ID: ${{ secrets.OSU_CLIENT_ID }}
+          OSU_CLIENT_SECRET: ${{ secrets.OSU_CLIENT_SECRET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${OSU_CLIENT_ID:-}" || -z "${OSU_CLIENT_SECRET:-}" ]]; then
+            echo "::error::Required secret OSU_CLIENT_ID / OSU_CLIENT_SECRET missing."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          deadline=$(( $(date +%s) + 3 * 3600 + 35 * 60 ))
+          failures=0
+          batches=0
+          echo "updated=false" >> "$GITHUB_OUTPUT"
+          while (( $(date +%s) < deadline )); do
+            if python -c 'import json,sys; s=json.load(open("data/ranked-state.json")); sys.exit(0 if s.get("backfill_complete") else 1)'; then
+              echo "Historical API cursor exhausted; initial search traversal completed."
+              break
+            fi
+            echo "::group::Backfill batch $((batches + 1))"
+            # ~40-50 API pages/minute: stay within a conservative polling budget.
+            # osu_api.py handles 429/Retry-After, network retries, and 5xx.
+            if python sync_catalog.py --pages 150 --fresh-pages 1 --delay 1.0 --checkpoint-every 50; then
+              failures=0
+            else
+              failures=$((failures + 1))
+              echo "::warning::Batch interrupted; saved checkpoints will be published."
+            fi
+            python build_ranked_views.py
+            # Exclude osu! personal profiles: they belong only in the user's browser.
+            for path in data/ranked data/ranked-search data/ranked-manifest.json data/ranked-state.json data/ranked-summary.json data/chart-dna data/chart-dna-manifest.json data/chart-dna-state.json; do
+              if [[ -e "$path" ]]; then git add -A -- "$path"; fi
+            done
+            if ! git diff --cached --quiet; then
+              git commit -m "Backfill osu!standard Ranked metadata (resumable batch)"
+              git pull --rebase origin main
+              git push origin HEAD:main
+              echo "updated=true" >> "$GITHUB_OUTPUT"
+            fi
+            python -c 'import json; m=json.load(open("data/ranked-manifest.json")); print("Collected",m.get("indexed_difficulties"),"difficulties /",m.get("indexed_sets"),"beatmapsets; history complete:",m.get("backfill_complete"),flush=True)'
+            batches=$((batches + 1))
+            echo "::endgroup::"
+            if (( failures >= 3 )); then
+              echo "::error::Repeated API failures; prior committed batches remain safe."
+              exit 1
+            fi
+            if (( failures > 0 )); then sleep 60; fi
+          done
+          echo "Stopped after $batches batches (completed or runner time budget)."
+
+  deploy:
+    needs: backfill
+    if: always() && needs.backfill.outputs.updated == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    concurrency:
+      group: osu-ranked-pages-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/configure-pages@v5
+      - name: Prepare expanded public catalogue
+        run: |
+          python build_ranked_views.py
+          mkdir -p _site
+          cp index.html app-shell.css ranked-catalog.js profile.js mobile-analyzer.js mobile-replay.js manifest.webmanifest sw.js version.json _site/
+          cp -R data _site/data
+          rm -f _site/data/osu-profile.json _site/data/profile-config.json
+          touch _site/.nojekyll
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+      - name: Deploy expanded Ranked catalogue
+        id: deployment
+        uses: actions/deploy-pages@v4
