@@ -1,7 +1,7 @@
 name: Backfill Ranked Chart DNA
 on:
   push:
-    paths: ['.github/workflows/backfill-chart-dna.yml']
+    paths: ['.github/workflows/backfill-chart-dna.yml', 'build_chart_dna.py']
   workflow_dispatch:
   schedule:
     - cron: '41 */3 * * *'
