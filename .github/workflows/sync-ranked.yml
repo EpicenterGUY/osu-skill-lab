@@ -42,7 +42,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A data
+          # Stage only public catalogue and aggregate chart metrics.
+          # Never stage any osu! user profile or profile configuration data.
+          for path in data/ranked data/ranked-search data/ranked-manifest.json data/ranked-state.json data/ranked-summary.json data/chart-dna data/chart-dna-manifest.json data/chart-dna-state.json; do
+            if [ -e "$path" ]; then git add -A -- "$path"; fi
+          done
           if ! git diff --cached --quiet; then
             git commit -m "Sync osu Ranked metadata catalog"
             git push
@@ -74,6 +78,8 @@ jobs:
           mkdir -p _site
           cp index.html app-shell.css ranked-catalog.js profile.js mobile-analyzer.js mobile-replay.js manifest.webmanifest sw.js version.json _site/
           cp -R data _site/data
+          # Defense in depth: never deploy user-profile snapshots even if a local file exists.
+          rm -f _site/data/osu-profile.json _site/data/profile-config.json
           touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v4
         with:
