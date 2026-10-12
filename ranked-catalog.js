@@ -25,6 +25,7 @@ let globalSearchActive = false;
 let sharedMapHandled = false;
 let similaritySeedMap = null;
 let similarityGeneration = 0;
+const similarityResultMaps = new Map();
 const compareMaps = new Map();
 const favoriteMaps = new Map();
 let recentViewedMaps = [];
@@ -743,6 +744,8 @@ function setSimilaritySeed(map,autoRun=false){
 }
 function similarityResultHtml(rows,mode){
   const host=$("similarityResults");if(!host)return;
+  similarityResultMaps.clear();
+  for(const row of rows)if(row?.map?.beatmap_id)similarityResultMaps.set(String(row.map.beatmap_id),row.map);
   host.innerHTML=rows.length?rows.map((x,i)=>{
     const m=x.map,id=String(m.beatmap_id),dna=similarityDnaDistance(similaritySeedMap,m);
     const year=String(m.ranked_date||"").slice(0,4);
@@ -920,7 +923,7 @@ $("compareNow")?.addEventListener("click",showCompareMaps);
 $("clearCompare")?.addEventListener("click",()=>{compareMaps.clear();saveCompareMaps();renderCompareTray();renderIndexed();});
 document.addEventListener("click",event=>{
   const add=event.target.closest("[data-compare-map]");
-  if(add){event.preventDefault();const id=decodeURIComponent(add.dataset.compareMap||"");const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id);toggleCompareMap(map);return;}
+  if(add){event.preventDefault();const id=decodeURIComponent(add.dataset.compareMap||"");const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);toggleCompareMap(map);return;}
   const remove=event.target.closest("[data-compare-remove]");
   if(remove){event.preventDefault();compareMaps.delete(decodeURIComponent(remove.dataset.compareRemove||""));saveCompareMaps();renderCompareTray();renderIndexed();}
 });
@@ -1187,7 +1190,7 @@ document.addEventListener("click", event => {
   const button=event.target.closest("[data-ranked-detail]");
   if(!button)return;
   const id=decodeURIComponent(button.dataset.rankedDetail||"");
-  const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+  const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
   showRankedDetails(map);
 });
 document.addEventListener("click", event => {
@@ -1230,7 +1233,7 @@ function bindInteractiveCatalogueControls() {
     if(similar){
       event.preventDefault();
       const id=decodeURIComponent(similar.dataset.similaritySeed||"");
-      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
       if(map){
         const dialog=$("chartModal");if(dialog?.open&&typeof dialog.close==="function")dialog.close();
         setSimilaritySeed(map,false);
@@ -1253,7 +1256,7 @@ function bindInteractiveCatalogueControls() {
     if(share){
       event.preventDefault();
       const id=decodeURIComponent(share.dataset.shareMap||"");
-      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
       if(map)copyMapShareLink(map);
       return;
     }
