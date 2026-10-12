@@ -219,6 +219,15 @@ class UiContractTests(unittest.TestCase):
             self.assertIn(token, CLIENT)
         self.assertIn("Background DNA ✓", HTML)
 
+    def test_osl_client_always_on_watcher_is_wired(self):
+        for element_id in ("clientWatcherEnabled", "clientWatcherInterval",
+                           "clientWatcherSave", "clientWatcherStatus"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', CLIENT)
+        for token in ("renderWatcherStatus", "saveWatcher", "/api/client/watch/config",
+                      "Always-on watcher ✓"):
+            self.assertIn(token, CLIENT + HTML)
+
     def test_osl_client_replay_inbox_is_wired(self):
         for element_id in ("clientReplayPath", "clientReplayAutoDetect", "clientReplaySavePath",
                            "clientReplayScan", "clientReplayStatus", "clientReplayWatch",
