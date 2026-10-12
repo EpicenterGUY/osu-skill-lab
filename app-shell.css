@@ -421,3 +421,22 @@ dialog.chart-modal::backdrop{background:#030812ce;backdrop-filter:blur(6px)}
 .replay-signal-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.replay-signal-actions .ghost-btn{min-height:34px;padding:7px 9px;font-size:9px}
 @media(max-width:1100px){.replay-signal-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:650px){.replay-signals-toolbar{display:grid;grid-template-columns:1fr 1fr}.replay-signals-toolbar .ghost-btn,.replay-signals-toolbar .file-ghost{width:100%}.replay-signal-grid{grid-template-columns:1fr}.replay-signal-row{grid-template-columns:1fr}.replay-signal-actions{justify-content:flex-start}.replay-signal-actions .ghost-btn{flex:1 1 120px}}
+
+/* v2.7 Replay Trend Lab */
+.replay-trend-section{margin-top:18px;padding-top:18px;border-top:1px solid #2d4056}
+.replay-trend-controls{display:grid;grid-template-columns:minmax(230px,1.7fr) minmax(130px,.8fr) minmax(110px,.65fr);gap:8px;margin:10px 0 12px}
+.replay-trend-controls label{display:grid;gap:5px;color:#95a9be;font-size:10px;font-weight:760}
+.replay-trend-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.replay-trend-kpis>div,.replay-before-after-kpis>div{padding:10px 11px;border:1px solid #33485f;border-radius:11px;background:#111b29;min-width:0}
+.replay-trend-kpis span,.replay-trend-kpis small,.replay-before-after-kpis span,.replay-before-after-kpis small{display:block;color:#8fa3b8;font-size:8px}
+.replay-trend-kpis b,.replay-before-after-kpis b{display:block;margin:4px 0;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.replay-trend-chart{margin-top:10px;padding:8px;border:1px solid #30445b;border-radius:14px;background:#0d1622;overflow:hidden}
+.replay-trend-chart svg{display:block;width:100%;height:auto;min-height:230px}
+.replay-chart-axis{stroke:#53667d;stroke-width:1}.replay-trend-line{fill:none;stroke:#ff8fbd;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.replay-trend-point{fill:#131f31;stroke:#ffd8e8;stroke-width:2}.replay-practice-marker{stroke:#77ddc6;stroke-width:2;stroke-dasharray:7 6}.replay-marker-label{fill:#8ee7d3;font-size:11px}.replay-axis-label{fill:#8196ad;font-size:10px}.replay-axis-label.end{text-anchor:end}
+.replay-analysis-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.replay-analysis-grid>div{min-width:0;padding:12px;border:1px solid #30445b;border-radius:13px;background:#111b29}.replay-analysis-grid h3{margin:0 0 10px;font-size:11px}
+.replay-before-after-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.replay-before-after-list{display:grid;gap:6px;margin-top:8px}.replay-compare-map{display:block;width:100%;padding:8px 9px;border:1px solid #33475e;border-radius:9px;background:#101a28;color:#edf5ff;text-align:left}.replay-compare-map b,.replay-compare-map small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.replay-compare-map b{font-size:9px}.replay-compare-map small{margin-top:3px;color:#8fa3b8;font-size:8px}
+.replay-repeated-signals{display:grid;gap:7px}.replay-repeat-row{display:grid;grid-template-columns:minmax(80px,.8fr) repeat(4,minmax(90px,1fr));gap:7px;padding:9px;border:1px solid #33475d;border-radius:10px;background:#101a28}.replay-repeat-row>div{min-width:0}.replay-repeat-row span,.replay-repeat-row small,.replay-repeat-row b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.replay-repeat-row span,.replay-repeat-row small{color:#8fa3b8;font-size:8px}.replay-repeat-row b{margin:3px 0;font-size:9px}.replay-repeat-row>div:first-child>span{color:#ff9fc7;font-weight:850}
+@media(max-width:1000px){.replay-trend-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.replay-analysis-grid{grid-template-columns:1fr}.replay-repeat-row{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){.replay-trend-controls{grid-template-columns:1fr}.replay-trend-kpis{grid-template-columns:1fr 1fr}.replay-trend-chart{overflow-x:auto}.replay-trend-chart svg{min-width:680px}.replay-before-after-kpis{grid-template-columns:1fr 1fr}.replay-repeat-row{grid-template-columns:1fr 1fr}.replay-repeat-row>div:first-child{grid-column:1/-1}}
