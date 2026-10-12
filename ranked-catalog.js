@@ -859,6 +859,14 @@ async function runSimilarityExplorer(){
   if(run)run.disabled=true;if(cancel)cancel.hidden=false;
   if(host)host.innerHTML='<div class="empty">유사 채보 계산 중…</div>';
   try{
+    if((mode==="dna"||mode==="balanced")&&!seed.dna?.skills){
+      const year=String(seed.ranked_date||"").slice(0,4);
+      if(/^\d{4}$/.test(year)){
+        await loadDnaOverlayYears([year],indexedGeneration,false);
+        mergeCachedDna([seed]);renderSimilaritySeed();
+      }
+      if(mode==="dna"&&!seed.dna?.skills)throw Error("기준 채보의 Chart DNA 분석이 아직 없습니다.");
+    }
     let rows=[];
     if(scope==="loaded"){
       rows=rankedIndex.map(m=>({map:m,score:similarityScore(seed,m,mode)})).filter(x=>Number.isFinite(x.score)).sort((a,b)=>a.score-b.score).slice(0,limit);
