@@ -271,3 +271,15 @@ dialog.chart-modal::backdrop{background:#030812ce;backdrop-filter:blur(6px)}
 .compare-table tbody th{color:#9bb0c4;white-space:nowrap}
 @media(max-width:900px){.advanced-filter-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.compare-tray{grid-template-columns:1fr}.compare-tray-actions{justify-content:flex-start}}
 @media(max-width:600px){.advanced-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ranked-tool-row{align-items:stretch;flex-direction:column}.ranked-tool-row>div{display:grid;grid-template-columns:1fr 1fr}.ranked-tool-row .ghost-btn{width:100%}.compare-chip{max-width:100%;flex:1 1 45%}.compare-tray-actions{display:grid;grid-template-columns:1fr 1fr}.ranked-result-actions .ghost-btn{flex:1 1 120px}}
+
+/* v1.8 project milestone board */
+.project-milestones{overflow:hidden}
+.milestone-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}
+.milestone{position:relative;min-width:0;padding:14px 13px;border:1px solid #304057;border-radius:14px;background:#111b29}
+.milestone:before{content:"";position:absolute;left:13px;right:13px;top:0;height:2px;border-radius:2px;background:#47556a}
+.milestone.done:before{background:#66d7c2}.milestone.active:before{background:#ff8fbd}.milestone.planned:before{background:#7585a2}
+.milestone span{display:block;margin-bottom:7px;color:#8fa2b8;font-size:9px;font-weight:900;letter-spacing:.08em}
+.milestone.done span{color:#76dec9}.milestone.active span{color:#ff9fc8}
+.milestone b{display:block;font-size:12px;line-height:1.35}.milestone small{display:block;margin-top:7px;color:#8fa2b8;font-size:9px;line-height:1.5}
+@media(max-width:1000px){.milestone-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.milestone:last-child{grid-column:1/-1}}
+@media(max-width:560px){.milestone-grid{grid-template-columns:1fr}.milestone:last-child{grid-column:auto}}
