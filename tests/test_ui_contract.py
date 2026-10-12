@@ -74,6 +74,17 @@ class UiContractTests(unittest.TestCase):
                       "data-relation-node", "buildRelationGraph"):
             self.assertIn(token, RANKED)
 
+    def test_search_workspace_is_wired(self):
+        for element_id in ("activeFilterChips", "savedSearchSelect", "saveSearchPreset",
+                           "applySavedSearch", "deleteSavedSearch", "copySearchLink",
+                           "rankedExportFormat", "exportRankedResults", "rankedSearchHistory"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', RANKED)
+        for token in ("osl-ranked-saved-searches", "osl-ranked-search-history",
+                      "buildSearchShareUrl", "restoreSearchStateFromUrl",
+                      "exportRankedRows", "recordSearchHistory"):
+            self.assertIn(token, RANKED)
+
     def test_ranked_compare_workspace_is_wired(self):
         for element_id in ("compareTray", "compareTrayItems", "compareCount", "openCompare",
                            "compareNow", "clearCompare"):
