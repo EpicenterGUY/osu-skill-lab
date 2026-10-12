@@ -134,6 +134,50 @@ async function saveWatcher(){
   finally{if(button)button.disabled=false}
 }
 
+function renderUpdaterStatus(data){
+  const state=$("clientUpdateStatus"),check=$("clientUpdateCheck"),apply=$("clientUpdateApply"),progress=$("clientUpdateProgress");
+  if(!state)return;
+  const hosted=isHosted(),up=data?.update||{},local=up.local_version||"—",remote=up.remote_version||"—";
+  if($("clientUpdateLocal"))$("clientUpdateLocal").textContent=local;
+  if($("clientUpdateRemote"))$("clientUpdateRemote").textContent=remote;
+  if(hosted){
+    state.innerHTML='<b>웹/PWA 모드</b><span>Client Updater는 로컬 OSL Client 서버에서만 사용할 수 있습니다.</span>';
+    if(check)check.disabled=true;if(apply)apply.disabled=true;
+    if(progress){progress.classList.remove("running");progress.querySelector("span").textContent="웹에서는 비활성";}
+    return;
+  }
+  const checking=Boolean(up.checking),applying=Boolean(up.applying),available=Boolean(up.update_available),restart=Boolean(up.restart_required);
+  const done=Number(up.progress_done||0),total=Number(up.progress_total||0);
+  const title=restart?"✓ 업데이트 설치 완료 · 재시작 필요":applying?"업데이트 설치 중…":checking?"최신 버전 확인 중…":available?("새 버전 "+remote+" 사용 가능"):"Client Updater";
+  state.innerHTML='<b>'+esc(title)+'</b><span>'+esc(up.message||"업데이트 확인 전")+
+    (up.checked_at?' · 확인 '+esc(formatWhen(up.checked_at)):'')+
+    (up.applied_at?' · 설치 '+esc(formatWhen(up.applied_at)):'')+'</span>';
+  if(progress){
+    progress.classList.toggle("running",applying);
+    const bar=progress.querySelector("i");
+    if(bar)bar.style.width=total?Math.min(100,done/total*100).toFixed(1)+"%":"0%";
+    progress.querySelector("span").textContent=applying?("검증/설치 "+done.toLocaleString()+" / "+total.toLocaleString()):restart?"재시작하면 새 server.py가 적용됩니다.":available?("v"+local+" → v"+remote):"수동 확인 · 자동 설치 안 함";
+  }
+  if(check){check.disabled=checking||applying;check.textContent=checking?"확인 중…":"업데이트 확인";}
+  if(apply){apply.disabled=!available||checking||applying||restart;apply.textContent=applying?"업데이트 중…":restart?"재시작 필요":"업데이트 적용";}
+}
+async function checkUpdate(){
+  if(isHosted())return;
+  const btn=$("clientUpdateCheck");if(btn)btn.disabled=true;
+  try{
+    const update=await api("/api/client/update/check",{method:"POST"});
+    renderUpdaterStatus({update});await refreshStatus();
+  }catch(err){alert("업데이트 확인 실패: "+err.message);if(btn)btn.disabled=false}
+}
+async function applyUpdate(){
+  if(isHosted())return;
+  const btn=$("clientUpdateApply");if(btn)btn.disabled=true;
+  try{
+    await api("/api/client/update/apply",{method:"POST"});
+    await refreshStatus();
+  }catch(err){alert("업데이트 시작 실패: "+err.message);if(btn)btn.disabled=false}
+}
+
 function dominantDna(dna){
   const skills=dna?.skills||{},keys=["aim","stream","speed","stamina","tech","reading","flow"];
   const best=keys.map(k=>[k,Number(skills[k])]).filter(([,v])=>Number.isFinite(v)).sort((a,b)=>b[1]-a[1])[0];
@@ -190,10 +234,11 @@ function renderStatus(data){
   renderReplayStatus(data);
   renderDnaStatus(data);
   renderWatcherStatus(data);
+  renderUpdaterStatus(data);
   if(hosted){
     state.innerHTML='<b>GitHub Pages · OSL Client Bridge 비활성</b><span>로컬 파일 시스템 접근은 실행.bat / server.py로 연 PC 서버에서만 동작합니다.</span>';
     progress.classList.remove("running");progress.querySelector("span").textContent="웹/PWA 모드";
-    ["clientSongsPath","clientAutoDetect","clientSavePath","clientScan","clientSearch","clientQuery","clientReplayPath","clientReplayAutoDetect","clientReplaySavePath","clientReplayScan","clientReplayWatch","clientDnaLimit","clientDnaStart","clientDnaStop","clientWatcherEnabled","clientWatcherInterval","clientWatcherSave"].forEach(id=>{const el=$(id);if(el)el.disabled=true});
+    ["clientSongsPath","clientAutoDetect","clientSavePath","clientScan","clientSearch","clientQuery","clientReplayPath","clientReplayAutoDetect","clientReplaySavePath","clientReplayScan","clientReplayWatch","clientDnaLimit","clientDnaStart","clientDnaStop","clientWatcherEnabled","clientWatcherInterval","clientWatcherSave","clientUpdateCheck","clientUpdateApply"].forEach(id=>{const el=$(id);if(el)el.disabled=true});
     return;
   }
   const scan=data?.scan||{},exists=Boolean(data?.path_exists);
@@ -211,7 +256,7 @@ async function refreshStatus(){
   try{
     const data=await api("/api/client/status");renderStatus(data);
     clearTimeout(pollTimer);
-    if(data?.scan?.running||data?.replay_scan?.running||data?.dna?.running)pollTimer=setTimeout(refreshStatus,900);
+    if(data?.scan?.running||data?.replay_scan?.running||data?.dna?.running||data?.update?.applying)pollTimer=setTimeout(refreshStatus,900);
     else {
       if(lastStatus?.maps) await searchLibrary(false);
       await refreshReplays(false);
@@ -285,6 +330,8 @@ function bind(){
   $("clientDnaStart")?.addEventListener("click",startDna);
   $("clientDnaStop")?.addEventListener("click",stopDna);
   $("clientWatcherSave")?.addEventListener("click",saveWatcher);
+  $("clientUpdateCheck")?.addEventListener("click",checkUpdate);
+  $("clientUpdateApply")?.addEventListener("click",applyUpdate);
   const watch=$("clientReplayWatch");
   if(watch){
     try{watch.checked=localStorage.getItem("osl-client-replay-watch")==="1"}catch(_){}
@@ -299,5 +346,5 @@ function bind(){
   });
 }
 bind();refreshStatus();scheduleReplayWatch();
-window.OSLClientBridge={refresh:refreshStatus,search:searchLibrary,scan:startScan,replays:refreshReplays,replayScan:startReplayScan,dnaStart:startDna,dnaStop:stopDna,watchSave:saveWatcher};
+window.OSLClientBridge={refresh:refreshStatus,search:searchLibrary,scan:startScan,replays:refreshReplays,replayScan:startReplayScan,dnaStart:startDna,dnaStop:stopDna,watchSave:saveWatcher,updateCheck:checkUpdate,updateApply:applyUpdate};
 })();
