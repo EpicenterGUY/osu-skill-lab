@@ -1,7 +1,7 @@
 {
-  "version": "2.2.0",
+  "version": "2.3.0",
   "channel": "ranked",
-  "name": "Research Explorer",
+  "name": "Similarity Explorer",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -26,6 +26,12 @@
     "Beatmap detail modal with official metadata and optional Chart DNA",
     "Interactive Mapper Fingerprint detail explorer",
     "Interactive Difficulty Twins pairs",
-    "Global similarity neighborhoods with DNA enrichment"
+    "Global similarity neighborhoods with DNA enrichment",
+    "Dedicated Similarity Explorer with balanced, metadata, Chart DNA, mapper and era modes",
+    "Progressive whole-catalog similarity scans that keep only top candidates in memory",
+    "Global DNA similarity scans stream year overlays without retaining the full DNA corpus",
+    "Precomputed similarity neighborhoods now include year hints for faster map resolution",
+    "Browser-local Ranked favorites, recent history, shareable map links and four-map compare",
+    "Explicit whole-catalog text search across 144k+ collected Ranked difficulties"
   ]
 }
