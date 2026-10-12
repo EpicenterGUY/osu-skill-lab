@@ -491,6 +491,8 @@ def main():
             "method": "chart-dna-pilot-v1",
             "status": "experimental partial coverage",
             "note": "Real .osu object geometry; heuristic scores are NOT official SR/pp.",
+            "updated_at": dna_state.get("updated_at"),
+            "stale_after_hours": 3,
             "coverage_percent": round(len(set(maps).intersection(dna)) / max(1, len(values)) * 100, 4),
             "unsupported_difficulties": int(dna_state.get("terminal_failed_count") or 0),
             "resolved_percent": round((len(set(maps).intersection(dna)) + int(dna_state.get("terminal_failed_count") or 0)) / max(1, len(values)) * 100, 4),
