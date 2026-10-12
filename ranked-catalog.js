@@ -1285,7 +1285,7 @@ $("compareNow")?.addEventListener("click",showCompareMaps);
 $("clearCompare")?.addEventListener("click",()=>{compareMaps.clear();saveCompareMaps();renderCompareTray();renderIndexed();});
 document.addEventListener("click",event=>{
   const add=event.target.closest("[data-compare-map]");
-  if(add){event.preventDefault();const id=decodeURIComponent(add.dataset.compareMap||"");const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||trainingRouteMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);toggleCompareMap(map);return;}
+  if(add){event.preventDefault();const id=decodeURIComponent(add.dataset.compareMap||"");const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||trainingRouteMaps.get(id)||replaySignalMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);toggleCompareMap(map);return;}
   const remove=event.target.closest("[data-compare-remove]");
   if(remove){event.preventDefault();compareMaps.delete(decodeURIComponent(remove.dataset.compareRemove||""));saveCompareMaps();renderCompareTray();renderIndexed();}
 });
@@ -1442,6 +1442,236 @@ function findSummaryMap(id) {
   ];
   return candidates.find(m=>String(m?.beatmap_id||"")===id) || null;
 }
+function persistReplaySignals(){
+  try{localStorage.setItem("osl-replay-signals",JSON.stringify(replaySignalHistory.slice(0,200)));}catch(_){}
+}
+function replayHits(raw){
+  const h=raw?.hits||{};
+  return {
+    great:Number(h.great??h["300"]??0)||0,
+    good:Number(h.good??h["100"]??0)||0,
+    meh:Number(h.meh??h["50"]??0)||0,
+    miss:Number(h.miss??0)||0,
+  };
+}
+function replayLocalMap(raw,hash){
+  if(!raw)return null;
+  const official=raw.official||{},meta=raw.meta||{},id=official.beatmap_id??official.id??raw.beatmap_id;
+  const map={
+    beatmap_id:id,beatmapset_id:official.beatmapset_id??official.beatmapset?.id,
+    artist:meta.Artist||official.artist||official.beatmapset?.artist,
+    title:meta.Title||raw.filename||official.title||official.beatmapset?.title,
+    creator:meta.Creator||official.creator||official.beatmapset?.creator,
+    version:meta.Version||official.version,
+    official_sr:official.official_sr??official.difficulty_rating,
+    bpm:raw.bpm??official.bpm,ar:official.ar,od:official.od,cs:official.cs,hp:official.hp,
+    total_length:raw.duration_s??official.total_length,status:official.status,
+    checksum:hash||raw.md5,
+  };
+  if(raw.skills)map.dna={skills:{...raw.skills}};
+  return map;
+}
+async function resolveCatalogMapById(id,year){
+  id=String(id||"");if(!id)return null;
+  const known=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||trainingRouteMaps.get(id)||replaySignalMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+  if(known)return known;
+  const shards=(catalogSummary?.search_shards||[]).filter(sh=>!year||String(sh.year)===String(year));
+  for(let i=0;i<shards.length;i+=4){
+    const batch=await Promise.allSettled(shards.slice(i,i+4).map(async sh=>{
+      const key=sh.path+"@"+(sh.version||catalogSummary?.updated_at||"1");
+      if(indexedYearCache.has(key))return indexedYearCache.get(key);
+      return fetchCatalogJson(sh.path,sh.version||catalogSummary?.updated_at);
+    }));
+    for(const result of batch){
+      if(result.status!=="fulfilled")continue;
+      const map=result.value.find(m=>String(m?.beatmap_id)===id);
+      if(map)return mergeCachedDna([map])[0];
+    }
+  }
+  return null;
+}
+async function resolveReplayMapHash(hash,selectedLocal=null){
+  hash=String(hash||"").toLowerCase();
+  if(!/^[0-9a-f]{32}$/.test(hash))return {map:null,link_type:"unresolved"};
+  const locals=readLocalDnaRows(),local=selectedLocal?.md5?.toLowerCase()===hash?selectedLocal:locals.find(m=>String(m?.md5||"").toLowerCase()===hash);
+  const localMap=local?replayLocalMap(local,hash):null;
+  for(const candidate of [...trainingRouteMaps.values(),...favoriteMaps.values(),...recentViewedMaps]){
+    if(String(candidate?.checksum||"").toLowerCase()===hash)return {map:{...candidate,checksum:hash},link_type:"saved-checksum"};
+  }
+  const lookup=catalogSummary?.replay_lookup;
+  if(lookup?.versions&&lookup?.path_template){
+    const prefix=hash.slice(0,Number(lookup.prefix_length||2)),version=lookup.versions[prefix];
+    if(version){
+      let rows=replayChecksumShardCache.get(prefix);
+      if(!rows){
+        const path=String(lookup.path_template).replace("{prefix}",prefix);
+        rows=await fetchCatalogJson(path,version);
+        if(Array.isArray(rows))replayChecksumShardCache.set(prefix,rows);
+      }
+      const hit=Array.isArray(rows)?rows.find(x=>x?.h===hash):null;
+      if(hit){
+        const publicMap=await resolveCatalogMapById(hit.id,hit.y);
+        if(publicMap){
+          publicMap.checksum=hash;
+          if(localMap?.dna?.skills&&!publicMap.dna?.skills)publicMap.dna=localMap.dna;
+          return {map:publicMap,link_type:local?"local+ranked-checksum":"ranked-checksum"};
+        }
+        return {map:{beatmap_id:hit.id,ranked_date:String(hit.y||"")+"-01-01",checksum:hash},link_type:"ranked-checksum-id"};
+      }
+    }
+  }
+  return {map:localMap,link_type:localMap?"local-md5":"unresolved"};
+}
+function replayRecordId(raw){
+  const hits=replayHits(raw);
+  return String(raw?.replay_hash||"")||[
+    String(raw?.map_hash||"").toLowerCase(),String(raw?.replay_timestamp||""),
+    Number(raw?.score||0),Number(raw?.combo||0),hits.great,hits.good,hits.meh,hits.miss
+  ].join(":");
+}
+function replayCompactMap(map){
+  if(!map)return null;
+  const compact=compactStoredMap(map)||{};
+  for(const key of ["artist","title","creator","version","bpm","total_length","checksum"])if(map[key]!=null)compact[key]=map[key];
+  if(map.dna?.skills)compact.dna={skills:{...map.dna.skills}};
+  return Object.keys(compact).length?compact:null;
+}
+async function recordReplaySignal(raw,selectedLocal=null){
+  if(!raw)return;
+  const hits=replayHits(raw),judged=hits.great+hits.good+hits.meh+hits.miss;
+  const accuracy=raw.accuracy==null?(judged?(300*hits.great+100*hits.good+50*hits.meh)/(300*judged)*100:null):Number(raw.accuracy);
+  let resolved={map:null,link_type:"unresolved"};
+  try{resolved=await resolveReplayMapHash(raw.map_hash,selectedLocal);}catch(err){console.warn("Replay map link failed",err);}
+  const localFallback=selectedLocal?replayLocalMap(selectedLocal,String(raw.map_hash||"").toLowerCase()):null;
+  const map=resolved.map||localFallback;
+  const id=replayRecordId(raw),importedAt=new Date().toISOString(),playedAt=raw.replay_timestamp||importedAt;
+  const burstStd=raw.burst_std_median!=null?Number(raw.burst_std_median):
+    (Array.isArray(raw.bursts)&&raw.bursts.length?(()=>{
+      const vals=raw.bursts.map(x=>Number(x?.std)).filter(Number.isFinite).sort((a,b)=>a-b);
+      return vals.length?vals[Math.floor(vals.length/2)]:null;
+    })():null);
+  const record={
+    id,imported_at:importedAt,played_at:playedAt,filename:String(raw.filename||""),
+    player:String(raw.player||""),map_hash:String(raw.map_hash||"").toLowerCase(),
+    replay_hash:String(raw.replay_hash||""),score:Number(raw.score||0),combo:Number(raw.combo||0),
+    mods:Number(raw.mods||0),perfect:Boolean(raw.perfect),accuracy:Number.isFinite(accuracy)?Math.round(accuracy*100)/100:null,
+    hits,judged,miss_rate:judged?Math.round(hits.miss/judged*10000)/100:null,
+    non300_rate:judged?Math.round((hits.good+hits.meh+hits.miss)/judged*10000)/100:null,
+    header_only:Boolean(raw.header_only),replay_data_analyzed:Boolean(raw.replay_data_analyzed),
+    taps:raw.taps==null?null:Number(raw.taps),median_gap:raw.median_gap==null?null:Number(raw.median_gap),
+    burst_count:Number(raw.burst_count??raw.bursts?.length??0),burst_std_median:Number.isFinite(burstStd)?burstStd:null,
+    link_type:resolved.map?resolved.link_type:(localFallback?"selected-local-unverified":"unresolved"),
+    map:replayCompactMap(map),
+  };
+  replaySignalHistory=[record,...replaySignalHistory.filter(x=>String(x.id)!==String(id))].slice(0,200);
+  persistReplaySignals();renderReplaySignals();
+  return record;
+}
+function replayDisplayMap(record){
+  const map=record?.map;if(!map)return null;
+  const id=String(map.beatmap_id||"");
+  const live=id?(rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||trainingRouteMaps.get(id)||replaySignalMaps.get(id)||favoriteMaps.get(id)):null;
+  return live?{...map,...live}:map;
+}
+function replayMedian(values){
+  const xs=values.map(Number).filter(Number.isFinite).sort((a,b)=>a-b);
+  if(!xs.length)return null;
+  const i=Math.floor(xs.length/2);return xs.length%2?xs[i]:(xs[i-1]+xs[i])/2;
+}
+function renderReplaySignals(){
+  const kpis=$("replaySignalKpis"),judgements=$("replayJudgementMix"),bands=$("replayAccuracyBands"),timing=$("replayTimingSignals"),dnaHost=$("replayDnaSignals"),list=$("replaySignalList"),summary=$("replaySignalSummary");
+  if(!kpis||!judgements||!bands||!timing||!dnaHost||!list)return;
+  replaySignalMaps.clear();
+  const rows=replaySignalHistory,linked=rows.filter(r=>r.map),acc=rows.map(r=>Number(r.accuracy)).filter(Number.isFinite),avgAcc=acc.length?acc.reduce((a,b)=>a+b,0)/acc.length:null;
+  const totals={great:0,good:0,meh:0,miss:0};for(const r of rows)for(const k of Object.keys(totals))totals[k]+=Number(r.hits?.[k]||0);
+  kpis.innerHTML='<div class="dash-kpi"><span>저장 리플레이</span><b>'+ct(rows.length)+'</b><small>이 브라우저</small></div>'+
+    '<div class="dash-kpi"><span>Ranked/로컬 연결</span><b>'+ct(linked.length)+'</b><small>checksum/MD5</small></div>'+
+    '<div class="dash-kpi"><span>평균 정확도</span><b>'+(avgAcc==null?"—":avgAcc.toFixed(2)+"%")+'</b><small>'+ct(acc.length)+' 표본</small></div>'+
+    '<div class="dash-kpi"><span>총 Miss</span><b>'+ct(totals.miss)+'</b><small>판정 헤더 합</small></div>';
+  const judgeMax=Math.max(1,...Object.values(totals));
+  judgements.innerHTML=rows.length?[["300","great"],["100","good"],["50","meh"],["Miss","miss"]].map(([label,key])=>
+    '<div class="training-dist-row"><span>'+label+'</span><div><i style="width:'+(totals[key]/judgeMax*100)+'%"></i></div><b>'+ct(totals[key])+'</b></div>'
+  ).join(""):'<div class="empty">리플레이 기록이 없습니다.</div>';
+  const accBands={"99%+":0,"97–99%":0,"95–97%":0,"<95%":0};
+  for(const a of acc){if(a>=99)accBands["99%+"]++;else if(a>=97)accBands["97–99%"]++;else if(a>=95)accBands["95–97%"]++;else accBands["<95%"]++;}
+  const accMax=Math.max(1,...Object.values(accBands));
+  bands.innerHTML=acc.length?Object.entries(accBands).map(([label,count])=>
+    '<div class="training-dist-row"><span>'+cx(label)+'</span><div><i style="width:'+(count/accMax*100)+'%"></i></div><b>'+ct(count)+'</b></div>'
+  ).join(""):'<div class="empty">정확도 표본이 없습니다.</div>';
+  const detailed=rows.filter(r=>!r.header_only&&(Number.isFinite(Number(r.median_gap))||Number.isFinite(Number(r.burst_std_median))));
+  const medianGap=replayMedian(detailed.map(r=>r.median_gap)),burstStd=replayMedian(detailed.map(r=>r.burst_std_median)),tapMedian=replayMedian(detailed.map(r=>r.taps));
+  timing.innerHTML=detailed.length?'<b>PC 상세 '+ct(detailed.length)+'개</b><span>키 입력 중앙 간격 '+(medianGap==null?"—":medianGap.toFixed(1)+"ms")+' · burst 간격 변동 중앙값 '+(burstStd==null?"—":burstStd.toFixed(1)+"ms")+' · 입력 수 중앙값 '+(tapMedian==null?"—":ct(Math.round(tapMedian)))+'</span><p class="hint-text">입력 프레임 기반 요약이며 100/50/Miss가 발생한 정확한 시점은 아닙니다.</p>':
+    '<b>상세 표본 없음</b><span>웹 단독 .osr은 판정 헤더만 읽습니다. PC 서버에서 가져온 리플레이만 키 입력 간격 프록시가 추가됩니다.</span>';
+  const skillGroups=new Map(),skills=["aim","stream","speed","stamina","tech","reading","flow"];
+  for(const r of rows){
+    const map=replayDisplayMap(r),sv=map?.dna?.skills;if(!sv)continue;
+    const dominant=skills.map(k=>[k,Number(sv[k])]).filter(x=>Number.isFinite(x[1])).sort((a,b)=>b[1]-a[1])[0]?.[0];if(!dominant)continue;
+    if(!skillGroups.has(dominant))skillGroups.set(dominant,[]);
+    skillGroups.get(dominant).push(r);
+  }
+  dnaHost.innerHTML=skillGroups.size?[...skillGroups.entries()].sort((a,b)=>b[1].length-a[1].length).map(([skill,group])=>{
+    const ga=group.map(r=>Number(r.accuracy)).filter(Number.isFinite),gm=group.map(r=>Number(r.hits?.miss||0));
+    const a=ga.length?ga.reduce((x,y)=>x+y,0)/ga.length:null,m=gm.length?gm.reduce((x,y)=>x+y,0)/gm.length:0;
+    return '<div class="replay-dna-row"><span>'+skill.toUpperCase()+'</span><b>'+group.length+'회</b><small>평균 ACC '+(a==null?"—":a.toFixed(2)+"%")+' · 평균 Miss '+m.toFixed(2)+'</small></div>';
+  }).join(""):'<div class="empty">DNA가 연결된 리플레이가 없습니다.</div>';
+  if(summary)summary.textContent=rows.length?ct(rows.length)+"개 · 연결 "+ct(linked.length)+"개 · PC 상세 "+ct(detailed.length)+"개":"기록 없음";
+  list.innerHTML=rows.length?rows.slice(0,30).map(r=>{
+    const map=replayDisplayMap(r),id=String(map?.beatmap_id||"");if(id)replaySignalMaps.set(id,map);
+    const title=map?.title?cx(map.artist||"?")+' — '+cx(map.title):"MD5 "+cx(String(r.map_hash||"미상").slice(0,10))+"…";
+    const when=new Date(r.played_at||r.imported_at||Date.now()),routeMatch=id&&trainingRouteMaps.has(id);
+    return '<div class="replay-signal-row"><div><span>'+cx(when.toLocaleString())+' · '+(r.header_only?"헤더":"PC 상세")+' · '+cx(r.link_type||"unresolved")+'</span><b>'+title+'</b><small>ACC '+(r.accuracy==null?"—":Number(r.accuracy).toFixed(2)+"%")+' · Miss '+ct(r.hits?.miss||0)+' · Combo '+ct(r.combo||0)+(r.player?' · '+cx(r.player):'')+'</small></div><div class="replay-signal-actions">'+
+      (id?'<button type="button" class="ghost-btn" data-ranked-detail="'+encodeURIComponent(id)+'">채보 상세</button>':'')+
+      (routeMatch?'<button type="button" class="ghost-btn" data-replay-route-complete="'+encodeURIComponent(id)+'">현재 세션 완료 반영</button>':'')+
+      '<button type="button" class="ghost-btn" data-replay-signal-remove="'+encodeURIComponent(String(r.id))+'">삭제</button></div></div>';
+  }).join(""):'<div class="empty">Replay Lab에서 .osr을 가져오면 자동 기록됩니다.</div>';
+}
+async function relinkReplaySignals(){
+  if(!replaySignalHistory.length)return;
+  const button=$("retryReplayLinks");if(button)button.disabled=true;
+  let changed=0;
+  try{
+    for(let i=0;i<replaySignalHistory.length;i++){
+      const r=replaySignalHistory[i];if(r.map?.beatmap_id&&r.link_type!=="ranked-checksum-id")continue;
+      try{
+        const resolved=await resolveReplayMapHash(r.map_hash,null);
+        if(resolved.map){
+          r.map=replayCompactMap(resolved.map);r.link_type=resolved.link_type;changed++;
+        }
+      }catch(err){console.warn("Replay relink failed",err);}
+    }
+    if(changed)persistReplaySignals();renderReplaySignals();
+    alert(changed?"리플레이 "+changed+"개 맵 연결을 갱신했습니다.":"새로 연결된 리플레이가 없습니다.");
+  }finally{if(button)button.disabled=false;}
+}
+$("retryReplayLinks")?.addEventListener("click",relinkReplaySignals);
+$("exportReplaySignals")?.addEventListener("click",()=>{
+  const payload={format:"osu-skill-lab-replay-signals",version:1,exported_at:new Date().toISOString(),note:"Judgement outcomes and optional PC key-timing proxies; no exact miss-location claims.",replays:replaySignalHistory};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;a.download="osu-skill-lab-replay-signals-"+new Date().toISOString().slice(0,10)+".json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+});
+$("clearReplaySignals")?.addEventListener("click",()=>{
+  if(!replaySignalHistory.length)return;
+  if(!confirm("이 브라우저의 Replay Failure Signals 기록을 모두 지울까요?"))return;
+  replaySignalHistory=[];persistReplaySignals();renderReplaySignals();
+});
+document.addEventListener("click",event=>{
+  const remove=event.target.closest("[data-replay-signal-remove]");
+  if(remove){
+    const id=decodeURIComponent(remove.dataset.replaySignalRemove||"");
+    replaySignalHistory=replaySignalHistory.filter(x=>String(x.id)!==id);persistReplaySignals();renderReplaySignals();return;
+  }
+  const complete=event.target.closest("[data-replay-route-complete]");
+  if(complete){
+    const id=decodeURIComponent(complete.dataset.replayRouteComplete||"");
+    if(!trainingRouteMaps.has(id))return;
+    const done=new Set((trainingRouteState.done||[]).map(String)),times={...(trainingRouteState.done_at||{})};
+    done.add(id);if(!times[id])times[id]=new Date().toISOString();
+    trainingRouteState.done=[...done];trainingRouteState.done_at=times;persistTrainingRoute();renderTrainingRoute();renderTrainingJournal();
+  }
+});
+window.OSLReplayBridge={record:recordReplaySignal,relink:relinkReplaySignals};
+renderReplaySignals();
+
 function trainingRouteSkill(){
   const selected=$("trainingRouteSkill")?.value||"auto";
   if(selected!=="auto")return {skill:selected,auto:false};
@@ -1900,7 +2130,7 @@ document.addEventListener("click", event => {
   const button=event.target.closest("[data-ranked-detail]");
   if(!button)return;
   const id=decodeURIComponent(button.dataset.rankedDetail||"");
-  const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||trainingRouteMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+  const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||trainingRouteMaps.get(id)||replaySignalMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
   showRankedDetails(map);
 });
 document.addEventListener("click", event => {
@@ -1943,7 +2173,7 @@ function bindInteractiveCatalogueControls() {
     if(similar){
       event.preventDefault();
       const id=decodeURIComponent(similar.dataset.similaritySeed||"");
-      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||trainingRouteMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||trainingRouteMaps.get(id)||replaySignalMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
       if(map){
         const dialog=$("chartModal");if(dialog?.open&&typeof dialog.close==="function")dialog.close();
         setSimilaritySeed(map,false);
@@ -1954,7 +2184,7 @@ function bindInteractiveCatalogueControls() {
     if(favorite){
       event.preventDefault();
       const id=decodeURIComponent(favorite.dataset.favoriteMap||"");
-      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||trainingRouteMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||trainingRouteMaps.get(id)||replaySignalMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
       if(map){
         toggleFavoriteMap(map);
         const dialog=$("chartModal");
@@ -1966,7 +2196,7 @@ function bindInteractiveCatalogueControls() {
     if(share){
       event.preventDefault();
       const id=decodeURIComponent(share.dataset.shareMap||"");
-      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||trainingRouteMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||trainingRouteMaps.get(id)||replaySignalMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
       if(map)copyMapShareLink(map);
       return;
     }
