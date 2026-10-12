@@ -225,7 +225,7 @@ dialog.chart-modal::backdrop{background:#030812ce;backdrop-filter:blur(6px)}
 @media(max-width:700px){.dna-rank-row{grid-template-columns:31px minmax(0,1fr);padding:10px}.dna-rank-row small{font-size:9px}}
 
 /* v1.5 Chart DNA collector observability */
-.collector-health{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;margin-bottom:10px;border:1px solid #31445e;border-radius:12px;background:#101a2a}
+.collector-health{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;margin-bottom:10px;border:1px solid #31445e;border-radius:12px;background:#101a2a}.collector-health.delayed{border-color:#77506a;background:#241621}
 .collector-health b{font-size:12px}.collector-health span{color:#91a0b8;font-size:10px;text-align:right}
 .dna-era-list{display:grid;gap:6px;max-height:360px;overflow:auto;padding-right:2px}
 .dna-era-list>div{display:grid;grid-template-columns:42px minmax(70px,1fr) 48px 92px;gap:8px;align-items:center;font-size:10px}
