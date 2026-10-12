@@ -1,7 +1,7 @@
 {
-  "version": "2.5.0",
+  "version": "2.6.0",
   "channel": "ranked",
-  "name": "Search Workspace",
+  "name": "Practice Route",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -41,6 +41,11 @@
     "Recent whole-catalog search history with one-tap restore",
     "Shareable Ranked filter/search URLs that restore scope, query, sort and advanced filters",
     "CSV and JSON export of the currently filtered Ranked result set",
-    "Active filter chips that summarize the current search state"
+    "Active filter chips that summarize the current search state",
+    "Practice Route Builder with target skill, official SR band, session style, source scope and 5/8/12-map sessions",
+    "Precomputed diverse Chart DNA practice pools published separately from Ranked search shards",
+    "Auto target skill chooses the least-exposed local DNA dimension without claiming player weakness",
+    "Practice sessions persist locally with completion progress",
+    "Practice Route maps connect to details, similarity, compare, favorites and relation graph"
   ]
 }
