@@ -6,6 +6,7 @@
 <button type="button" data-tab="home" class="active"><span class="nav-symbol" aria-hidden="true">⌂</span><span>홈</span></button>
 <button type="button" data-tab="ranked"><span class="nav-symbol" aria-hidden="true">≡</span><span>Ranked</span></button>
 <button type="button" data-tab="analyze"><span class="nav-symbol" aria-hidden="true">◎</span><span>채보 분석</span></button>
+<button type="button" data-tab="client"><span class="nav-symbol" aria-hidden="true">▣</span><span>OSL Client</span></button>
 <button type="button" data-tab="skills"><span class="nav-symbol" aria-hidden="true">◇</span><span>Skill DNA</span></button>
 <button type="button" data-tab="stats"><span class="nav-symbol" aria-hidden="true">▥</span><span>통계</span></button>
 <button type="button" data-tab="profile"><span class="nav-symbol" aria-hidden="true">♙</span><span>프로필</span></button>
@@ -31,12 +32,26 @@
 <div class="card half"><div class="card-header"><h2>내 osu! 프로필</h2><span class="pill">내 계정</span></div><div id="profileHomePreview" class="muted">계정 정보를 확인하는 중…</div></div>
 <div class="card half"><h2>내 분석실</h2><p class="card-lead">공식 Ranked 통계와 별도인, 내 기기에서 분석한 실제 .osu 채보 데이터입니다.</p>
 <div class="metrics"><div class="metric"><b id="dbCount">0</b><span>내 채보</span></div><div class="metric"><b id="played">0</b><span>리플레이</span></div><div class="metric"><b id="peakSkill">—</b><span>주요 스킬</span></div><div class="metric"><b id="peakVal">—</b><span>Peak</span></div></div>
-<div class="hr"></div><div class="home-quick"><button type="button" class="ghost-btn" data-tab="analyze">채보 분석 열기 ↗</button><button type="button" class="ghost-btn" data-tab="train">트레이닝 ↗</button></div></div>
+<div class="hr"></div><div class="home-quick"><button type="button" class="ghost-btn" data-tab="analyze">채보 분석 열기 ↗</button><button type="button" class="ghost-btn" data-tab="client">OSL Client ↗</button><button type="button" class="ghost-btn" data-tab="train">트레이닝 ↗</button></div></div>
 <div class="card half"><h2>선택된 채보</h2><div id="selectedSummary" class="empty">아직 분석한 채보가 없습니다. 상단의 ‘내 .osu 분석’을 눌러 파일을 선택하세요.</div></div>
 <div class="card half"><h2>Skill DNA 미리보기</h2><div id="homeSkills" class="empty">.osu 파일을 추가하면 Aim · Stream · Speed · Tech 등의 추정치가 표시됩니다.</div></div>
 <div class="card full"><div class="card-header"><h2>무엇을 분석할 수 있나요?</h2><span class="pill">데이터 출처 구분</span></div>
 <div class="grid"><div class="half"><h3>01 · 공식 osu! API 메타데이터</h3><p class="muted">곡, 맵퍼, Ranked 날짜, 공식 SR, BPM, 플레이 수를 공용 DB에서 확인합니다. 모든 방문자가 같은 데이터를 사용합니다.</p></div>
 <div class="half"><h3>02 · 실제 .osu 채보 기반 Skill DNA</h3><p class="muted">노트 간격·좌표·시간으로 Aim, Stream, Speed 등을 추정합니다. 자체 휴리스틱으로, 공식 SR·pp가 아닙니다.</p></div></div></div></div></section>
+<section id="client" class="panel">
+<div class="section-heading"><div><h2>OSL Client Bridge</h2><p>로컬 osu! Songs 폴더를 자동 색인하고 파일 선택 없이 Skill Lab 분석으로 연결합니다.</p></div><span class="pill">M4 · Phase 1 · Local PC</span></div>
+<div id="clientKpis" class="dashboard-kpis"><div class="dash-kpi"><span>실행 모드</span><b id="clientModeKpi">확인 중</b><small>127.0.0.1 bridge</small></div><div class="dash-kpi"><span>로컬 채보</span><b id="clientMapCount">0</b><small>osu!standard</small></div><div class="dash-kpi"><span>비트맵셋</span><b id="clientSetCount">0</b><small>로컬 Songs</small></div><div class="dash-kpi"><span>마지막 스캔</span><b id="clientLastScanKpi">—</b><small>증분 SQLite 인덱스</small></div></div>
+<div class="grid">
+<div class="card full elevated"><div class="card-header"><div><h2>Local Library Bridge</h2><p class="card-lead">기본 osu! stable 경로를 자동 감지합니다. 다른 위치에 설치했다면 Songs 폴더를 직접 지정할 수 있습니다.</p></div><span class="pill">파일은 PC 밖으로 업로드하지 않음</span></div>
+<div class="client-path-controls"><label>osu! Songs 폴더<input id="clientSongsPath" type="text" placeholder="예: C:\Users\name\AppData\Local\osu!\Songs" autocomplete="off"></label><div><button type="button" class="ghost-btn" id="clientAutoDetect">자동 감지</button><button type="button" class="ghost-btn" id="clientSavePath">경로 저장</button><button type="button" class="action" id="clientScan">라이브러리 스캔</button></div></div>
+<div id="clientStatus" class="collection-state"><b>OSL Client Bridge 확인 중…</b><span>GitHub Pages에서는 로컬 Songs 폴더에 접근하지 않습니다.</span></div>
+<div id="clientScanProgress" class="client-scan-progress"><div><i style="width:0%"></i></div><span>대기 중</span></div></div>
+<div class="card full"><div class="card-header"><div><h2>Local Library Search</h2><p class="card-lead">색인된 채보를 검색한 뒤 한 번에 Chart X-Ray/Skill DNA로 분석합니다.</p></div><span class="pill">SQLite · 로컬 전용</span></div>
+<div class="client-search-controls"><input id="clientQuery" type="text" placeholder="곡명 · 아티스트 · 맵퍼 · 난이도 · Beatmap ID" autocomplete="off"><button type="button" class="action" id="clientSearch">검색</button></div>
+<div id="clientResults" class="client-results"><div class="empty">로컬 PC 서버에서 Songs 폴더를 스캔하면 검색할 수 있습니다.</div></div></div>
+<div class="card half"><h2>Phase 1이 하는 일</h2><p class="card-lead">Songs 폴더의 .osu 메타데이터와 MD5를 SQLite에 증분 색인합니다. 변경되지 않은 파일은 다시 분석하지 않고, 원하는 채보를 선택할 때만 전체 Chart DNA를 계산합니다.</p><p class="hint-text">인덱스는 <code>~/.osu-skill-lab/client.db</code>에 로컬로 저장됩니다. GitHub 저장소나 공개 DB로 업로드하지 않습니다.</p></div>
+<div class="card half"><h2>다음 Client 단계</h2><p class="card-lead">osu! 설치 자동 감지 확대 · replay 자동 수집 · 백그라운드 분석 큐 · 자동 업데이트 · 설치형 패키징을 차례로 붙입니다.</p><div class="feature-roadmap"><span>Songs index ✓</span><span>One-click analyze ✓</span><span>Replay watch</span><span>Background DNA</span><span>Updater</span><span>Installer</span></div></div>
+</div></section>
 <section id="profile" class="panel"><div class="section-heading"><div><h2>My osu! Profile</h2><p>내 osu!standard 계정을 이 브라우저에만 저장합니다. 사이트 방문자에게는 공개하지 않아요.</p></div><span class="pill">로컬 전용 · 비밀번호 불필요</span></div>
 <div class="grid">
 <div class="card full elevated"><div class="card-header"><h2>내 브라우저에 프로필 등록</h2><span class="pill">osu!standard</span></div>
@@ -203,7 +218,7 @@
 <div class="milestone done"><span>M1 · DONE</span><b>Public Ranked Catalogue</b><small>Ranked/Approved DB · 빠른 검색 · PWA</small></div>
 <div class="milestone active"><span>M2 · BUILDING</span><b>Chart DNA Coverage</b><small>실제 .osu 기반 스킬 분석 대량 구축</small></div>
 <div class="milestone active"><span>M3 · BUILDING</span><b>Explorer & Observatory</b><small>고급 필터 · 비교 · 시대/맵퍼/유사도 연구</small></div>
-<div class="milestone planned"><span>M4 · PLANNED</span><b>OSL Client</b><small>공용 Ranked/DNA DB + 로컬 .osu/.osr 분석을 데스크톱 경험으로 통합</small></div>
+<div class="milestone active"><span>M4 · BUILDING</span><b>OSL Client</b><small>Local Songs index · one-click 분석 · 공용 Ranked/DNA + 로컬 데이터 통합 기반</small></div>
 <div class="milestone active"><span>M5 · EARLY PREVIEW</span><b>Personal Rhythm Intelligence</b><small>Practice · Journal · Replay Profile · PC Alignment · Repeat/Fingerprint · Failure Structure ✓ · 장기 성장 추적</small></div>
 </div><p class="hint-text">OSL Client는 최근 논의한 별도 클라이언트 방향을 정식 이정표로 추가한 단계입니다. 현재 웹/PWA는 유지하며, 기존 로컬 분석기(server.py)를 출발점으로 단계적으로 통합합니다.</p></div></div></section>
 <p class="footer">비공식 개인용 도구 · 자체 휴리스틱은 osu! 공식 Star Rating/pp가 아닙니다.</p></main><script src="./mobile-analyzer.js?v=112"></script><script src="./mobile-replay.js?v=101"></script><script>
@@ -231,6 +246,16 @@ $('replayFile').onchange=async e=>{let f=e.target.files[0];if(!f)return;try{let 
 $('exportDb').onclick=()=>{let payload={format:'osu-skill-lab-db',version:1,exported_at:new Date().toISOString(),maps:db};let blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='osu-skill-lab-db.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
 $('importDb').onchange=async e=>{let f=e.target.files[0];if(!f)return;try{let x=JSON.parse(await f.text()),maps=Array.isArray(x)?x:x.maps;if(!Array.isArray(maps))throw Error('Skill Lab DB 형식이 아닙니다.');let by=new Map(db.map(m=>[(m.md5||m.filename),m]));maps.forEach(m=>by.set(m.md5||m.filename,m));db=[...by.values()];try{localStorage.setItem('osl-db',JSON.stringify(db.map(({features,...rest})=>rest)))}catch(quota){console.warn('Local storage full',quota);alert('가져온 DB가 기기 저장 한도를 넘었습니다. 현재 탭에서는 사용할 수 있지만 새로고침하면 사라질 수 있습니다.')}selected=db.at(-1)||null;render();alert('DB '+maps.length+'개를 가져왔습니다.')}catch(err){alert('가져오기 실패: '+err.message)}e.target.value=''};
 render();
+window.OSLClientAcceptMap=function(m){
+  if(!m||typeof m!=="object")return false;
+  m.filename=m.filename||((m.meta?.Artist||"local")+" - "+(m.meta?.Title||"map")+".osu");
+  m.rankStatus=m.rankStatus||"LOCAL CLIENT · 로컬 분석";
+  m.perceived=m.perceived||{clear:null,fc:null,accuracy:null,reading:null,stamina:null,sample_size:0};
+  const key=m.md5||m.filename,idx=db.findIndex(x=>(x.md5||x.filename)===key);
+  idx>=0?db[idx]=m:db.push(m);selected=m;
+  try{localStorage.setItem('osl-db',JSON.stringify(db.map(({features,...rest})=>rest)))}catch(err){console.warn('Local client analysis storage quota reached',err)}
+  render();openTab('analyze');return true;
+};
 
 async function initOfficial(){if(location.hostname.endsWith('.github.io')){$('apiState').textContent='정적 GitHub Pages · PC 전용 API 검색을 사용하지 않습니다.';return}try{let d=await fetch('/api/osu/status').then(r=>{if(!r.ok)throw Error();return r.json()});$('apiState').textContent=d.configured?'PC 서버 · osu! API 연결됨':'PC 서버 연결 · osu! API 미설정'}catch(e){$('apiState').textContent='모바일 단독 모드 · 로컬 .osu 분석 가능 / 공식 검색은 PC 서버 필요'}}
 $('officialSearch').onclick=async()=>{if(location.hostname.endsWith('.github.io')){$('officialResults').textContent='웹에서는 위 공식 Ranked DB 검색을 사용하세요. PC 서버 검색은 로컬 실행에서만 가능합니다.';return}let q=$('officialQuery').value.trim();if(!q)return;$('officialResults').textContent='공식 데이터 검색 중…';try{let r=await fetch('/api/osu/search?q='+encodeURIComponent(q));let d=await r.json();if(!r.ok||!Array.isArray(d.beatmapsets))throw Error(d.error||'PC 서버에서만 공식 검색을 지원합니다');$('officialResults').innerHTML=d.beatmapsets.length?d.beatmapsets.map(x=>'<div class="dbitem"><b>'+esc(x.artist)+' — '+esc(x.title)+'</b><div class="muted">Mapper: '+esc(x.creator)+' · '+x.maps.length+' difficulties</div>'+x.maps.map(b=>'<span class="chip">'+esc(b.version)+' ★'+(b.official_sr??'—')+' · '+esc(b.status)+' · #'+b.beatmap_id+'</span>').join('')+'</div>').join(''):'<div class="empty">검색 결과 없음</div>'}catch(e){$('officialResults').textContent='검색 실패: '+e.message}};
@@ -262,5 +287,5 @@ initOfficial();if('serviceWorker' in navigator&&location.protocol==='https:')nav
   window.addEventListener("error",e=>{if(e.filename&&e.filename.includes("ranked-catalog"))show("⚠ Ranked 스크립트 오류: "+e.message);});
   window.addEventListener("unhandledrejection",e=>{if(!window.__rankedSummaryReady)show("⚠ Ranked 초기화 오류: "+String(e.reason?.message||e.reason).slice(0,110));});
 })();
-</script><script src="./ranked-catalog.js?v=260" onerror="document.getElementById('hostedSyncState').textContent='⚠ Ranked JS 파일 다운로드 실패'"></script><script src="./profile.js?v=115"></script>
+</script><script src="./ranked-catalog.js?v=260" onerror="document.getElementById('hostedSyncState').textContent='⚠ Ranked JS 파일 다운로드 실패'"></script><script src="./profile.js?v=115"></script><script src="./client-bridge.js?v=100"></script>
 <dialog id="chartModal" class="chart-modal" aria-label="실제 채보 Chart DNA 자세히 보기"><button id="chartModalClose" class="modal-close" type="button" aria-label="닫기">×</button><div id="chartModalBody"></div></dialog></body></html>
