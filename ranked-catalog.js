@@ -430,7 +430,7 @@ async function loadRankedSummary() {
 renderSimilaritySeed();
     if (document.getElementById("ranked").classList.contains("active"))
       loadRankedSearch();
-    queueMicrotask(()=>openSharedMapFromUrl().catch(err=>console.warn("Shared map open failed",err)));
+    queueMicrotask(async()=>{try{await restoreSearchStateFromUrl();await openSharedMapFromUrl();}catch(err){console.warn("Shared ranked state open failed",err);}});
   } catch (err) {
     // A transient failed request must not leave the Ranked dashboard blank indefinitely.
     if (!catalogSummary) {
@@ -555,6 +555,134 @@ function getRankedFilterState(){
     dnaOnly:Boolean($("dnaOnly")?.checked)
   };
 }
+function getRankedSearchState(){
+  const filters=getRankedFilterState();
+  return {
+    scope:globalSearchActive?"global":($("indexedYear")?.value||"recent"),
+    q:($("indexedQuery")?.value||"").trim(),
+    sort:$("indexedSort")?.value||"sr_desc",
+    ...filters
+  };
+}
+function searchStateSignature(state){
+  const s={...state};delete s.saved_at;delete s.name;delete s.result_count;
+  return JSON.stringify(s);
+}
+function persistSearchWorkspace(){
+  try{localStorage.setItem("osl-ranked-saved-searches",JSON.stringify(savedSearches.slice(0,20)));}catch(_){}
+  try{localStorage.setItem("osl-ranked-search-history",JSON.stringify(rankedSearchHistory.slice(0,12)));}catch(_){}
+}
+function searchStateLabel(state){
+  const parts=[];
+  if(state.q)parts.push("“"+state.q+"”");
+  if(state.scope==="global")parts.push("전체 DB");
+  else if(state.scope?.startsWith("year:"))parts.push(state.scope.slice(5)+"년");
+  else if(state.scope?.startsWith("month:"))parts.push(state.scope.slice(6));
+  if(Number(state.minSr))parts.push(state.minSr+"★+");
+  if(Number(state.maxSr))parts.push("≤"+state.maxSr+"★");
+  if(Number(state.minBpm))parts.push(state.minBpm+" BPM+");
+  if(Number(state.maxBpm))parts.push("≤"+state.maxBpm+" BPM");
+  if(Number(state.minAr))parts.push("AR"+state.minAr+"+");
+  if(Number(state.minOd))parts.push("OD"+state.minOd+"+");
+  if(state.lengthMode&&state.lengthMode!=="all")parts.push("길이 "+state.lengthMode);
+  if(state.status&&state.status!=="all")parts.push(state.status);
+  if(state.dnaOnly)parts.push("DNA only");
+  return parts.join(" · ")||"전체 조건 없음";
+}
+function renderSearchWorkspace(){
+  const select=$("savedSearchSelect");
+  if(select){
+    const current=select.value;
+    select.innerHTML='<option value="">'+(savedSearches.length?"저장된 검색 조건 선택":"저장된 검색 조건 없음")+'</option>'+
+      savedSearches.map((x,i)=>'<option value="'+i+'">'+cx(x.name||("조건 "+(i+1)))+' · '+cx(searchStateLabel(x.state||{}))+'</option>').join("");
+    if([...select.options].some(o=>o.value===current))select.value=current;
+  }
+  const history=$("rankedSearchHistory");
+  if(history)history.innerHTML=rankedSearchHistory.length?rankedSearchHistory.map((x,i)=>
+    '<button type="button" class="search-history-chip" data-search-history="'+i+'"><b>'+cx(searchStateLabel(x.state||{}))+'</b><small>'+ct(x.result_count||0)+'개 결과</small></button>'
+  ).join(""):'<span class="muted">아직 기록 없음</span>';
+  const active=$("activeFilterChips");
+  if(active){
+    const state=getRankedSearchState(),chips=[];
+    if(state.q)chips.push("검색 "+state.q);
+    if(state.scope==="global")chips.push("전체 DB");
+    else if(state.scope&&state.scope!=="recent")chips.push(state.scope.replace("year:","").replace("month:",""));
+    if(state.minSr)chips.push(state.minSr+"★+");if(state.maxSr)chips.push("≤"+state.maxSr+"★");
+    if(state.minBpm)chips.push(state.minBpm+" BPM+");if(state.maxBpm)chips.push("≤"+state.maxBpm+" BPM");
+    if(state.minAr)chips.push("AR"+state.minAr+"+");if(state.minOd)chips.push("OD"+state.minOd+"+");
+    if(state.lengthMode!=="all")chips.push("길이 "+state.lengthMode);
+    if(state.status!=="all")chips.push(state.status);
+    if(state.dnaOnly)chips.push("DNA only");
+    if(state.sort!=="sr_desc")chips.push("정렬 "+state.sort);
+    active.innerHTML=chips.length?chips.map(x=>'<span>'+cx(x)+'</span>').join(""):'<span class="muted">기본 조건</span>';
+  }
+}
+function applySearchStateToControls(state){
+  const set=(id,value)=>{const el=$(id);if(el&&[...el.options||[]].some?.(o=>o.value===String(value)))el.value=String(value);};
+  if($("indexedQuery"))$("indexedQuery").value=state.q||"";
+  set("indexedMinSr",state.minSr??0);set("indexedMaxSr",state.maxSr??0);
+  set("indexedMinBpm",state.minBpm??0);set("indexedMaxBpm",state.maxBpm??0);
+  set("indexedMinAr",state.minAr??0);set("indexedMinOd",state.minOd??0);
+  set("indexedLength",state.lengthMode||"all");set("indexedStatus",state.status||"all");
+  set("indexedSort",state.sort||"sr_desc");
+  if($("dnaOnly"))$("dnaOnly").checked=Boolean(state.dnaOnly);
+  if(state.scope!=="global"){
+    const scope=state.scope||"recent",range=$("indexedYear");
+    if(range&&[...range.options].some(o=>o.value===scope))range.value=scope;
+  }
+  renderSearchWorkspace();
+}
+async function executeSearchState(state){
+  applySearchStateToControls(state);
+  indexedLimit=20;
+  if(state.scope==="global"){globalSearchActive=true;await globalRankedSearch();}
+  else{globalSearchActive=false;indexedLoadedKey="";await loadRankedSearch();renderIndexed();}
+}
+function recordSearchHistory(state,resultCount){
+  const entry={state:{...state},result_count:Number(resultCount||0),saved_at:new Date().toISOString()};
+  const sig=searchStateSignature(entry.state);
+  rankedSearchHistory=[entry,...rankedSearchHistory.filter(x=>searchStateSignature(x.state||{})!==sig)].slice(0,12);
+  persistSearchWorkspace();renderSearchWorkspace();
+}
+function buildSearchShareUrl(){
+  const state=getRankedSearchState(),url=new URL(location.href);
+  for(const key of [...url.searchParams.keys()])url.searchParams.delete(key);
+  url.searchParams.set("search","1");
+  url.searchParams.set("rscope",state.scope||"recent");
+  if(state.q)url.searchParams.set("rq",state.q);
+  const pairs={minsr:state.minSr,maxsr:state.maxSr,minbpm:state.minBpm,maxbpm:state.maxBpm,minar:state.minAr,minod:state.minOd,len:state.lengthMode,status:state.status,sort:state.sort,dna:state.dnaOnly?"1":"0"};
+  for(const [k,v] of Object.entries(pairs))if(v!=null&&v!==""&&v!==0&&v!=="0"&&v!=="all"&&v!=="sr_desc")url.searchParams.set(k,String(v));
+  url.hash="ranked";return url.toString();
+}
+async function copySearchShareLink(){
+  const url=buildSearchShareUrl();
+  try{await navigator.clipboard.writeText(url);alert("현재 검색 조건 링크를 복사했습니다.");}
+  catch(_){prompt("검색 조건 링크를 복사하세요.",url);}
+}
+async function restoreSearchStateFromUrl(){
+  if(sharedSearchHandled||!catalogSummary)return false;
+  const p=new URLSearchParams(location.search);if(p.get("search")!=="1")return false;
+  sharedSearchHandled=true;
+  const num=k=>Number(p.get(k)||0);
+  const state={scope:p.get("rscope")||"recent",q:p.get("rq")||"",minSr:num("minsr"),maxSr:num("maxsr"),minBpm:num("minbpm"),maxBpm:num("maxbpm"),minAr:num("minar"),minOd:num("minod"),lengthMode:p.get("len")||"all",status:p.get("status")||"all",sort:p.get("sort")||"sr_desc",dnaOnly:p.get("dna")==="1"};
+  await executeSearchState(state);return true;
+}
+function csvCell(value){const s=String(value??"");return /[",\n]/.test(s)?'"'+s.replaceAll('"','""')+'"':s;}
+function exportRankedRows(){
+  const rows=lastFilteredRows,format=$("rankedExportFormat")?.value||"csv";
+  if(!rows.length){alert("내보낼 검색 결과가 없습니다.");return;}
+  let data,type,ext;
+  if(format==="json"){
+    data=JSON.stringify({format:"osu-skill-lab-ranked-results",exported_at:new Date().toISOString(),search:getRankedSearchState(),count:rows.length,maps:rows.map(compactStoredMap)},null,2);
+    type="application/json;charset=utf-8";ext="json";
+  }else{
+    const fields=["beatmap_id","beatmapset_id","artist","title","version","creator","official_sr","bpm","ar","od","cs","hp","total_length","playcount","status","ranked_date"];
+    data="\uFEFF"+fields.join(",")+"\n"+rows.map(m=>fields.map(k=>csvCell(m[k])).join(",")).join("\n");
+    type="text/csv;charset=utf-8";ext="csv";
+  }
+  const blob=new Blob([data],{type}),url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;a.download="osu-skill-lab-results-"+new Date().toISOString().slice(0,10)+"."+ext;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
 function rankedMapMatches(m,filters,q=""){
   const sr=Number(m.official_sr||0), bpm=Number(m.bpm||0), ar=Number(m.ar||0), od=Number(m.od||0);
   if(filters.dnaOnly&&!m.dna?.skills)return false;
@@ -607,6 +735,7 @@ function renderIndexed() {
   }).join("")||'<div class="empty">검색 결과 없음 · 필터를 완화해 보세요.</div>';
   const more=$("indexedMore"); if(more) more.style.display=rows.length>indexedLimit?"block":"none";
   renderCompareTray();
+  renderSearchWorkspace();
 }
 function scheduleIndexedRender() {
   clearTimeout(indexedSearchTimer);
@@ -702,6 +831,7 @@ async function globalRankedSearch(){
     indexedLoadedKey="global:"+(q||"<filters>")+"@"+(catalogSummary.updated_at||"1");
     const state=$("hostedSyncState");
     if(state)state.textContent=(q?"전체 DB 검색 완료":"검색어 없이 필터 검색 완료")+" · "+ct(totalHits)+"건 · 조건에 맞는 채보 전체 표시 · "+scanned+"파일"+(failed?" · 실패 "+failed:"");
+    recordSearchHistory(getRankedSearchState(),totalHits);
     const years=dnaYearsForSelection("global");
     if(years.length&&years.length<=4&&!filters.dnaOnly)loadDnaOverlayYears(years,indexedGeneration,false).catch(()=>{});
   } finally {
@@ -720,6 +850,20 @@ function cancelGlobalRankedSearch(){
 }
 $("globalRankedSearch")?.addEventListener("click",globalRankedSearch);
 $("cancelGlobalSearch")?.addEventListener("click",cancelGlobalRankedSearch);
+
+$("saveSearchPreset")?.addEventListener("click",()=>{
+  const name=(prompt("이 검색 조건의 이름을 입력하세요.","내 검색 조건")||"").trim();if(!name)return;
+  const state=getRankedSearchState(),existing=savedSearches.findIndex(x=>x.name===name);
+  const entry={name,state,saved_at:new Date().toISOString()};
+  if(existing>=0)savedSearches.splice(existing,1,entry);else savedSearches.unshift(entry);
+  savedSearches=savedSearches.slice(0,20);persistSearchWorkspace();renderSearchWorkspace();
+});
+$("applySavedSearch")?.addEventListener("click",()=>{const i=Number($("savedSearchSelect")?.value);if(Number.isInteger(i)&&savedSearches[i])executeSearchState(savedSearches[i].state);});
+$("deleteSavedSearch")?.addEventListener("click",()=>{const i=Number($("savedSearchSelect")?.value);if(!Number.isInteger(i)||!savedSearches[i])return;savedSearches.splice(i,1);persistSearchWorkspace();renderSearchWorkspace();});
+$("copySearchLink")?.addEventListener("click",copySearchShareLink);
+$("exportRankedResults")?.addEventListener("click",exportRankedRows);
+document.addEventListener("click",event=>{const b=event.target.closest("[data-search-history]");if(!b)return;const i=Number(b.dataset.searchHistory);if(Number.isInteger(i)&&rankedSearchHistory[i])executeSearchState(rankedSearchHistory[i].state);});
+renderSearchWorkspace();
 
 function resetRankedFilters() {
   const defaults={indexedMinSr:"0",indexedMaxSr:"0",indexedMinBpm:"0",indexedMaxBpm:"0",indexedMinAr:"0",indexedMinOd:"0",indexedLength:"all",indexedStatus:"all",indexedSort:"sr_desc"};
