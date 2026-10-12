@@ -171,6 +171,18 @@ class UiContractTests(unittest.TestCase):
                       "top-candidate recurrence"):
             self.assertIn(token, RANKED)
 
+    def test_region_fingerprint_is_wired(self):
+        for element_id in ("replayFingerprintFilter", "replayFingerprintSummary"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', RANKED)
+        for token in ("replayRegionFingerprint", "replayStoredFingerprint",
+                      "replayAggregateFingerprints", "renderReplayFingerprintSummary",
+                      "data-fingerprint-filter", "fingerprint-primary"):
+            self.assertIn(token, RANKED)
+        for label in ("Stream / Burst", "Jump", "Tech / Rhythm",
+                      "Slider-heavy", "Dense / Reading", "Flow", "Mixed"):
+            self.assertIn(label, RANKED)
+
     def test_ranked_compare_workspace_is_wired(self):
         for element_id in ("compareTray", "compareTrayItems", "compareCount", "openCompare",
                            "compareNow", "clearCompare"):
