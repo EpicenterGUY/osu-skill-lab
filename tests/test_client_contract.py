@@ -32,6 +32,24 @@ class ClientContractTests(unittest.TestCase):
                          "/api/client/scan", "/api/client/analyze"):
             self.assertIn(endpoint, SERVER)
 
+    def test_replay_inbox_uses_local_sqlite_and_md5_map_matching(self):
+        for token in ("CREATE TABLE IF NOT EXISTS replays", "idx_replays_map_hash",
+                      "client_scan_replay_worker", "client_replay_list", "client_replay_analyze",
+                      "LEFT JOIN maps m ON m.md5=r.map_hash"):
+            self.assertIn(token, SERVER)
+
+    def test_replay_inbox_api_contract_exists(self):
+        for endpoint in ("/api/client/replays", "/api/client/replays/scan",
+                         "/api/client/replays/config", "/api/client/replays/analyze"):
+            self.assertIn(endpoint, SERVER)
+        self.assertIn("Replay 폴더 밖의 파일은 읽지 않습니다.", SERVER)
+
+    def test_browser_replay_watch_is_explicitly_tab_open_only(self):
+        for token in ("osl-client-replay-watch", "scheduleReplayWatch",
+                      "panel?.classList.contains(\"active\")", "12000",
+                      "OSLReplayBridge.record"):
+            self.assertIn(token, CLIENT)
+
     def test_browser_client_is_hosted_safe(self):
         self.assertIn('location.hostname.endsWith(".github.io")', CLIENT)
         self.assertIn("GitHub Pages · OSL Client Bridge 비활성", CLIENT)
