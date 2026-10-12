@@ -31,6 +31,15 @@ class DataArchitectureTests(unittest.TestCase):
         self.assertIn('"training_pool": {', BUILD)
         self.assertIn("dna_focus", BUILD)
 
+    def test_replay_checksum_index_is_tiny_and_lazy(self):
+        self.assertIn('CHECKSUM_INDEX = DATA / "checksum-index"', BUILD)
+        self.assertIn('"format": "md5-prefix-v1"', BUILD)
+        self.assertIn('"path_template": "data/checksum-index/{prefix}.json"', BUILD)
+        self.assertIn('"prefix_length": 2', BUILD)
+        self.assertIn('"replay_lookup": checksum_lookup', BUILD)
+        commit_line = next(line for line in DNA_WORKFLOW.splitlines() if "git add -A --" in line)
+        self.assertIn("data/checksum-index", commit_line)
+
     def test_dna_request_rate_stays_capped(self):
         self.assertIn("--delay 1", DNA_WORKFLOW)
         self.assertIn("--max-minutes 32", DNA_WORKFLOW)
