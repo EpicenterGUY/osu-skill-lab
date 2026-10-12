@@ -358,3 +358,27 @@ dialog.chart-modal::backdrop{background:#030812ce;backdrop-filter:blur(6px)}
 .training-route-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.training-route-actions .ghost-btn{min-height:34px;padding:7px 9px;font-size:9px}
 @media(max-width:1050px){.training-route-controls{grid-template-columns:repeat(3,minmax(0,1fr))}.training-route-controls .ghost-btn{width:100%}}
 @media(max-width:700px){.training-route-controls{grid-template-columns:1fr 1fr}.training-route-controls label:first-child{grid-column:1/-1}.training-route-progress{grid-template-columns:1fr}.training-route-row{grid-template-columns:30px minmax(0,1fr)}.training-route-actions{grid-column:2;justify-content:flex-start}.training-route-actions .ghost-btn{flex:1 1 110px}}
+
+/* v2.4 Training Journal */
+.training-session-footer{display:grid;grid-template-columns:150px minmax(220px,1fr) auto;gap:9px;align-items:end;margin-top:12px;padding-top:12px;border-top:1px solid #2e4157}
+.training-session-footer label{display:grid;gap:5px;color:#95a9be;font-size:10px;font-weight:760}
+.training-note-label input{min-height:38px}
+.training-journal-card{overflow:hidden}
+.training-journal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:13px 0}
+.training-journal-grid>div{padding:12px;border:1px solid #30445b;border-radius:13px;background:#111b29}
+.training-journal-grid h3{margin:0 0 10px;font-size:11px}
+.training-activity-chart{display:grid;grid-template-columns:repeat(14,minmax(22px,1fr));gap:5px;align-items:end;min-height:92px}
+.activity-day{display:grid;grid-template-rows:58px auto auto;gap:3px;justify-items:center;align-items:end;min-width:0}
+.activity-day i{display:block;width:min(18px,75%);min-height:2px;border-radius:5px 5px 2px 2px;background:linear-gradient(180deg,#ff8fbd,#8e6cff)}
+.activity-day b{font-size:8px;color:#dbe7f5}.activity-day small{font-size:7px;color:#7f93aa;white-space:nowrap}
+.training-exposure{display:grid;gap:7px}
+.training-journal-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0 8px}
+.training-journal-toolbar>div:first-child b,.training-journal-toolbar>div:first-child span{display:block}.training-journal-toolbar>div:first-child span{margin-top:3px;color:#8fa3b8;font-size:9px}
+.training-journal-toolbar>div:last-child{display:flex;gap:7px;flex-wrap:wrap}
+.training-journal-list{display:grid;gap:7px}
+.training-journal-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px 12px;border:1px solid #30445a;border-radius:12px;background:#111a28}
+.training-journal-row>div:first-child{min-width:0}.training-journal-row span,.training-journal-row b,.training-journal-row small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.training-journal-row span{color:#8fa3b8;font-size:8px}.training-journal-row b{margin:3px 0;font-size:11px}.training-journal-row small{color:#9badc0;font-size:9px}
+.training-journal-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.training-journal-actions .ghost-btn{min-height:34px;padding:7px 9px;font-size:9px}
+@media(max-width:850px){.training-session-footer{grid-template-columns:1fr 1fr}.training-session-footer .training-note-label{grid-column:1/-1}.training-session-footer>button{grid-column:1/-1;width:100%}.training-journal-grid{grid-template-columns:1fr}}
+@media(max-width:600px){.training-activity-chart{gap:3px;overflow-x:auto;padding-bottom:3px}.activity-day{min-width:24px}.training-journal-toolbar{align-items:stretch;flex-direction:column}.training-journal-toolbar>div:last-child{display:grid;grid-template-columns:1fr 1fr}.training-journal-row{grid-template-columns:1fr}.training-journal-actions{justify-content:flex-start}.training-journal-actions .ghost-btn{flex:1 1 120px}}
