@@ -105,6 +105,51 @@ function scheduleReplayWatch(){
   },12000);
 }
 
+function dominantDna(dna){
+  const skills=dna?.skills||{},keys=["aim","stream","speed","stamina","tech","reading","flow"];
+  const best=keys.map(k=>[k,Number(skills[k])]).filter(([,v])=>Number.isFinite(v)).sort((a,b)=>b[1]-a[1])[0];
+  if(!best)return "";
+  const labels={aim:"Aim",stream:"Stream",speed:"Speed",stamina:"Stamina",tech:"Tech",reading:"Reading",flow:"Flow"};
+  const overall=Number(skills.overall);
+  return "DNA "+labels[best[0]]+" "+Math.round(best[1])+(Number.isFinite(overall)?" · Overall "+Math.round(overall):"");
+}
+function renderDnaStatus(data){
+  const state=$("clientDnaStatus"),progress=$("clientDnaProgress"),start=$("clientDnaStart"),stop=$("clientDnaStop");
+  if(!state||!progress)return;
+  const hosted=isHosted(),dna=data?.dna||{},cached=Number(dna.cached||0),remaining=Number(dna.remaining||0),processed=Number(dna.processed||0),limit=Number(dna.limit||0);
+  if($("clientDnaCached"))$("clientDnaCached").textContent=cached.toLocaleString();
+  if($("clientDnaRemaining"))$("clientDnaRemaining").textContent=remaining.toLocaleString();
+  if(hosted){
+    state.innerHTML='<b>웹/PWA 모드</b><span>Background DNA는 로컬 OSL Client 서버에서만 실행됩니다.</span>';
+    progress.classList.remove("running");progress.querySelector("span").textContent="웹에서는 비활성";
+    if(start)start.disabled=true;if(stop)stop.disabled=true;return;
+  }
+  const running=Boolean(dna.running),done=Math.max(0,cached),total=Math.max(1,cached+remaining);
+  state.innerHTML='<b>'+(running?'Background DNA 분석 중':'로컬 DNA 캐시 · '+cached.toLocaleString()+'개')+'</b><span>'+
+    esc(dna.message||("남은 채보 "+remaining.toLocaleString()+"개"))+
+    (dna.last_run?' · 마지막 '+esc(formatWhen(dna.last_run)):'')+'</span>';
+  progress.classList.toggle("running",running);
+  const bar=progress.querySelector("i");if(bar&&!running)bar.style.width=Math.min(100,done/total*100).toFixed(1)+"%";else if(bar)bar.style.width="";
+  progress.querySelector("span").textContent=running?
+    ("처리 "+processed.toLocaleString()+(limit?" / 최대 "+limit.toLocaleString():"")+" · 캐시 "+cached.toLocaleString()+" · 남음 "+remaining.toLocaleString()):
+    ("캐시 "+cached.toLocaleString()+" · 남음 "+remaining.toLocaleString());
+  if(start)start.disabled=running||!data?.path_exists;
+  if(stop)stop.disabled=!running;
+}
+async function startDna(){
+  if(isHosted())return;
+  const btn=$("clientDnaStart");if(btn)btn.disabled=true;
+  const limit=Number($("clientDnaLimit")?.value||200);
+  try{await api("/api/client/dna/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({limit})});await refreshStatus()}
+  catch(err){alert("Background DNA 시작 실패: "+err.message);if(btn)btn.disabled=false}
+}
+async function stopDna(){
+  if(isHosted())return;
+  const btn=$("clientDnaStop");if(btn)btn.disabled=true;
+  try{await api("/api/client/dna/stop",{method:"POST"});await refreshStatus()}
+  catch(err){alert("Background DNA 중지 실패: "+err.message);if(btn)btn.disabled=false}
+}
+
 function renderStatus(data){
   lastStatus=data;
   const hosted=isHosted(),path=$("clientSongsPath"),state=$("clientStatus"),progress=$("clientScanProgress");
@@ -114,10 +159,11 @@ function renderStatus(data){
   if($("clientLastScanKpi"))$("clientLastScanKpi").textContent=formatWhen(data?.last_scan);
   if(path&&document.activeElement!==path)path.value=data?.songs_path||"";
   renderReplayStatus(data);
+  renderDnaStatus(data);
   if(hosted){
     state.innerHTML='<b>GitHub Pages · OSL Client Bridge 비활성</b><span>로컬 파일 시스템 접근은 실행.bat / server.py로 연 PC 서버에서만 동작합니다.</span>';
     progress.classList.remove("running");progress.querySelector("span").textContent="웹/PWA 모드";
-    ["clientSongsPath","clientAutoDetect","clientSavePath","clientScan","clientSearch","clientQuery","clientReplayPath","clientReplayAutoDetect","clientReplaySavePath","clientReplayScan","clientReplayWatch"].forEach(id=>{const el=$(id);if(el)el.disabled=true});
+    ["clientSongsPath","clientAutoDetect","clientSavePath","clientScan","clientSearch","clientQuery","clientReplayPath","clientReplayAutoDetect","clientReplaySavePath","clientReplayScan","clientReplayWatch","clientDnaLimit","clientDnaStart","clientDnaStop"].forEach(id=>{const el=$(id);if(el)el.disabled=true});
     return;
   }
   const scan=data?.scan||{},exists=Boolean(data?.path_exists);
@@ -134,7 +180,7 @@ async function refreshStatus(){
   if(isHosted()){renderStatus({maps:0,beatmapsets:0});return null}
   try{
     const data=await api("/api/client/status");renderStatus(data);
-    if(data?.scan?.running||data?.replay_scan?.running){clearTimeout(pollTimer);pollTimer=setTimeout(refreshStatus,900)}
+    if(data?.scan?.running||data?.replay_scan?.running||data?.dna?.running){clearTimeout(pollTimer);pollTimer=setTimeout(refreshStatus,900)}
     else {
       if(lastStatus?.maps) await searchLibrary(false);
       await refreshReplays(false);
@@ -166,11 +212,11 @@ async function startScan(){
   }catch(err){alert("라이브러리 스캔 시작 실패: "+err.message);if(btn)btn.disabled=false}
 }
 function resultHtml(m){
-  const id=esc(m.md5||""),title=(m.artist||"?")+" — "+(m.title||"?"),meta=[
+  const id=esc(m.md5||""),title=(m.artist||"?")+" — "+(m.title||"?"),dnaLabel=dominantDna(m.dna),meta=[
     m.creator?"Mapper "+m.creator:null,m.version?"["+m.version+"]":null,
     Number.isFinite(Number(m.bpm))?Number(m.bpm).toFixed(0)+" BPM":null,
     m.ar!=null?"AR "+Number(m.ar).toFixed(1):null,m.od!=null?"OD "+Number(m.od).toFixed(1):null,
-    m.beatmap_id?"#"+m.beatmap_id:null
+    m.beatmap_id?"#"+m.beatmap_id:null,dnaLabel||null
   ].filter(Boolean).join(" · ");
   return '<div class="client-result-row"><div><b>'+esc(title)+'</b><span>'+esc(meta)+'</span></div><button type="button" class="ghost-btn" data-client-analyze="'+id+'">분석 열기</button></div>';
 }
@@ -204,6 +250,8 @@ function bind(){
   $("clientReplayAutoDetect")?.addEventListener("click",()=>saveReplayPath(true));
   $("clientReplaySavePath")?.addEventListener("click",()=>saveReplayPath(false));
   $("clientReplayScan")?.addEventListener("click",()=>startReplayScan(false));
+  $("clientDnaStart")?.addEventListener("click",startDna);
+  $("clientDnaStop")?.addEventListener("click",stopDna);
   const watch=$("clientReplayWatch");
   if(watch){
     try{watch.checked=localStorage.getItem("osl-client-replay-watch")==="1"}catch(_){}
@@ -218,5 +266,5 @@ function bind(){
   });
 }
 bind();refreshStatus();scheduleReplayWatch();
-window.OSLClientBridge={refresh:refreshStatus,search:searchLibrary,scan:startScan,replays:refreshReplays,replayScan:startReplayScan};
+window.OSLClientBridge={refresh:refreshStatus,search:searchLibrary,scan:startScan,replays:refreshReplays,replayScan:startReplayScan,dnaStart:startDna,dnaStop:stopDna};
 })();
