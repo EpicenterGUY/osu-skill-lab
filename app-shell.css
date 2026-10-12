@@ -424,7 +424,7 @@ dialog.chart-modal::backdrop{background:#030812ce;backdrop-filter:blur(6px)}
 
 /* v2.7 Replay Trend Lab */
 .replay-trend-section{margin-top:18px;padding-top:18px;border-top:1px solid #2d4056}
-.replay-trend-controls{display:grid;grid-template-columns:minmax(230px,1.7fr) minmax(130px,.8fr) minmax(110px,.65fr);gap:8px;margin:10px 0 12px}
+.replay-trend-controls{display:grid;grid-template-columns:minmax(230px,1.7fr) minmax(120px,.75fr) minmax(130px,.8fr) minmax(110px,.65fr);gap:8px;margin:10px 0 12px}
 .replay-trend-controls label{display:grid;gap:5px;color:#95a9be;font-size:10px;font-weight:760}
 .replay-trend-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
 .replay-trend-kpis>div,.replay-before-after-kpis>div{padding:10px 11px;border:1px solid #33485f;border-radius:11px;background:#111b29;min-width:0}
