@@ -53,6 +53,21 @@ class ClientContractTests(unittest.TestCase):
         self.assertIn("root not in path.parents", SERVER)
         self.assertIn("summary_json", SERVER)
 
+    def test_always_on_watcher_is_persistent_and_change_driven(self):
+        for token in ("CLIENT_WATCH", "client_tree_signature", "client_watch_loop",
+                      "client_watch_config", "client_start_watch_thread", "watch_enabled",
+                      "watch_interval_s", "triggered_scans"):
+            self.assertIn(token, SERVER)
+        for endpoint in ("/api/client/watch/status", "/api/client/watch/config"):
+            self.assertIn(endpoint, SERVER)
+        self.assertIn("client_start_watch_thread()", SERVER)
+        self.assertIn("CLIENT_WATCH_WAKE.set()", SERVER)
+
+    def test_songs_config_preserves_other_client_settings(self):
+        self.assertIn("cfg=client_json_read(CLIENT_CONFIG,{})", SERVER)
+        self.assertIn("cfg.pop('songs_path',None)", SERVER)
+        self.assertNotIn("client_json_write(CLIENT_CONFIG,{})", SERVER)
+
     def test_browser_replay_watch_is_explicitly_tab_open_only(self):
         for token in ("osl-client-replay-watch", "scheduleReplayWatch",
                       "panel?.classList.contains(\"active\")", "12000",
@@ -65,6 +80,9 @@ class ClientContractTests(unittest.TestCase):
         self.assertIn("OSLClientAcceptMap", CLIENT)
         for token in ("renderDnaStatus", "startDna", "stopDna", "dominantDna",
                       "/api/client/dna/start", "/api/client/dna/stop"):
+            self.assertIn(token, CLIENT)
+        for token in ("renderWatcherStatus", "saveWatcher", "/api/client/watch/config",
+                      "lastStatus?.watch?.enabled"):
             self.assertIn(token, CLIENT)
 
     def test_pwa_shell_includes_client_bridge(self):
