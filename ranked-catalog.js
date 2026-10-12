@@ -1007,7 +1007,7 @@ document.addEventListener("click", event => {
   const button=event.target.closest("[data-ranked-detail]");
   if(!button)return;
   const id=decodeURIComponent(button.dataset.rankedDetail||"");
-  const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id);
+  const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
   showRankedDetails(map);
 });
 document.addEventListener("click", event => {
@@ -1051,7 +1051,11 @@ function bindInteractiveCatalogueControls() {
       event.preventDefault();
       const id=decodeURIComponent(favorite.dataset.favoriteMap||"");
       const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
-      if(map)toggleFavoriteMap(map);
+      if(map){
+        toggleFavoriteMap(map);
+        const dialog=$("chartModal");
+        if(dialog?.open)showRankedDetails(map);
+      }
       return;
     }
     const share=event.target.closest("[data-share-map]");
