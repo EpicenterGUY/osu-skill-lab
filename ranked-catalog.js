@@ -25,6 +25,10 @@ let globalSearchActive = false;
 let sharedMapHandled = false;
 let similaritySeedMap = null;
 let similarityGeneration = 0;
+let relationGeneration = 0;
+let relationSelectedMap = null;
+let relationFocusMap = null;
+const relationGraphMaps = new Map();
 const similarityResultMaps = new Map();
 const compareMaps = new Map();
 const favoriteMaps = new Map();
@@ -531,21 +535,27 @@ function rankedLengthMatch(seconds, mode) {
   if(mode==="gte300") return n>=300;
   return true;
 }
+function getRankedFilterState(){
+  return {
+    minSr:Number($("indexedMinSr")?.value||0), maxSr:Number($("indexedMaxSr")?.value||0),
+    minBpm:Number($("indexedMinBpm")?.value||0), maxBpm:Number($("indexedMaxBpm")?.value||0),
+    minAr:Number($("indexedMinAr")?.value||0), minOd:Number($("indexedMinOd")?.value||0),
+    lengthMode:$("indexedLength")?.value||"all", status:$("indexedStatus")?.value||"all",
+    dnaOnly:Boolean($("dnaOnly")?.checked)
+  };
+}
+function rankedMapMatches(m,filters,q=""){
+  const sr=Number(m.official_sr||0), bpm=Number(m.bpm||0), ar=Number(m.ar||0), od=Number(m.od||0);
+  if(filters.dnaOnly&&!m.dna?.skills)return false;
+  if(sr<filters.minSr||(filters.maxSr&&sr>filters.maxSr)||bpm<filters.minBpm||(filters.maxBpm&&bpm>filters.maxBpm)||ar<filters.minAr||od<filters.minOd)return false;
+  if(filters.status!=="all"&&String(m.status||"").toLowerCase()!==filters.status)return false;
+  if(!rankedLengthMatch(m.total_length,filters.lengthMode))return false;
+  return !q || matchesGlobalQuery(m,q);
+}
 function renderIndexed() {
   const q = ($("indexedQuery")?.value || "").trim().toLocaleLowerCase();
-  const minSr=Number($("indexedMinSr")?.value||0), maxSr=Number($("indexedMaxSr")?.value||0);
-  const minBpm=Number($("indexedMinBpm")?.value||0), maxBpm=Number($("indexedMaxBpm")?.value||0);
-  const minAr=Number($("indexedMinAr")?.value||0), minOd=Number($("indexedMinOd")?.value||0);
-  const lengthMode=$("indexedLength")?.value||"all", status=$("indexedStatus")?.value||"all";
-  const dnaOnly=Boolean($("dnaOnly")?.checked);
-  const rows = rankedIndex.filter(m => {
-    const sr=Number(m.official_sr||0), bpm=Number(m.bpm||0), ar=Number(m.ar||0), od=Number(m.od||0);
-    if(dnaOnly&&!m.dna?.skills)return false;
-    if(sr<minSr||(maxSr&&sr>maxSr)||bpm<minBpm||(maxBpm&&bpm>maxBpm)||ar<minAr||od<minOd)return false;
-    if(status!=="all"&&String(m.status||"").toLowerCase()!==status)return false;
-    if(!rankedLengthMatch(m.total_length,lengthMode))return false;
-    return !q || [m.artist,m.title,m.creator,m.version,m.beatmap_id,m.beatmapset_id].some(v=>String(v??"").toLocaleLowerCase().includes(q));
-  });
+  const filters=getRankedFilterState();
+  const rows = rankedIndex.filter(m => rankedMapMatches(m,filters,q));
   const sort = $("indexedSort")?.value || "sr_desc";
   const numeric=(m,field)=>Number(m?.[field])||0;
   rows.sort((a,b)=>{
@@ -631,43 +641,58 @@ function matchesGlobalQuery(m,q){
 async function globalRankedSearch(){
   if(!catalogSummary)return;
   const input=$("indexedQuery"), q=(input?.value||"").trim().toLocaleLowerCase();
-  if(!q || (q.length<2&&!/^\d+$/.test(q))){alert("전체 DB 검색은 2글자 이상 입력해 주세요. 숫자 ID는 그대로 검색할 수 있습니다.");input?.focus();return;}
+  if(q&&q.length<2&&!/^\d+$/.test(q)){alert("검색어는 2글자 이상 입력해 주세요. 숫자 ID는 그대로 검색할 수 있습니다. 검색어 없이 필터만으로도 전체 DB 검색이 가능합니다.");input?.focus();return;}
   const token=++globalSearchGeneration;
   const cancel=$("cancelGlobalSearch"); if(cancel)cancel.hidden=false;
   const button=$("globalRankedSearch"); if(button)button.disabled=true;
   globalSearchActive=true;
+  const filters=getRankedFilterState();
   const matches=new Map(), shards=(catalogSummary.search_shards||[]).slice().sort((a,b)=>String(b.month||"").localeCompare(String(a.month||"")));
-  let scanned=0, failed=0, totalHits=0, capped=false;
+  let scanned=0, failed=0, totalHits=0;
   try{
+    // DNA-only is a real filter too: hydrate one year at a time before evaluating it.
+    const dnaManifest=new Map((catalogSummary.chart_dna?.shards||[]).map(sh=>[String(sh.year),sh]));
     for(let i=0;i<shards.length;i+=8){
       if(token!==globalSearchGeneration)return;
       const group=shards.slice(i,i+8);
       const batch=await Promise.allSettled(group.map(async sh=>{
-        const cacheKey=sh.path+"@"+(sh.version||catalogSummary.updated_at||"1");
-        if(indexedYearCache.has(cacheKey))return indexedYearCache.get(cacheKey);
-        return fetchCatalogJson(sh.path,sh.version||catalogSummary.updated_at);
+        const rows=await fetchCatalogJson(sh.path,sh.version||catalogSummary.updated_at);
+        if(filters.dnaOnly){
+          const year=String(sh.year), dnaSh=dnaManifest.get(year);
+          if(dnaSh){
+            let overlay=dnaOverlayCache.get(year);
+            if(!overlay){
+              const dnaRows=await fetchCatalogJson(dnaSh.path,dnaSh.version||catalogSummary.updated_at);
+              overlay=new Map();
+              for(const row of dnaRows){const dna=compactOverlayDna(row);if(row?.beatmap_id&&dna)overlay.set(String(row.beatmap_id),dna);}
+              dnaOverlayCache.set(year,overlay);
+            }
+            for(const m of rows){const dna=overlay.get(String(m.beatmap_id));if(dna)m.dna=dna;}
+          }
+        }
+        return rows;
       }));
       for(const result of batch){
         scanned++;
         if(result.status!=="fulfilled"){failed++;continue;}
         for(const m of result.value){
-          if(!m?.beatmap_id||!matchesGlobalQuery(m,q))continue;
+          if(!m?.beatmap_id||!rankedMapMatches(m,filters,q))continue;
           totalHits++;
-          if(matches.size<4000)matches.set(String(m.beatmap_id),m); else capped=true;
+          matches.set(String(m.beatmap_id),m);
         }
       }
       rankedIndex=mergeCachedDna([...matches.values()]);
       indexedLimit=20;renderIndexed();
       const pct=shards.length?scanned/shards.length*100:100;
-      setRankedLoadState("전체 DB 검색",ct(totalHits)+"건 발견 · "+scanned+"/"+shards.length+" 월 파일"+(capped?" · 화면 보관 4,000건 제한":""),pct);
+      setRankedLoadState(q?"전체 DB 검색":"전체 DB 필터 검색",ct(totalHits)+"건 일치 · "+scanned+"/"+shards.length+" 월 파일 · 일치 채보 전체 유지",pct);
       await new Promise(resolve=>setTimeout(resolve,0));
     }
     if(token!==globalSearchGeneration)return;
-    indexedLoadedKey="global:"+q+"@"+(catalogSummary.updated_at||"1");
+    indexedLoadedKey="global:"+(q||"<filters>")+"@"+(catalogSummary.updated_at||"1");
     const state=$("hostedSyncState");
-    if(state)state.textContent="전체 DB 검색 완료 · "+ct(totalHits)+"건"+(capped?" · 상위 4,000건만 화면 보관":"")+" · "+scanned+"파일"+(failed?" · 실패 "+failed:"");
+    if(state)state.textContent=(q?"전체 DB 검색 완료":"검색어 없이 필터 검색 완료")+" · "+ct(totalHits)+"건 · 조건에 맞는 채보 전체 표시 · "+scanned+"파일"+(failed?" · 실패 "+failed:"");
     const years=dnaYearsForSelection("global");
-    if(years.length&&years.length<=4)loadDnaOverlayYears(years,indexedGeneration,false).catch(()=>{});
+    if(years.length&&years.length<=4&&!filters.dnaOnly)loadDnaOverlayYears(years,indexedGeneration,false).catch(()=>{});
   } finally {
     if(token===globalSearchGeneration){
       if(cancel)cancel.hidden=true;
@@ -675,6 +700,7 @@ async function globalRankedSearch(){
     }
   }
 }
+
 function cancelGlobalRankedSearch(){
   globalSearchGeneration++;
   const cancel=$("cancelGlobalSearch");if(cancel)cancel.hidden=true;
@@ -740,6 +766,7 @@ function setSimilaritySeed(map,autoRun=false){
   const panel=$("similaritySeed")?.closest(".similarity-explorer");
   panel?.scrollIntoView({behavior:"smooth",block:"start"});
   const status=$("similarityStatus");if(status)status.textContent="기준 채보 선택됨 · 유사 기준과 범위를 선택하세요.";
+  if($("relationGraphStatus"))$("relationGraphStatus").textContent="새 기준 채보 선택됨 · 관계망 만들기를 누르면 다시 계산합니다.";
   if(autoRun)runSimilarityExplorer();
 }
 function similarityResultHtml(rows,mode){
@@ -915,6 +942,117 @@ async function runSimilarityExplorer(){
 $("runSimilarity")?.addEventListener("click",runSimilarityExplorer);
 $("cancelSimilarity")?.addEventListener("click",()=>{similarityGeneration++;if($("cancelSimilarity"))$("cancelSimilarity").hidden=true;if($("runSimilarity"))$("runSimilarity").disabled=false;if($("similarityStatus"))$("similarityStatus").textContent="유사 채보 탐색 취소됨";});
 
+function relationKinds(a,b){
+  const kinds=[];
+  if(a?.beatmapset_id&&String(a.beatmapset_id)===String(b?.beatmapset_id))kinds.push("set");
+  if(a?.creator&&String(a.creator)===String(b?.creator))kinds.push("mapper");
+  const dna=similarityDnaDistance(a,b);if(dna!=null&&dna<1.05)kinds.push("dna");
+  const meta=similarityMetaDistance(a,b);if(meta<.72)kinds.push("meta");
+  const ya=Number(String(a?.ranked_date||"").slice(0,4)),yb=Number(String(b?.ranked_date||"").slice(0,4));
+  if(Number.isFinite(ya)&&Number.isFinite(yb)&&Math.abs(ya-yb)<=1)kinds.push("era");
+  return kinds;
+}
+function relationStrength(a,b){
+  const kinds=relationKinds(a,b), meta=similarityMetaDistance(a,b), dna=similarityDnaDistance(a,b);
+  let score=1/(.18+meta);
+  if(dna!=null)score+=1/(.3+dna)*.7;
+  if(kinds.includes("set"))score+=5;
+  if(kinds.includes("mapper"))score+=2.4;
+  if(kinds.includes("era"))score+=.35;
+  return score;
+}
+function relationNodePool(){
+  const all=new Map();
+  for(const m of rankedIndex)if(m?.beatmap_id)all.set(String(m.beatmap_id),m);
+  for(const m of similarityResultMaps.values())if(m?.beatmap_id)all.set(String(m.beatmap_id),m);
+  for(const m of favoriteMaps.values())if(m?.beatmap_id)all.set(String(m.beatmap_id),m);
+  for(const m of recentViewedMaps)if(m?.beatmap_id)all.set(String(m.beatmap_id),m);
+  for(const m of relationGraphMaps.values())if(m?.beatmap_id)all.set(String(m.beatmap_id),m);
+  return [...all.values()];
+}
+async function relationCandidates(focus,limit,token){
+  const pool=relationNodePool().filter(m=>String(m.beatmap_id)!==String(focus.beatmap_id));
+  const pre=catalogSummary?.research?.similarity_index?.[String(focus.beatmap_id)]||[];
+  if(pre.length){
+    const resolved=await resolveSimilarityIds(pre.slice(0,Math.max(limit*2,24)).map(x=>({id:x.beatmap_id,year:x.year,score:x.distance})),token);
+    for(const row of resolved)if(row.map?.beatmap_id&&!pool.some(m=>String(m.beatmap_id)===String(row.map.beatmap_id)))pool.push(row.map);
+  }
+  return pool.map(m=>({map:m,strength:relationStrength(focus,m),kinds:relationKinds(focus,m)}))
+    .filter(x=>x.kinds.length||x.strength>.62)
+    .sort((a,b)=>b.strength-a.strength).slice(0,limit);
+}
+function relationEdgeKind(kinds){
+  for(const k of ["set","mapper","dna","meta","era"])if(kinds.includes(k))return k;
+  return "meta";
+}
+function renderRelationGraph(nodes,edges,focus){
+  const edgeHost=$("relationGraphEdges"),nodeHost=$("relationGraphNodes"),svg=$("relationGraph");
+  if(!edgeHost||!nodeHost||!svg)return;
+  relationGraphMaps.clear();for(const n of nodes)relationGraphMaps.set(String(n.map.beatmap_id),n.map);
+  const W=1000,H=560,cx0=500,cy0=280;
+  const others=nodes.filter(n=>!n.root),count=Math.max(1,others.length);
+  const positions=new Map([[String(focus.beatmap_id),{x:cx0,y:cy0}]]);
+  others.forEach((n,i)=>{
+    const ring=i<8?1:2, ringIndex=ring===1?i:i-8, ringCount=ring===1?Math.min(8,count):Math.max(1,count-8);
+    const angle=-Math.PI/2+(ringIndex/ringCount)*Math.PI*2+(ring===2?.2:0);
+    const radius=ring===1?155:235;
+    positions.set(String(n.map.beatmap_id),{x:cx0+Math.cos(angle)*radius,y:cy0+Math.sin(angle)*radius});
+  });
+  edgeHost.innerHTML=edges.map(e=>{
+    const a=positions.get(String(e.a)),b=positions.get(String(e.b));if(!a||!b)return"";
+    return '<line class="relation-edge kind-'+cx(e.kind)+'" x1="'+a.x.toFixed(1)+'" y1="'+a.y.toFixed(1)+'" x2="'+b.x.toFixed(1)+'" y2="'+b.y.toFixed(1)+'"><title>'+cx(e.label)+'</title></line>';
+  }).join("");
+  nodeHost.innerHTML=nodes.map(n=>{
+    const id=String(n.map.beatmap_id),p=positions.get(id),root=n.root,selected=relationSelectedMap&&String(relationSelectedMap.beatmap_id)===id;
+    const title=(n.map.title||"?").slice(0,22),sub="★"+Number(n.map.official_sr||0).toFixed(2)+" · "+Number(n.map.bpm||0).toFixed(0)+" BPM";
+    return '<g class="relation-node '+(root?"root ":"")+(selected?"selected":"")+'" data-relation-node="'+encodeURIComponent(id)+'" transform="translate('+p.x.toFixed(1)+' '+p.y.toFixed(1)+')" tabindex="0" role="button"><circle r="'+(root?46:34)+'"></circle><text class="relation-title" text-anchor="middle" y="'+(root?62:50)+'">'+cx(title)+'</text><text class="relation-sub" text-anchor="middle" y="'+(root?76:63)+'">'+cx(sub)+'</text><title>'+cx(n.map.artist||"?")+' — '+cx(n.map.title||"?")+' ['+cx(n.map.version||"?")+']</title></g>';
+  }).join("");
+}
+function renderRelationInspector(map,focus){
+  const host=$("relationNodeInspector"),expand=$("expandRelationNode");if(!host)return;
+  if(!map){host.innerHTML='<div class="empty">그래프에서 노드를 선택하면 관계와 상세 정보가 표시됩니다.</div>';if(expand)expand.disabled=true;return;}
+  relationSelectedMap=map;if(expand)expand.disabled=false;
+  const kinds=focus&&String(map.beatmap_id)!==String(focus.beatmap_id)?relationKinds(focus,map):[];
+  host.innerHTML='<div class="relation-inspector-card"><div><span>선택 노드</span><b>'+cx(map.artist||"?")+' — '+cx(map.title||"?")+' ['+cx(map.version||"?")+']</b><small>'+cx(map.creator||"?")+' · ★'+Number(map.official_sr||0).toFixed(2)+' · '+Number(map.bpm||0).toFixed(0)+' BPM · '+cx(String(map.ranked_date||"").slice(0,10))+'</small></div><div class="relation-kind-badges">'+(kinds.length?kinds.map(k=>'<span data-rel-kind="'+cx(k)+'">'+cx({set:"같은 세트",mapper:"같은 맵퍼",dna:"DNA 유사",meta:"구조 유사",era:"같은 시대"}[k]||k)+'</span>').join(""):'<span>중심 노드</span>')+'</div><div class="relation-inspector-actions"><button type="button" class="ghost-btn" data-ranked-detail="'+encodeURIComponent(String(map.beatmap_id))+'">상세</button><button type="button" class="ghost-btn" data-similarity-seed="'+encodeURIComponent(String(map.beatmap_id))+'">유사도 기준</button><button type="button" class="ghost-btn" data-compare-map="'+encodeURIComponent(String(map.beatmap_id))+'">비교 +</button></div></div>';
+}
+async function buildRelationGraph(focus=similaritySeedMap){
+  if(!focus){alert("먼저 Similarity Explorer의 기준 채보를 선택해 주세요.");return;}
+  const token=++relationGeneration,limit=Number($("relationNodeLimit")?.value||16),density=$("relationDensity")?.value||"normal",status=$("relationGraphStatus");
+  relationFocusMap=focus;relationSelectedMap=focus;if(status)status.textContent="관계 후보 수집 중…";
+  const candidates=await relationCandidates(focus,Math.max(1,limit-1),token);if(token!==relationGeneration)return;
+  const nodes=[{map:focus,root:true},...candidates.map(x=>({map:x.map,root:false}))],edges=[];
+  for(const item of candidates){
+    const kinds=item.kinds.length?item.kinds:["meta"],kind=relationEdgeKind(kinds);
+    edges.push({a:focus.beatmap_id,b:item.map.beatmap_id,kind,label:kinds.join(" · ")});
+  }
+  if(density!=="light"){
+    const maxCross=density==="dense"?Math.max(12,limit*2):Math.max(5,Math.floor(limit*.7));
+    const cross=[];
+    for(let i=1;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
+      const kinds=relationKinds(nodes[i].map,nodes[j].map);
+      if(!kinds.length)continue;
+      cross.push({a:nodes[i].map.beatmap_id,b:nodes[j].map.beatmap_id,kind:relationEdgeKind(kinds),label:kinds.join(" · "),score:relationStrength(nodes[i].map,nodes[j].map)});
+    }
+    cross.sort((a,b)=>b.score-a.score);edges.push(...cross.slice(0,maxCross));
+  }
+  renderRelationGraph(nodes,edges,focus);renderRelationInspector(focus,focus);
+  if(status)status.textContent=ct(nodes.length)+"개 노드 · "+ct(edges.length)+"개 관계 · 중심: "+(focus.title||"?");
+}
+$("buildRelationGraph")?.addEventListener("click",()=>buildRelationGraph());
+$("expandRelationNode")?.addEventListener("click",()=>{if(relationSelectedMap)buildRelationGraph(relationSelectedMap);});
+$("resetRelationGraph")?.addEventListener("click",()=>{relationGeneration++;relationGraphMaps.clear();relationSelectedMap=null;relationFocusMap=null;if($("relationGraphEdges"))$("relationGraphEdges").innerHTML="";if($("relationGraphNodes"))$("relationGraphNodes").innerHTML="";renderRelationInspector(null,null);if($("relationGraphStatus"))$("relationGraphStatus").textContent="Similarity Explorer의 기준 채보를 선택하면 관계망을 만들 수 있습니다.";});
+document.addEventListener("click",event=>{
+  const node=event.target.closest("[data-relation-node]");if(!node)return;
+  const id=decodeURIComponent(node.dataset.relationNode||""),map=relationGraphMaps.get(id);if(!map)return;
+  document.querySelectorAll(".relation-node.selected").forEach(x=>x.classList.remove("selected"));node.classList.add("selected");
+  renderRelationInspector(map,relationFocusMap);
+});
+document.addEventListener("keydown",event=>{
+  if(event.key!=="Enter"&&event.key!==" ")return;
+  const node=event.target.closest?.("[data-relation-node]");if(!node)return;
+  event.preventDefault();node.dispatchEvent(new MouseEvent("click",{bubbles:true}));
+});
+
 function saveCompareMaps(){
   try{localStorage.setItem("osl-ranked-compare",JSON.stringify([...compareMaps.values()].slice(0,4)));}catch(_){}
 }
@@ -968,7 +1106,7 @@ $("compareNow")?.addEventListener("click",showCompareMaps);
 $("clearCompare")?.addEventListener("click",()=>{compareMaps.clear();saveCompareMaps();renderCompareTray();renderIndexed();});
 document.addEventListener("click",event=>{
   const add=event.target.closest("[data-compare-map]");
-  if(add){event.preventDefault();const id=decodeURIComponent(add.dataset.compareMap||"");const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);toggleCompareMap(map);return;}
+  if(add){event.preventDefault();const id=decodeURIComponent(add.dataset.compareMap||"");const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);toggleCompareMap(map);return;}
   const remove=event.target.closest("[data-compare-remove]");
   if(remove){event.preventDefault();compareMaps.delete(decodeURIComponent(remove.dataset.compareRemove||""));saveCompareMaps();renderCompareTray();renderIndexed();}
 });
@@ -1235,7 +1373,7 @@ document.addEventListener("click", event => {
   const button=event.target.closest("[data-ranked-detail]");
   if(!button)return;
   const id=decodeURIComponent(button.dataset.rankedDetail||"");
-  const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+  const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
   showRankedDetails(map);
 });
 document.addEventListener("click", event => {
@@ -1278,7 +1416,7 @@ function bindInteractiveCatalogueControls() {
     if(similar){
       event.preventDefault();
       const id=decodeURIComponent(similar.dataset.similaritySeed||"");
-      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
       if(map){
         const dialog=$("chartModal");if(dialog?.open&&typeof dialog.close==="function")dialog.close();
         setSimilaritySeed(map,false);
@@ -1289,7 +1427,7 @@ function bindInteractiveCatalogueControls() {
     if(favorite){
       event.preventDefault();
       const id=decodeURIComponent(favorite.dataset.favoriteMap||"");
-      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
       if(map){
         toggleFavoriteMap(map);
         const dialog=$("chartModal");
@@ -1301,7 +1439,7 @@ function bindInteractiveCatalogueControls() {
     if(share){
       event.preventDefault();
       const id=decodeURIComponent(share.dataset.shareMap||"");
-      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
       if(map)copyMapShareLink(map);
       return;
     }
