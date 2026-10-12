@@ -400,6 +400,7 @@ async function loadRankedSummary() {
     try { localStorage.setItem("osl-ranked-summary-backup", JSON.stringify(s)); } catch (_) {}
     indexedYearCache.clear();
     dnaOverlayCache.clear();
+    trainingPoolCache = null;
     indexedLoadedKey = "";
     renderCatalogSummary(s);
     setRankedLoadState("Ranked 인덱스 준비", ct(s.counts?.difficulties) + "채보 · " + ((performance.now()-started)/1000).toFixed(1) + "초", 96);
@@ -1132,6 +1133,7 @@ function relationNodePool(){
   for(const m of similarityResultMaps.values())if(m?.beatmap_id)all.set(String(m.beatmap_id),m);
   for(const m of favoriteMaps.values())if(m?.beatmap_id)all.set(String(m.beatmap_id),m);
   for(const m of recentViewedMaps)if(m?.beatmap_id)all.set(String(m.beatmap_id),m);
+  for(const m of trainingRouteMaps.values())if(m?.beatmap_id)all.set(String(m.beatmap_id),m);
   for(const m of relationGraphMaps.values())if(m?.beatmap_id)all.set(String(m.beatmap_id),m);
   return [...all.values()];
 }
