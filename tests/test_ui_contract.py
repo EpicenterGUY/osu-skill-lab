@@ -49,6 +49,15 @@ class UiContractTests(unittest.TestCase):
                       "osl-ranked-favorites", "osl-ranked-recent", "data-share-map"):
             self.assertIn(token, RANKED)
 
+    def test_similarity_explorer_is_wired(self):
+        for element_id in ("similaritySeed", "similarityMode", "similarityScope", "similarityLimit",
+                           "runSimilarity", "cancelSimilarity", "similarityStatus", "similarityResults"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', RANKED)
+        for token in ("data-similarity-seed", "runSimilarityExplorer", "runGlobalDnaSimilarity",
+                      "runGlobalMetaSimilarity", "similarityDnaDistance", "similarityMetaDistance"):
+            self.assertIn(token, RANKED)
+
     def test_ranked_compare_workspace_is_wired(self):
         for element_id in ("compareTray", "compareTrayItems", "compareCount", "openCompare",
                            "compareNow", "clearCompare"):
