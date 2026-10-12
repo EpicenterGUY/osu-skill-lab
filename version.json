@@ -1,7 +1,7 @@
 {
-  "version": "2.9.0",
+  "version": "2.10.0",
   "channel": "ranked",
-  "name": "Replay Signals",
+  "name": "Replay Trends",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -60,6 +60,11 @@
     "Lazy 256-shard checksum lookup resolves one replay MD5 back to a Ranked beatmap without loading the whole catalogue",
     "Browser replay parsing now exposes replay timestamp, miss rate and non-300 rate while remaining explicitly header-only",
     "PC replay parsing adds key-input median-gap and burst-variability proxies without claiming exact miss locations",
-    "Replay records can reopen linked map details and optionally mark the matching active Practice Route map complete"
+    "Replay records can reopen linked map details and optionally mark the matching active Practice Route map complete",
+    "Same-map Replay Trend Lab with accuracy, miss, non-300 and combo history",
+    "Mod-aware same-map filtering and same-Mod Practice Route before-after comparisons",
+    "Replay timestamp provenance separates actual replay time from import-time fallback",
+    "Repeated outcome summaries by dominant base Chart DNA axis with sample-size and mod-mix caveats",
+    "Replay Signals JSON import merges portable local histories and retries checksum resolution"
   ]
 }
