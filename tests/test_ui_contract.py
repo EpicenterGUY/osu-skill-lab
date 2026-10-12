@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "index.html").read_text(encoding="utf-8")
 RANKED = (ROOT / "ranked-catalog.js").read_text(encoding="utf-8")
+CLIENT = (ROOT / "client-bridge.js").read_text(encoding="utf-8")
 
 
 class UiContractTests(unittest.TestCase):
@@ -194,6 +195,19 @@ class UiContractTests(unittest.TestCase):
                       "failureStructureReportText", "data-failure-structure",
                       "2회 이상 다시 등장한"):
             self.assertIn(token, RANKED)
+
+    def test_osl_client_bridge_is_wired(self):
+        for element_id in ("clientModeKpi", "clientMapCount", "clientSetCount", "clientLastScanKpi",
+                           "clientSongsPath", "clientAutoDetect", "clientSavePath", "clientScan",
+                           "clientStatus", "clientScanProgress", "clientQuery", "clientSearch",
+                           "clientResults"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', CLIENT)
+        for token in ("/api/client/status", "/api/client/library", "/api/client/config",
+                      "/api/client/scan", "/api/client/analyze", "OSLClientAcceptMap"):
+            self.assertIn(token, CLIENT + HTML)
+        self.assertIn('data-tab="client"', HTML)
+        self.assertIn("M4 · BUILDING", HTML)
 
     def test_ranked_compare_workspace_is_wired(self):
         for element_id in ("compareTray", "compareTrayItems", "compareCount", "openCompare",
