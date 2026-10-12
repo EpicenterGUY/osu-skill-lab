@@ -673,7 +673,8 @@ function exportRankedRows(){
   if(!rows.length){alert("내보낼 검색 결과가 없습니다.");return;}
   let data,type,ext;
   if(format==="json"){
-    data=JSON.stringify({format:"osu-skill-lab-ranked-results",exported_at:new Date().toISOString(),search:getRankedSearchState(),count:rows.length,maps:rows.map(compactStoredMap)},null,2);
+    const payload={format:"osu-skill-lab-ranked-results",exported_at:new Date().toISOString(),search:getRankedSearchState(),count:rows.length,maps:rows.map(compactStoredMap)};
+    data=JSON.stringify(payload,null,rows.length>5000?0:2);
     type="application/json;charset=utf-8";ext="json";
   }else{
     const fields=["beatmap_id","beatmapset_id","artist","title","version","creator","official_sr","bpm","ar","od","cs","hp","total_length","playcount","status","ranked_date"];
@@ -858,8 +859,8 @@ $("saveSearchPreset")?.addEventListener("click",()=>{
   if(existing>=0)savedSearches.splice(existing,1,entry);else savedSearches.unshift(entry);
   savedSearches=savedSearches.slice(0,20);persistSearchWorkspace();renderSearchWorkspace();
 });
-$("applySavedSearch")?.addEventListener("click",()=>{const i=Number($("savedSearchSelect")?.value);if(Number.isInteger(i)&&savedSearches[i])executeSearchState(savedSearches[i].state);});
-$("deleteSavedSearch")?.addEventListener("click",()=>{const i=Number($("savedSearchSelect")?.value);if(!Number.isInteger(i)||!savedSearches[i])return;savedSearches.splice(i,1);persistSearchWorkspace();renderSearchWorkspace();});
+$("applySavedSearch")?.addEventListener("click",()=>{const raw=$("savedSearchSelect")?.value;if(raw==null||raw==="")return;const i=Number(raw);if(Number.isInteger(i)&&savedSearches[i])executeSearchState(savedSearches[i].state);});
+$("deleteSavedSearch")?.addEventListener("click",()=>{const raw=$("savedSearchSelect")?.value;if(raw==null||raw==="")return;const i=Number(raw);if(!Number.isInteger(i)||!savedSearches[i])return;savedSearches.splice(i,1);persistSearchWorkspace();renderSearchWorkspace();});
 $("copySearchLink")?.addEventListener("click",copySearchShareLink);
 $("exportRankedResults")?.addEventListener("click",exportRankedRows);
 document.addEventListener("click",event=>{const b=event.target.closest("[data-search-history]");if(!b)return;const i=Number(b.dataset.searchHistory);if(Number.isInteger(i)&&rankedSearchHistory[i])executeSearchState(rankedSearchHistory[i].state);});
