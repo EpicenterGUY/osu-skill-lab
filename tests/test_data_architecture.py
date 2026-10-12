@@ -50,6 +50,16 @@ class DataArchitectureTests(unittest.TestCase):
         self.assertIn("--max-minutes 40", DNA_WORKFLOW)
         self.assertIn("2200", DNA_WORKFLOW)
 
+    def test_dna_backfill_has_push_fallback_for_pipeline_changes(self):
+        self.assertIn("push:", DNA_WORKFLOW)
+        self.assertIn('".github/workflows/backfill-chart-dna.yml"', DNA_WORKFLOW)
+        self.assertIn('"build_chart_dna.py"', DNA_WORKFLOW)
+        self.assertIn('cron: "43 * * * *"', DNA_WORKFLOW)
+
+    def test_dna_summary_exposes_collector_freshness(self):
+        self.assertIn('"updated_at": dna_state.get("updated_at")', BUILD)
+        self.assertIn('"stale_after_hours": 3', BUILD)
+
 
 if __name__ == "__main__":
     unittest.main()
