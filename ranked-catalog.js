@@ -115,7 +115,11 @@ function mergeCachedDna(rows) {
   for (const m of rows) {
     const year=String(m.ranked_date||"").slice(0,4);
     const overlay=dnaOverlayCache.get(year)?.get(String(m.beatmap_id));
-    if (overlay) m.dna=overlay;
+    if (overlay) {
+      m.dna=overlay;
+      const saved=compareMaps.get(String(m.beatmap_id));
+      if(saved){saved.dna=overlay;compareMaps.set(String(m.beatmap_id),saved);}
+    }
   }
   return rows;
 }
@@ -495,10 +499,11 @@ function renderIndexed() {
   const rs=$("rankedResultSummary");
   if(rs){
     const avg=(field)=>rows.length?rows.reduce((n,m)=>n+Number(m[field]||0),0)/rows.length:0;
-    const srVals=rows.map(m=>Number(m.official_sr||0)).filter(Number.isFinite);
+    let minResultSr=Infinity,maxResultSr=-Infinity;
+    for(const m of rows){const v=Number(m.official_sr);if(Number.isFinite(v)){if(v<minResultSr)minResultSr=v;if(v>maxResultSr)maxResultSr=v;}}
     rs.innerHTML='<span><b>'+ct(rows.length)+'</b> 결과</span><span>평균 <b>★'+avg("official_sr").toFixed(2)+'</b></span>'+
       '<span>평균 <b>'+avg("bpm").toFixed(0)+' BPM</b></span>'+
-      (srVals.length?'<span>범위 <b>★'+Math.min(...srVals).toFixed(2)+'–'+Math.max(...srVals).toFixed(2)+'</b></span>':'');
+      (Number.isFinite(minResultSr)?'<span>범위 <b>★'+minResultSr.toFixed(2)+'–'+maxResultSr.toFixed(2)+'</b></span>':'');
   }
   const list=$("indexedList");
   if(list) list.innerHTML=rows.slice(0,indexedLimit).map(m=>{
