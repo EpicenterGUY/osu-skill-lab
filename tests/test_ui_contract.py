@@ -107,6 +107,16 @@ class UiContractTests(unittest.TestCase):
                       "trainingSessionEvents", "suggestTrainingBand", "data-training-history-replay"):
             self.assertIn(token, RANKED)
 
+    def test_training_insights_are_wired(self):
+        for element_id in ("trainingInsightsPeriod", "copyTrainingInsights", "trainingInsightsKpis",
+                           "trainingExposureCompare", "trainingSrBands", "trainingTargetMix",
+                           "trainingFeelMix", "trainingInsightsSummary"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', RANKED)
+        for token in ("trainingPeriodMetrics", "renderTrainingInsights",
+                      "trainingInsightsReportText", "trainingMetricDelta"):
+            self.assertIn(token, RANKED)
+
     def test_ranked_compare_workspace_is_wired(self):
         for element_id in ("compareTray", "compareTrayItems", "compareCount", "openCompare",
                            "compareNow", "clearCompare"):
