@@ -1558,7 +1558,7 @@ async function recordReplaySignal(raw,selectedLocal=null){
       return vals.length?vals[Math.floor(vals.length/2)]:null;
     })():null);
   const record={
-    id,imported_at:importedAt,played_at:playedAt,filename:String(raw.filename||""),
+    id,imported_at:importedAt,played_at:playedAt,played_at_source:raw.replay_timestamp?"replay_timestamp":"imported_at_fallback",filename:String(raw.filename||""),
     player:String(raw.player||""),map_hash:String(raw.map_hash||"").toLowerCase(),
     replay_hash:String(raw.replay_hash||""),score:Number(raw.score||0),combo:Number(raw.combo||0),
     mods:Number(raw.mods||0),perfect:Boolean(raw.perfect),accuracy:Number.isFinite(accuracy)?Math.round(accuracy*100)/100:null,
@@ -1585,11 +1585,173 @@ function replayMedian(values){
   if(!xs.length)return null;
   const i=Math.floor(xs.length/2);return xs.length%2?xs[i]:(xs[i-1]+xs[i])/2;
 }
+function replayTrueTimestamp(record){
+  if(record?.played_at_source==="replay_timestamp")return true;
+  const played=Date.parse(record?.played_at||""),imported=Date.parse(record?.imported_at||"");
+  return Number.isFinite(played)&&Number.isFinite(imported)&&Math.abs(played-imported)>5000;
+}
+function replayGroupKey(record){
+  const map=replayDisplayMap(record),id=String(map?.beatmap_id||"");
+  return id?"id:"+id:"hash:"+String(record?.map_hash||"unknown");
+}
+function replayGroupLabel(group){
+  const map=group.map;
+  if(map?.title)return (map.artist||"?")+" — "+map.title+" ["+(map.version||"?")+"]";
+  const hash=String(group.records?.[0]?.map_hash||"unknown");
+  return "MD5 "+hash.slice(0,10)+"…";
+}
+function replayGroups(){
+  const groups=new Map();
+  for(const record of replaySignalHistory){
+    const key=replayGroupKey(record),map=replayDisplayMap(record);
+    if(!groups.has(key))groups.set(key,{key,map,records:[]});
+    const group=groups.get(key);group.records.push(record);if(!group.map&&map)group.map=map;
+    if(map?.beatmap_id)replaySignalMaps.set(String(map.beatmap_id),map);
+  }
+  for(const group of groups.values())group.records.sort((a,b)=>Date.parse(a.played_at||a.imported_at||0)-Date.parse(b.played_at||b.imported_at||0));
+  return [...groups.values()].sort((a,b)=>{
+    const ta=Date.parse(a.records.at(-1)?.played_at||a.records.at(-1)?.imported_at||0),tb=Date.parse(b.records.at(-1)?.played_at||b.records.at(-1)?.imported_at||0);
+    return tb-ta;
+  });
+}
+function replayMetricValue(record,metric){
+  if(metric==="accuracy")return Number(record?.accuracy);
+  if(metric==="miss")return Number(record?.hits?.miss);
+  if(metric==="non300_rate")return Number(record?.non300_rate);
+  if(metric==="combo")return Number(record?.combo);
+  return NaN;
+}
+function replayMetricName(metric){
+  return ({accuracy:"정확도 %",miss:"Miss 수",non300_rate:"Non-300 비율",combo:"Max Combo"})[metric]||metric;
+}
+function replayAverage(records,getter){
+  const values=records.map(getter).map(Number).filter(Number.isFinite);
+  return values.length?values.reduce((a,b)=>a+b,0)/values.length:null;
+}
+function firstTrainingCompletionByMap(){
+  const out=new Map(),sessions=[...trainingHistory];
+  if(trainingRouteState.maps?.length)sessions.push(trainingRouteState);
+  for(const session of sessions){
+    const ids=new Set((session.done||[]).map(String));
+    for(const id of ids){
+      const t=Date.parse(session.done_at?.[id]||"");if(!Number.isFinite(t))continue;
+      if(!out.has(id)||t<out.get(id))out.set(id,t);
+    }
+  }
+  return out;
+}
+function renderReplayTrendChart(records,metric,map){
+  const host=$("replayTrendChart");if(!host)return;
+  const valid=records.map(r=>({r,t:Date.parse(r.played_at||r.imported_at||""),v:replayMetricValue(r,metric)})).filter(x=>Number.isFinite(x.t)&&Number.isFinite(x.v));
+  if(valid.length<2){host.innerHTML='<div class="empty">선택 지표에 유효한 표본이 2개 이상 필요합니다.</div>';return;}
+  const W=920,H=250,padX=52,padY=34,values=valid.map(x=>x.v),minRaw=Math.min(...values),maxRaw=Math.max(...values);
+  let minY,maxY;
+  if(metric==="accuracy"){minY=Math.max(0,Math.floor((minRaw-.5)*10)/10);maxY=Math.min(100,Math.ceil((maxRaw+.5)*10)/10);}
+  else{minY=Math.min(0,minRaw);maxY=Math.max(1,maxRaw*1.12);}
+  if(maxY<=minY)maxY=minY+1;
+  const minT=valid[0].t,maxT=valid.at(-1).t,spanT=Math.max(1,maxT-minT);
+  const point=(x,i)=>{
+    const px=valid.length===1?W/2:padX+(x.t-minT)/spanT*(W-padX*2);
+    const py=H-padY-(x.v-minY)/(maxY-minY)*(H-padY*2);
+    return {x:px,y:py,i,...x};
+  };
+  const points=valid.map(point),poly=points.map(p=>p.x.toFixed(1)+","+p.y.toFixed(1)).join(" ");
+  const completion=String(map?.beatmap_id||""),completionT=firstTrainingCompletionByMap().get(completion);
+  let marker="";
+  if(Number.isFinite(completionT)&&completionT>=minT&&completionT<=maxT){
+    const x=padX+(completionT-minT)/spanT*(W-padX*2);
+    marker='<line class="replay-practice-marker" x1="'+x.toFixed(1)+'" y1="'+padY+'" x2="'+x.toFixed(1)+'" y2="'+(H-padY)+'"></line><text class="replay-marker-label" x="'+(x+5).toFixed(1)+'" y="'+(padY+12)+'">Practice 완료</text>';
+  }
+  const yTop=metric==="accuracy"?maxY.toFixed(1):maxY.toFixed(metric==="non300_rate"?1:0),yBottom=metric==="accuracy"?minY.toFixed(1):minY.toFixed(metric==="non300_rate"?1:0);
+  host.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+cx(replayMetricName(metric))+' 리플레이 추이">'+
+    '<line class="replay-chart-axis" x1="'+padX+'" y1="'+padY+'" x2="'+padX+'" y2="'+(H-padY)+'"></line>'+
+    '<line class="replay-chart-axis" x1="'+padX+'" y1="'+(H-padY)+'" x2="'+(W-padX)+'" y2="'+(H-padY)+'"></line>'+
+    '<text class="replay-axis-label" x="8" y="'+(padY+4)+'">'+cx(yTop)+'</text><text class="replay-axis-label" x="8" y="'+(H-padY+4)+'">'+cx(yBottom)+'</text>'+
+    marker+'<polyline class="replay-trend-line" points="'+poly+'"></polyline>'+
+    points.map((p,i)=>'<circle class="replay-trend-point" cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="5"><title>#'+(i+1)+' · '+cx(new Date(p.t).toLocaleString())+' · '+cx(p.v.toFixed(metric==="accuracy"||metric==="non300_rate"?2:0))+'</title></circle>').join("")+
+    '<text class="replay-axis-label" x="'+padX+'" y="'+(H-8)+'">'+cx(new Date(minT).toLocaleDateString())+'</text><text class="replay-axis-label end" x="'+(W-padX)+'" y="'+(H-8)+'">'+cx(new Date(maxT).toLocaleDateString())+'</text></svg>';
+}
+function renderReplayPracticeCompare(){
+  const host=$("replayPracticeCompare");if(!host)return;
+  const completion=firstTrainingCompletionByMap(),groups=replayGroups(),rows=[];
+  for(const group of groups){
+    const id=String(group.map?.beatmap_id||""),cut=completion.get(id);if(!id||!Number.isFinite(cut))continue;
+    const stamped=group.records.filter(replayTrueTimestamp).map(r=>({r,t:Date.parse(r.played_at||"")})).filter(x=>Number.isFinite(x.t));
+    const before=stamped.filter(x=>x.t<cut).map(x=>x.r),after=stamped.filter(x=>x.t>=cut).map(x=>x.r);
+    if(!before.length||!after.length)continue;
+    rows.push({group,before,after,cut});
+  }
+  if(!rows.length){host.innerHTML='<div class="empty">같은 채보에서 Practice Route 완료 이전·이후의 실제 replay timestamp 표본이 각각 1개 이상 필요합니다.</div>';return;}
+  const allBefore=rows.flatMap(x=>x.before),allAfter=rows.flatMap(x=>x.after);
+  const ba=replayAverage(allBefore,r=>r.accuracy),aa=replayAverage(allAfter,r=>r.accuracy),bm=replayAverage(allBefore,r=>r.hits?.miss),am=replayAverage(allAfter,r=>r.hits?.miss),bn=replayAverage(allBefore,r=>r.non300_rate),an=replayAverage(allAfter,r=>r.non300_rate);
+  const delta=(a,b,d=2)=>Number.isFinite(a)&&Number.isFinite(b)?((b-a)>=0?"+":"")+(b-a).toFixed(d):"—";
+  host.innerHTML='<div class="replay-before-after-kpis"><div><span>비교 가능 채보</span><b>'+rows.length+'</b><small>전/후 표본 모두 존재</small></div>'+
+    '<div><span>ACC 전 → 후</span><b>'+(ba==null?"—":ba.toFixed(2))+' → '+(aa==null?"—":aa.toFixed(2))+'%</b><small>Δ '+delta(ba,aa,2)+'pp</small></div>'+
+    '<div><span>Miss 전 → 후</span><b>'+(bm==null?"—":bm.toFixed(2))+' → '+(am==null?"—":am.toFixed(2))+'</b><small>Δ '+delta(bm,am,2)+'</small></div>'+
+    '<div><span>Non-300 전 → 후</span><b>'+(bn==null?"—":bn.toFixed(2))+' → '+(an==null?"—":an.toFixed(2))+'%</b><small>Δ '+delta(bn,an,2)+'pp</small></div></div>'+
+    '<div class="replay-before-after-list">'+rows.slice(0,8).map(x=>{
+      const bacc=replayAverage(x.before,r=>r.accuracy),aacc=replayAverage(x.after,r=>r.accuracy),bmiss=replayAverage(x.before,r=>r.hits?.miss),amiss=replayAverage(x.after,r=>r.hits?.miss),id=String(x.group.map?.beatmap_id||"");
+      return '<button type="button" class="replay-compare-map" data-ranked-detail="'+encodeURIComponent(id)+'"><b>'+cx(replayGroupLabel(x.group))+'</b><small>전 '+x.before.length+' / 후 '+x.after.length+' · ACC '+(bacc==null?"—":bacc.toFixed(2))+' → '+(aacc==null?"—":aacc.toFixed(2))+'% · Miss '+(bmiss==null?"—":bmiss.toFixed(2))+' → '+(amiss==null?"—":amiss.toFixed(2))+'</small></button>';
+    }).join("")+'</div><p class="hint-text">기준선은 각 채보의 첫 Practice Route 완료 시각입니다. 표본 선택·난이도·mods 등 다른 요인이 통제되지 않은 단순 시간 전후 비교입니다.</p>';
+}
+function renderReplayRepeatedSignals(){
+  const host=$("replayRepeatedSignals");if(!host)return;
+  const skills=["aim","stream","speed","stamina","tech","reading","flow"],groups=new Map(),all=[];
+  for(const r of replaySignalHistory){
+    const map=replayDisplayMap(r),sv=map?.dna?.skills;if(!sv)continue;
+    const dominant=skills.map(k=>[k,Number(sv[k])]).filter(x=>Number.isFinite(x[1])).sort((a,b)=>b[1]-a[1])[0]?.[0];if(!dominant)continue;
+    if(!groups.has(dominant))groups.set(dominant,[]);
+    groups.get(dominant).push(r);all.push(r);
+  }
+  const baseAcc=replayAverage(all,r=>r.accuracy),baseMiss=replayAverage(all,r=>r.miss_rate),baseNon=replayAverage(all,r=>r.non300_rate);
+  const rows=[...groups.entries()].filter(([,rs])=>rs.length>=2).map(([skill,rs])=>{
+    const sorted=[...rs].sort((a,b)=>Date.parse(a.played_at||a.imported_at||0)-Date.parse(b.played_at||b.imported_at||0)),half=Math.max(1,Math.floor(sorted.length/2));
+    const older=sorted.slice(0,half),recent=sorted.slice(half);
+    const acc=replayAverage(rs,r=>r.accuracy),miss=replayAverage(rs,r=>r.miss_rate),non=replayAverage(rs,r=>r.non300_rate),oldAcc=replayAverage(older,r=>r.accuracy),recentAcc=replayAverage(recent,r=>r.accuracy);
+    return {skill,rs,acc,miss,non,trend:Number.isFinite(oldAcc)&&Number.isFinite(recentAcc)?recentAcc-oldAcc:null};
+  }).sort((a,b)=>b.rs.length-a.rs.length);
+  if(!rows.length){host.innerHTML='<div class="empty">같은 DNA 주축에 연결된 리플레이가 2개 이상인 표본이 아직 없습니다.</div>';return;}
+  const diff=(v,b,d=2)=>Number.isFinite(v)&&Number.isFinite(b)?((v-b)>=0?"+":"")+(v-b).toFixed(d):"—";
+  host.innerHTML=rows.map(x=>{
+    const sample=x.rs.length<4?"표본 적음":x.rs.length<8?"표본 보통":"표본 많음";
+    return '<div class="replay-repeat-row"><div><span>'+x.skill.toUpperCase()+'</span><b>'+x.rs.length+'회 · '+sample+'</b></div><div><small>ACC</small><b>'+(x.acc==null?"—":x.acc.toFixed(2)+"%")+'</b><span>전체 DNA표본 대비 '+diff(x.acc,baseAcc,2)+'pp</span></div><div><small>Miss rate</small><b>'+(x.miss==null?"—":x.miss.toFixed(2)+"%")+'</b><span>전체 대비 '+diff(x.miss,baseMiss,2)+'pp</span></div><div><small>Non-300</small><b>'+(x.non==null?"—":x.non.toFixed(2)+"%")+'</b><span>전체 대비 '+diff(x.non,baseNon,2)+'pp</span></div><div><small>최근 절반 ACC</small><b>'+(x.trend==null?"—":(x.trend>=0?"+":"")+x.trend.toFixed(2)+"pp")+'</b><span>동일 축 내 시간순 비교</span></div></div>';
+  }).join("")+'<p class="hint-text">DNA 주축은 해당 채보에서 가장 큰 자체 휴리스틱 축입니다. 결과 차이는 요구축과 성과의 인과관계나 개인 약점을 의미하지 않습니다.</p>';
+}
+function renderReplayTrendLab(){
+  const select=$("replayTrendMap"),summary=$("replayTrendSummary"),chart=$("replayTrendChart");
+  if(!select||!summary||!chart)return;
+  const groups=replayGroups().filter(g=>g.records.length>=2),current=select.value;
+  select.innerHTML=groups.length?groups.map(g=>'<option value="'+cx(g.key)+'">'+cx(replayGroupLabel(g))+' · '+g.records.length+'회</option>').join(""):'<option value="">2개 이상 기록된 채보 없음</option>';
+  if(groups.some(g=>g.key===current))select.value=current;
+  const group=groups.find(g=>g.key===select.value)||groups[0];
+  if(group&&select.value!==group.key)select.value=group.key;
+  if(!group){
+    summary.innerHTML='<div class="empty">같은 채보 리플레이가 2개 이상 쌓이면 추이를 볼 수 있습니다.</div>';
+    chart.innerHTML='<div class="empty">추이 그래프 대기 중</div>';
+    renderReplayPracticeCompare();renderReplayRepeatedSignals();return;
+  }
+  const metric=$("replayTrendMetric")?.value||"accuracy",windowValue=$("replayTrendWindow")?.value||"10",limit=windowValue==="all"?group.records.length:Number(windowValue),records=group.records.slice(-Math.max(2,limit));
+  const first=records[0],last=records.at(-1),fa=Number(first.accuracy),la=Number(last.accuracy),fm=Number(first.hits?.miss),lm=Number(last.hits?.miss),fn=Number(first.non300_rate),ln=Number(last.non300_rate);
+  const delta=(a,b,d=2)=>Number.isFinite(a)&&Number.isFinite(b)?((b-a)>=0?"+":"")+(b-a).toFixed(d):"—";
+  const trueTimes=records.filter(replayTrueTimestamp).length;
+  summary.innerHTML='<div class="replay-trend-kpis"><div><span>표시 표본</span><b>'+records.length+'</b><small>전체 '+group.records.length+'개</small></div>'+
+    '<div><span>ACC 첫 → 최근</span><b>'+(Number.isFinite(fa)?fa.toFixed(2):"—")+' → '+(Number.isFinite(la)?la.toFixed(2):"—")+'%</b><small>Δ '+delta(fa,la,2)+'pp</small></div>'+
+    '<div><span>Miss 첫 → 최근</span><b>'+(Number.isFinite(fm)?fm:"—")+' → '+(Number.isFinite(lm)?lm:"—")+'</b><small>Δ '+delta(fm,lm,0)+'</small></div>'+
+    '<div><span>Non-300 첫 → 최근</span><b>'+(Number.isFinite(fn)?fn.toFixed(2):"—")+' → '+(Number.isFinite(ln)?ln.toFixed(2):"—")+'%</b><small>Δ '+delta(fn,ln,2)+'pp</small></div>'+
+    '<div><span>실제 replay 시각</span><b>'+trueTimes+'/'+records.length+'</b><small>나머지는 가져온 시각</small></div></div>';
+  renderReplayTrendChart(records,metric,group.map);
+  renderReplayPracticeCompare();renderReplayRepeatedSignals();
+}
+$("replayTrendMap")?.addEventListener("change",renderReplayTrendLab);
+$("replayTrendMetric")?.addEventListener("change",renderReplayTrendLab);
+$("replayTrendWindow")?.addEventListener("change",renderReplayTrendLab);
+
 function renderReplaySignals(){
   const kpis=$("replaySignalKpis"),judgements=$("replayJudgementMix"),bands=$("replayAccuracyBands"),timing=$("replayTimingSignals"),dnaHost=$("replayDnaSignals"),list=$("replaySignalList"),summary=$("replaySignalSummary");
   if(!kpis||!judgements||!bands||!timing||!dnaHost||!list)return;
   replaySignalMaps.clear();
   const rows=replaySignalHistory,linked=rows.filter(r=>r.map),acc=rows.map(r=>Number(r.accuracy)).filter(Number.isFinite),avgAcc=acc.length?acc.reduce((a,b)=>a+b,0)/acc.length:null;
+  for(const r of rows){const map=replayDisplayMap(r),id=String(map?.beatmap_id||"");if(id)replaySignalMaps.set(id,map);}
   const totals={great:0,good:0,meh:0,miss:0};for(const r of rows)for(const k of Object.keys(totals))totals[k]+=Number(r.hits?.[k]||0);
   kpis.innerHTML='<div class="dash-kpi"><span>저장 리플레이</span><b>'+ct(rows.length)+'</b><small>이 브라우저</small></div>'+
     '<div class="dash-kpi"><span>Ranked/로컬 연결</span><b>'+ct(linked.length)+'</b><small>checksum/MD5</small></div>'+
@@ -1631,6 +1793,7 @@ function renderReplaySignals(){
       (routeMatch?'<button type="button" class="ghost-btn" data-replay-route-complete="'+encodeURIComponent(id)+'">현재 세션 완료 반영</button>':'')+
       '<button type="button" class="ghost-btn" data-replay-signal-remove="'+encodeURIComponent(String(r.id))+'">삭제</button></div></div>';
   }).join(""):'<div class="empty">Replay Lab에서 .osr을 가져오면 자동 기록됩니다.</div>';
+  renderReplayTrendLab();
 }
 async function relinkReplaySignals(silent=false){
   if(!replaySignalHistory.length)return 0;
@@ -1652,8 +1815,36 @@ async function relinkReplaySignals(silent=false){
   }finally{if(button)button.disabled=false;}
 }
 $("retryReplayLinks")?.addEventListener("click",relinkReplaySignals);
+$("importReplaySignals")?.addEventListener("change",async event=>{
+  const file=event.target.files?.[0];if(!file)return;
+  try{
+    const data=JSON.parse(await file.text());
+    if(data?.format!=="osu-skill-lab-replay-signals"||!Array.isArray(data.replays))throw Error("지원하지 않는 Replay Signals 파일");
+    const clean=data.replays.slice(0,400).map((r,i)=>{
+      const hits=replayHits(r),judged=hits.great+hits.good+hits.meh+hits.miss,map=replayCompactMap(r.map);
+      const accuracy=Number(r.accuracy),missRate=Number(r.miss_rate),non300=Number(r.non300_rate);
+      return {
+        id:String(r.id||("import-replay-"+Date.now()+"-"+i)).slice(0,180),imported_at:r.imported_at||new Date().toISOString(),played_at:r.played_at||r.imported_at||new Date().toISOString(),
+        played_at_source:r.played_at_source==="replay_timestamp"?"replay_timestamp":"imported_at_fallback",
+        filename:String(r.filename||"").slice(0,180),player:String(r.player||"").slice(0,120),map_hash:String(r.map_hash||"").toLowerCase().slice(0,32),
+        replay_hash:String(r.replay_hash||"").slice(0,80),score:Number(r.score||0),combo:Number(r.combo||0),mods:Number(r.mods||0),perfect:Boolean(r.perfect),
+        accuracy:Number.isFinite(accuracy)?accuracy:null,hits,judged:judged||Number(r.judged||0),
+        miss_rate:Number.isFinite(missRate)?missRate:(judged?hits.miss/judged*100:null),
+        non300_rate:Number.isFinite(non300)?non300:(judged?(hits.good+hits.meh+hits.miss)/judged*100:null),
+        header_only:r.header_only!==false,replay_data_analyzed:Boolean(r.replay_data_analyzed),
+        taps:r.taps==null?null:Number(r.taps),median_gap:r.median_gap==null?null:Number(r.median_gap),
+        burst_count:Number(r.burst_count||0),burst_std_median:r.burst_std_median==null?null:Number(r.burst_std_median),
+        link_type:String(r.link_type||"imported"),map
+      };
+    }).filter(r=>r.id);
+    const merged=new Map(replaySignalHistory.map(r=>[String(r.id),r]));for(const r of clean)merged.set(String(r.id),r);
+    replaySignalHistory=[...merged.values()].sort((a,b)=>Date.parse(b.played_at||b.imported_at||0)-Date.parse(a.played_at||a.imported_at||0)).slice(0,200);
+    persistReplaySignals();renderReplaySignals();await relinkReplaySignals(true);alert("Replay Signals "+clean.length+"개를 가져왔습니다.");
+  }catch(err){alert("Replay Signals 가져오기 실패: "+err.message);}
+  event.target.value="";
+});
 $("exportReplaySignals")?.addEventListener("click",()=>{
-  const payload={format:"osu-skill-lab-replay-signals",version:1,exported_at:new Date().toISOString(),note:"Judgement outcomes and optional PC key-timing proxies; no exact miss-location claims.",replays:replaySignalHistory};
+  const payload={format:"osu-skill-lab-replay-signals",version:2,exported_at:new Date().toISOString(),note:"Judgement outcomes, timestamp provenance, and optional PC key-timing proxies; no exact miss-location or causal training claims.",replays:replaySignalHistory};
   const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");
   a.href=url;a.download="osu-skill-lab-replay-signals-"+new Date().toISOString().slice(0,10)+".json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
 });
@@ -1760,6 +1951,7 @@ function renderTrainingJournal(){
     return '<div class="training-journal-row"><div><span>'+cx(date.toLocaleDateString())+' · '+cx(trainingSessionStatus(session))+'</span><b>'+cx(String(session.skill||"overall").toUpperCase())+' · '+cx(session.band||"all")+' · '+cx(session.mode||"—")+'</b><small>'+done+'/'+total+' 완료 · 체감 '+cx(trainingSessionFeelLabel(session.feel))+(session.note?' · '+cx(session.note):'')+'</small></div><div class="training-journal-actions"><button type="button" class="ghost-btn" data-training-history-replay="'+id+'">조건 다시 사용</button><button type="button" class="ghost-btn" data-training-history-remove="'+id+'">삭제</button></div></div>';
   }).join(""):'<div class="empty">종료한 세션 기록이 없습니다.</div>';
   renderTrainingInsights();
+  renderReplayTrendLab();
 }
 function trainingPeriodMetrics(days,offset=0){
   const now=Date.now(),span=Math.max(1,Number(days)||28)*86400000,end=now-span*offset,start=end-span;
