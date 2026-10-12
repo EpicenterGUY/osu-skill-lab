@@ -33,6 +33,9 @@ const similarityResultMaps = new Map();
 const compareMaps = new Map();
 const favoriteMaps = new Map();
 let recentViewedMaps = [];
+let savedSearches = [];
+let rankedSearchHistory = [];
+let sharedSearchHandled = false;
 try {
   const savedCompare = JSON.parse(localStorage.getItem("osl-ranked-compare") || "[]");
   if (Array.isArray(savedCompare)) for (const m of savedCompare.slice(0,4))
@@ -46,6 +49,14 @@ try {
 try {
   const savedRecent = JSON.parse(localStorage.getItem("osl-ranked-recent") || "[]");
   if (Array.isArray(savedRecent)) recentViewedMaps = savedRecent.filter(m=>m?.beatmap_id).slice(0,20);
+} catch (_) {}
+try {
+  const saved = JSON.parse(localStorage.getItem("osl-ranked-saved-searches") || "[]");
+  if (Array.isArray(saved)) savedSearches = saved.slice(0,20);
+} catch (_) {}
+try {
+  const saved = JSON.parse(localStorage.getItem("osl-ranked-search-history") || "[]");
+  if (Array.isArray(saved)) rankedSearchHistory = saved.slice(0,12);
 } catch (_) {}
 
 try {
