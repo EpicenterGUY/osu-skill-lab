@@ -341,3 +341,20 @@ dialog.chart-modal::backdrop{background:#030812ce;backdrop-filter:blur(6px)}
 .search-history-chip{max-width:260px;padding:6px 8px;border:1px solid #354a61;border-radius:10px;background:#111c2b;color:#edf5ff;text-align:left}.search-history-chip b,.search-history-chip small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.search-history-chip b{font-size:9px}.search-history-chip small{margin-top:2px;color:#8fa3b8;font-size:8px}.search-history-chip:hover{border-color:#637a97;background:#17263a}
 @media(max-width:1100px){.search-workspace-controls{grid-template-columns:repeat(3,minmax(0,1fr))}.search-workspace-controls select:first-child{grid-column:span 2}}
 @media(max-width:700px){.search-workspace-head{flex-direction:column}.active-filter-chips{justify-content:flex-start}.search-workspace-controls{grid-template-columns:1fr 1fr}.search-workspace-controls select:first-child{grid-column:1/-1}.search-workspace-controls .ghost-btn,.search-workspace-controls select{width:100%}.search-history-wrap{grid-template-columns:1fr}.search-history-wrap>span{padding-top:0}}
+
+/* v2.3 Practice Route Builder */
+.training-route-card{overflow:hidden}
+.training-route-controls{display:grid;grid-template-columns:1.25fr 1fr 1.05fr 1.1fr .7fr auto auto;gap:8px;align-items:end;margin:12px 0}
+.training-route-controls label{display:grid;gap:5px;color:#95a9be;font-size:10px;font-weight:760}
+.training-route-controls .ghost-btn{min-height:38px;padding:8px 10px}
+.training-route-progress{display:grid;grid-template-columns:auto minmax(160px,1fr);gap:10px;align-items:center;margin:8px 0}
+.training-route-progress>div:first-child{display:flex;gap:7px;align-items:baseline;white-space:nowrap}.training-route-progress span{color:#8fa3b8;font-size:9px}.training-route-progress b{font-size:11px}
+.training-route-list{display:grid;gap:7px;margin-top:10px}
+.training-route-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px 12px;border:1px solid #30445c;border-radius:13px;background:#111b2a;transition:.15s}
+.training-route-row.done{border-color:#3f685f;background:#12261f;opacity:.72}.training-route-row.done .training-route-copy strong{text-decoration:line-through;text-decoration-thickness:1px}
+.training-route-order{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#1c2b40;color:#ff9fc7;font-size:10px}
+.training-route-row.done .training-route-order{background:#214137;color:#78dfc7}
+.training-route-copy{min-width:0}.training-route-copy>button{display:block;width:100%;padding:0;border:0;background:transparent;color:#edf5ff;text-align:left}.training-route-copy strong,.training-route-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.training-route-copy strong{font-size:11px}.training-route-copy small{margin-top:4px;color:#8fa3b8;font-size:9px}
+.training-route-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.training-route-actions .ghost-btn{min-height:34px;padding:7px 9px;font-size:9px}
+@media(max-width:1050px){.training-route-controls{grid-template-columns:repeat(3,minmax(0,1fr))}.training-route-controls .ghost-btn{width:100%}}
+@media(max-width:700px){.training-route-controls{grid-template-columns:1fr 1fr}.training-route-controls label:first-child{grid-column:1/-1}.training-route-progress{grid-template-columns:1fr}.training-route-row{grid-template-columns:30px minmax(0,1fr)}.training-route-actions{grid-column:2;justify-content:flex-start}.training-route-actions .ghost-btn{flex:1 1 110px}}
