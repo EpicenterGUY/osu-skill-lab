@@ -2020,7 +2020,7 @@ function renderReplayAlignmentLab(){
   if(!record){
     kpis.innerHTML='<div class="dash-kpi"><span>Tap-head 객체</span><b>0</b><small>circle + slider head</small></div><div class="dash-kpi"><span>매칭</span><b>0%</b><small>1:1 nearest keydown</small></div><div class="dash-kpi"><span>중앙 |오차|</span><b>—</b><small>ms</small></div><div class="dash-kpi"><span>후보 구간</span><b>0</b><small>10초 창</small></div>';
     summary.innerHTML='<b>PC 상세 정렬 표본 없음</b><span>같은 MD5의 로컬 .osu를 선택한 상태에서 PC 서버로 .osr을 가져오세요.</span>';
-    regionsHost.innerHTML='<div class="empty">정렬된 리플레이가 생기면 상위 이상 구간 후보를 표시합니다.</div>';return;
+    regionsHost.innerHTML='<div class="empty">정렬된 리플레이가 생기면 상위 이상 구간 후보를 표시합니다.</div>';renderReplayRepeatRegions();return;
   }
   const a=record.alignment,map=replayDisplayMap(record);
   kpis.innerHTML='<div class="dash-kpi"><span>Tap-head 객체</span><b>'+ct(a.object_heads||0)+'</b><small>circle + slider head</small></div>'+
@@ -2034,7 +2034,92 @@ function renderReplayAlignmentLab(){
     const severity=Number(r.score||0)>=55?"high":Number(r.score||0)>=30?"mid":"low";
     return '<div class="replay-alignment-row '+severity+'"><b>#'+(i+1)+'</b><div><span>'+replayClock(r.start)+'–'+replayClock(r.end)+(r.pattern?' · '+cx(r.pattern):'')+'</span><strong>객체 '+ct(r.objects)+' · 미매칭 '+ct(r.unmatched)+' · early '+ct(r.early)+' · late '+ct(r.late)+'</strong><small>평균 |시간 오차| '+(r.mean_abs_ms==null?"—":Number(r.mean_abs_ms).toFixed(0))+'ms'+(r.mean_cursor_px==null?"":" · 평균 cursor "+Number(r.mean_cursor_px).toFixed(0)+"px")+(r.strain==null?"":" · local strain "+Number(r.strain).toFixed(1))+'</small></div><em>'+Number(r.score||0).toFixed(1)+'</em></div>';
   }).join(""):'<div class="empty">3개 이상 tap-head가 있는 이상 후보 구간이 없습니다.</div>';
+  renderReplayRepeatRegions();
 }
+function replayLongestPresence(presence){
+  let best=0,run=0;
+  for(const hit of presence){run=hit?run+1:0;if(run>best)best=run;}
+  return best;
+}
+function replayRepeatRegionData(){
+  const id=$("replayAlignmentSelect")?.value,seed=replaySignalHistory.find(r=>String(r.id)===String(id)&&r.alignment?.supported);
+  if(!seed)return {seed:null,records:[],regions:[],minimum:2};
+  const hash=String(seed.map_hash||seed.alignment?.checksum||"").toLowerCase(),mods=Number(seed.mods||0);
+  let records=replaySignalHistory.filter(r=>r.alignment?.supported&&String(r.map_hash||r.alignment?.checksum||"").toLowerCase()===hash&&Number(r.mods||0)===mods)
+    .sort((a,b)=>Date.parse(a.played_at||a.imported_at||0)-Date.parse(b.played_at||b.imported_at||0));
+  const windowValue=$("replayRepeatWindow")?.value||"10";
+  if(windowValue!=="all")records=records.slice(-Math.max(2,Number(windowValue)||10));
+  const minValue=$("replayRepeatMin")?.value||"majority";
+  const minimum=minValue==="majority"?Math.max(2,Math.floor(records.length/2)+1):Math.max(2,Number(minValue)||2);
+  const buckets=new Map();
+  records.forEach((record,index)=>{
+    for(const region of record.alignment?.regions||[]){
+      const start=Math.round(Number(region.start||0)/10000)*10000,key=String(start);
+      if(!buckets.has(key))buckets.set(key,{start,end:start+10000,presence:Array(records.length).fill(false),scores:[],unmatchedRates:[],residuals:[],cursor:[],strains:[],patterns:new Map()});
+      const b=buckets.get(key);b.presence[index]=true;
+      const score=replayNumeric(region.score);if(Number.isFinite(score))b.scores.push(score);
+      const objects=Number(region.objects||0),unmatched=Number(region.unmatched||0);if(objects>0)b.unmatchedRates.push(unmatched/objects*100);
+      const residual=replayNumeric(region.mean_abs_ms);if(Number.isFinite(residual))b.residuals.push(residual);
+      const cursor=replayNumeric(region.mean_cursor_px);if(Number.isFinite(cursor))b.cursor.push(cursor);
+      const strain=replayNumeric(region.strain);if(Number.isFinite(strain))b.strains.push(strain);
+      const pattern=String(region.pattern||"").trim();if(pattern)b.patterns.set(pattern,(b.patterns.get(pattern)||0)+1);
+    }
+  });
+  const mean=xs=>xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:null;
+  const regions=[...buckets.values()].map(b=>{
+    const count=b.presence.filter(Boolean).length,recurrence=records.length?count/records.length:0,longest=replayLongestPresence(b.presence);
+    const pattern=[...b.patterns.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||"";
+    const avgScore=mean(b.scores),avgUnmatched=mean(b.unmatchedRates),avgResidual=mean(b.residuals),avgCursor=mean(b.cursor),avgStrain=mean(b.strains);
+    const repeatScore=recurrence*70+(Number.isFinite(avgScore)?avgScore*.25:0)+Math.min(5,longest)*2;
+    return {...b,count,recurrence,longest,pattern,avgScore,avgUnmatched,avgResidual,avgCursor,avgStrain,repeatScore};
+  }).filter(r=>r.count>=minimum).sort((a,b)=>b.repeatScore-a.repeatScore||b.count-a.count||a.start-b.start);
+  return {seed,records,regions,minimum,mods,hash};
+}
+function renderReplayRepeatRegions(){
+  const kpis=$("replayRepeatRegionKpis"),summary=$("replayRepeatRegionSummary"),host=$("replayRepeatRegionList");
+  if(!kpis||!summary||!host)return;
+  const data=replayRepeatRegionData(),n=data.records.length;
+  const emptyKpis='<div class="dash-kpi"><span>같은 조건 정렬</span><b>'+ct(n)+'</b><small>같은 MD5 + Mods</small></div><div class="dash-kpi"><span>반복 후보</span><b>0</b><small>최소 반복 조건</small></div><div class="dash-kpi"><span>최고 재등장률</span><b>—</b><small>top-candidate recurrence</small></div><div class="dash-kpi"><span>최장 연속</span><b>—</b><small>연속 정렬 표본</small></div>';
+  if(!data.seed||n<2){
+    kpis.innerHTML=emptyKpis;summary.innerHTML='<b>반복 정렬 표본 부족</b><span>같은 채보·같은 Mods의 PC Timeline Alignment가 2개 이상 필요합니다.</span>';host.innerHTML='<div class="empty">반복 후보가 아직 없습니다.</div>';return;
+  }
+  const top=data.regions[0],map=replayDisplayMap(data.seed);
+  kpis.innerHTML='<div class="dash-kpi"><span>같은 조건 정렬</span><b>'+ct(n)+'</b><small>'+cx(replayModsLabel(data.mods))+'</small></div>'+
+    '<div class="dash-kpi"><span>반복 후보</span><b>'+ct(data.regions.length)+'</b><small>'+data.minimum+'회 이상</small></div>'+
+    '<div class="dash-kpi"><span>최고 재등장률</span><b>'+(top?Math.round(top.recurrence*100)+"%":"—")+'</b><small>상위 후보 재등장</small></div>'+
+    '<div class="dash-kpi"><span>최장 연속</span><b>'+(top?top.longest:"—")+'</b><small>정렬 표본 연속</small></div>';
+  summary.innerHTML='<b>'+cx(map?.title?((map.artist||"?")+" — "+map.title+" ["+(map.version||"?")+"]"):(data.seed.filename||"PC replay"))+'</b>'+
+    '<span>'+cx(replayModsLabel(data.mods))+' · 최근 '+n+'개 정렬 · '+data.minimum+'회 이상 재등장한 10초 창 '+data.regions.length+'개</span>'+
+    '<p class="hint-text">재등장률은 각 정렬의 상위 후보 목록 안에서 같은 10초 창이 다시 나타난 비율입니다.</p>';
+  if(!data.regions.length){host.innerHTML='<div class="empty">현재 최소 반복 조건을 만족한 구간이 없습니다.</div>';return;}
+  host.innerHTML=data.regions.slice(0,12).map((r,i)=>{
+    const severity=r.recurrence>=.75?"high":r.recurrence>=.5?"mid":"low";
+    const strip=r.presence.map((hit,j)=>'<i class="'+(hit?"hit":"")+'" title="'+cx(new Date(data.records[j].played_at||data.records[j].imported_at||Date.now()).toLocaleString())+'"></i>').join("");
+    return '<div class="replay-repeat-region-row '+severity+'"><b>#'+(i+1)+'</b><div class="replay-repeat-region-main"><span>'+replayClock(r.start)+'–'+replayClock(r.end)+(r.pattern?' · '+cx(r.pattern):'')+'</span><strong>'+r.count+'/'+n+'회 · 재등장 '+Math.round(r.recurrence*100)+'% · 최장 연속 '+r.longest+'</strong><small>평균 candidate score '+(r.avgScore==null?"—":r.avgScore.toFixed(1))+(r.avgUnmatched==null?"":" · 미매칭 비율 "+r.avgUnmatched.toFixed(1)+"%")+(r.avgResidual==null?"":" · |오차| "+r.avgResidual.toFixed(0)+"ms")+(r.avgCursor==null?"":" · cursor "+r.avgCursor.toFixed(0)+"px")+(r.avgStrain==null?"":" · strain "+r.avgStrain.toFixed(1))+'</small><div class="replay-repeat-strip">'+strip+'</div></div><em>'+r.repeatScore.toFixed(1)+'</em></div>';
+  }).join("");
+}
+function replayRepeatRegionReportText(){
+  const data=replayRepeatRegionData();if(!data.seed||data.records.length<2)return "";
+  const map=replayDisplayMap(data.seed),lines=[
+    "osu! Skill Lab Repeat Region Consensus",
+    map?.title?((map.artist||"?")+" — "+map.title+" ["+(map.version||"?")+"]"):(data.seed.filename||data.hash),
+    replayModsLabel(data.mods)+" · 정렬 "+data.records.length+"개 · 최소 "+data.minimum+"회",
+    "",
+    "반복 상위 이상 후보"
+  ];
+  if(!data.regions.length)lines.push("조건을 만족한 반복 구간 없음");
+  for(const [i,r] of data.regions.slice(0,12).entries())lines.push((i+1)+". "+replayClock(r.start)+"–"+replayClock(r.end)+" · "+r.count+"/"+data.records.length+"회 ("+Math.round(r.recurrence*100)+"%) · 연속 "+r.longest+" · 평균 score "+(r.avgScore==null?"—":r.avgScore.toFixed(1))+(r.pattern?" · "+r.pattern:""));
+  lines.push("","※ 각 replay의 상위 alignment 후보 재등장 통계이며 실제 Miss 위치·고정 약점·인과관계를 확정하지 않습니다.");
+  return lines.join("\n");
+}
+$("replayRepeatWindow")?.addEventListener("change",renderReplayRepeatRegions);
+$("replayRepeatMin")?.addEventListener("change",renderReplayRepeatRegions);
+$("copyReplayRepeatRegions")?.addEventListener("click",async()=>{
+  const report=replayRepeatRegionReportText();if(!report){alert("복사할 반복 정렬 표본이 없습니다.");return;}
+  try{await navigator.clipboard.writeText(report);alert("Repeat Region 리포트를 복사했습니다.");}
+  catch(_){prompt("Repeat Region 리포트를 복사하세요.",report);}
+});
+
 function replayAlignmentReportText(){
   const id=$("replayAlignmentSelect")?.value,record=replaySignalHistory.find(r=>String(r.id)===String(id)&&r.alignment?.supported);
   if(!record)return "";
