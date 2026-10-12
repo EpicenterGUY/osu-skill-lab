@@ -36,6 +36,10 @@ let recentViewedMaps = [];
 let savedSearches = [];
 let rankedSearchHistory = [];
 let sharedSearchHandled = false;
+let trainingPoolCache = null;
+let trainingRouteGeneration = 0;
+let trainingRouteState = {skill:null,band:null,mode:null,scope:null,maps:[],done:[],created_at:null};
+const trainingRouteMaps = new Map();
 try {
   const savedCompare = JSON.parse(localStorage.getItem("osl-ranked-compare") || "[]");
   if (Array.isArray(savedCompare)) for (const m of savedCompare.slice(0,4))
@@ -57,6 +61,10 @@ try {
 try {
   const saved = JSON.parse(localStorage.getItem("osl-ranked-search-history") || "[]");
   if (Array.isArray(saved)) rankedSearchHistory = saved.slice(0,12);
+} catch (_) {}
+try {
+  const saved = JSON.parse(localStorage.getItem("osl-training-route") || "null");
+  if(saved && Array.isArray(saved.maps)) trainingRouteState = {...trainingRouteState,...saved,maps:saved.maps.slice(0,20),done:Array.isArray(saved.done)?saved.done:[]};
 } catch (_) {}
 
 try {
@@ -1263,7 +1271,7 @@ $("compareNow")?.addEventListener("click",showCompareMaps);
 $("clearCompare")?.addEventListener("click",()=>{compareMaps.clear();saveCompareMaps();renderCompareTray();renderIndexed();});
 document.addEventListener("click",event=>{
   const add=event.target.closest("[data-compare-map]");
-  if(add){event.preventDefault();const id=decodeURIComponent(add.dataset.compareMap||"");const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);toggleCompareMap(map);return;}
+  if(add){event.preventDefault();const id=decodeURIComponent(add.dataset.compareMap||"");const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||trainingRouteMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);toggleCompareMap(map);return;}
   const remove=event.target.closest("[data-compare-remove]");
   if(remove){event.preventDefault();compareMaps.delete(decodeURIComponent(remove.dataset.compareRemove||""));saveCompareMaps();renderCompareTray();renderIndexed();}
 });
@@ -1420,6 +1428,105 @@ function findSummaryMap(id) {
   ];
   return candidates.find(m=>String(m?.beatmap_id||"")===id) || null;
 }
+function trainingRouteSkill(){
+  const selected=$("trainingRouteSkill")?.value||"auto";
+  if(selected!=="auto")return {skill:selected,auto:false};
+  const rows=readLocalDnaRows().filter(m=>m?.skills);
+  const keys=["aim","stream","speed","stamina","tech","reading","flow"];
+  if(!rows.length)return {skill:"overall",auto:true};
+  const avg=Object.fromEntries(keys.map(k=>[k,rows.reduce((n,m)=>n+Number(m.skills?.[k]||0),0)/rows.length]));
+  const skill=keys.sort((a,b)=>avg[a]-avg[b])[0]||"overall";
+  return {skill,auto:true,exposure:avg[skill]};
+}
+function persistTrainingRoute(){
+  try{localStorage.setItem("osl-training-route",JSON.stringify(trainingRouteState));}catch(_){}
+}
+function trainingBandBounds(band){
+  if(!band||band==="all")return [0,99];
+  const [lo,hi]=band.split("-").map(Number);return [Number.isFinite(lo)?lo:0,Number.isFinite(hi)?hi:99];
+}
+function trainingRouteScore(map,skill,band,mode){
+  const v=Number(map?.dna?.skills?.[skill]??map?.dna_focus??0);
+  const overall=Number(map?.dna?.skills?.overall||0);
+  const sr=Number(map?.official_sr||0),[lo,hi]=trainingBandBounds(band),mid=band==="all"?sr:(lo+Math.min(hi,12))/2;
+  const closeness=band==="all"?0:Math.max(0,1-Math.abs(sr-mid)/Math.max(.5,(hi-lo)/2));
+  if(mode==="focus")return v*1.15+overall*.08+closeness*8;
+  if(mode==="balanced")return v*.72+overall*.26+closeness*10;
+  return v*.62+overall*.18+closeness*18;
+}
+function diversifyTrainingRows(rows,count,mode){
+  const picked=[],sets=new Set(),mapperCount=new Map();
+  for(const item of rows){
+    const m=item.map,sid=String(m.beatmapset_id||""),mapper=String(m.creator||"Unknown");
+    if(sid&&sets.has(sid))continue;
+    if((mapperCount.get(mapper)||0)>=2)continue;
+    picked.push(item);if(sid)sets.add(sid);mapperCount.set(mapper,(mapperCount.get(mapper)||0)+1);
+    if(picked.length>=count)break;
+  }
+  if(mode==="ramp")picked.sort((a,b)=>Number(a.map.official_sr||0)-Number(b.map.official_sr||0)||a.score-b.score);
+  else if(mode==="balanced")picked.sort((a,b)=>Number(a.map.official_sr||0)-Number(b.map.official_sr||0));
+  return picked;
+}
+async function loadTrainingPools(){
+  if(trainingPoolCache)return trainingPoolCache;
+  const d=catalogSummary?.training_pool;
+  if(!d?.path)throw Error("훈련 후보 풀이 아직 배포되지 않았습니다.");
+  const data=await fetchCatalogJson(d.path,d.version||catalogSummary.updated_at);
+  if(data?.format!=="osu-skill-lab-training-pools"||!data.pools)throw Error("훈련 후보 풀 형식 오류");
+  trainingPoolCache=data;return data;
+}
+function renderTrainingRoute(){
+  const host=$("trainingRouteList"),status=$("trainingRouteStatus"),text=$("trainingRouteProgressText"),bar=$("trainingRouteProgressBar");
+  if(!host)return;
+  trainingRouteMaps.clear();
+  for(const m of trainingRouteState.maps||[])if(m?.beatmap_id)trainingRouteMaps.set(String(m.beatmap_id),m);
+  const done=new Set((trainingRouteState.done||[]).map(String)),total=trainingRouteState.maps?.length||0,completed=[...done].filter(id=>trainingRouteMaps.has(id)).length;
+  if(text)text.textContent=completed+" / "+total;
+  if(bar)bar.style.width=(total?completed/total*100:0)+"%";
+  if(!total){
+    host.innerHTML='<div class="empty">아직 만든 연습 세션이 없습니다.</div>';
+    if(status)status.textContent="현재 Ranked 결과 또는 분석 완료 DNA 전체에서 후보를 만들 수 있습니다.";
+    return;
+  }
+  const skill=(trainingRouteState.skill||"overall").toUpperCase();
+  host.innerHTML=trainingRouteState.maps.map((m,i)=>{
+    const id=String(m.beatmap_id),isDone=done.has(id),focus=Number(m.dna?.skills?.[trainingRouteState.skill]||m.dna?.skills?.overall||0);
+    return '<div class="training-route-row '+(isDone?"done":"")+'"><b class="training-route-order">'+(i+1)+'</b><div class="training-route-copy"><button type="button" data-ranked-detail="'+encodeURIComponent(id)+'"><strong>'+cx(m.artist||"?")+' — '+cx(m.title||"?")+' ['+cx(m.version||"?")+']</strong></button><small>'+cx(m.creator||"?")+' · ★'+Number(m.official_sr||0).toFixed(2)+' · '+Number(m.bpm||0).toFixed(0)+' BPM · '+skill+' '+focus.toFixed(1)+'</small></div><div class="training-route-actions"><button type="button" class="ghost-btn" data-training-toggle="'+encodeURIComponent(id)+'">'+(isDone?"완료 취소":"연습 완료")+'</button><button type="button" class="ghost-btn" data-similarity-seed="'+encodeURIComponent(id)+'">유사 채보</button></div></div>';
+  }).join("");
+  if(status)status.textContent=(trainingRouteState.auto_skill?"자동 낮은 노출 영역 → ":"")+"목표 "+skill+" · "+trainingRouteState.band+" · "+trainingRouteState.mode+" · "+trainingRouteState.scope+" · Chart DNA 분석 완료 채보만 사용";
+}
+async function buildTrainingRoute(){
+  if(!catalogSummary){alert("Ranked DB 준비 후 다시 시도해 주세요.");return;}
+  const token=++trainingRouteGeneration,skillInfo=trainingRouteSkill(),skill=skillInfo.skill,band=$("trainingRouteStars")?.value||"5-6",mode=$("trainingRouteMode")?.value||"ramp",scope=$("trainingRouteScope")?.value||"loaded",count=Number($("trainingRouteCount")?.value||8),status=$("trainingRouteStatus"),button=$("buildTrainingRoute");
+  if(button)button.disabled=true;if(status)status.textContent="훈련 후보 계산 중…";
+  try{
+    let source=[];
+    if(scope==="global"){
+      const pools=await loadTrainingPools();if(token!==trainingRouteGeneration)return;
+      source=(pools.pools?.[skill]?.[band]||pools.pools?.[skill]?.all||[]).map(m=>({...m}));
+    }else{
+      const [lo,hi]=trainingBandBounds(band);
+      source=lastFilteredRows.filter(m=>m?.dna?.skills&&(band==="all"||(Number(m.official_sr||0)>=lo&&Number(m.official_sr||0)<hi)));
+      if(source.length<count&&status)status.textContent="현재 결과의 DNA 후보가 적습니다 · 전체 DNA 분석분 범위를 쓰면 더 많은 후보를 찾을 수 있습니다.";
+    }
+    const ranked=source.map(map=>({map,score:trainingRouteScore(map,skill,band,mode)})).sort((a,b)=>b.score-a.score);
+    const picked=diversifyTrainingRows(ranked,count,mode).map(x=>x.map);
+    if(!picked.length)throw Error("조건에 맞는 Chart DNA 분석 채보가 없습니다.");
+    trainingRouteState={skill,auto_skill:skillInfo.auto,band,mode,scope,maps:picked,done:[],created_at:new Date().toISOString()};
+    persistTrainingRoute();renderTrainingRoute();
+  }catch(err){if(status)status.textContent="세션 생성 실패 · "+err.message;}
+  finally{if(token===trainingRouteGeneration&&button)button.disabled=false;}
+}
+$("buildTrainingRoute")?.addEventListener("click",buildTrainingRoute);
+$("clearTrainingRoute")?.addEventListener("click",()=>{trainingRouteGeneration++;trainingRouteState={skill:null,band:null,mode:null,scope:null,maps:[],done:[],created_at:null};persistTrainingRoute();renderTrainingRoute();});
+document.addEventListener("click",event=>{
+  const b=event.target.closest("[data-training-toggle]");if(!b)return;
+  const id=decodeURIComponent(b.dataset.trainingToggle||""),done=new Set((trainingRouteState.done||[]).map(String));
+  if(done.has(id))done.delete(id);else done.add(id);
+  trainingRouteState.done=[...done];persistTrainingRoute();renderTrainingRoute();
+});
+renderTrainingRoute();
+
 function readLocalDnaRows() {
   try {
     const rows=JSON.parse(localStorage.getItem("osl-db")||"[]");
@@ -1530,7 +1637,7 @@ document.addEventListener("click", event => {
   const button=event.target.closest("[data-ranked-detail]");
   if(!button)return;
   const id=decodeURIComponent(button.dataset.rankedDetail||"");
-  const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+  const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||trainingRouteMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
   showRankedDetails(map);
 });
 document.addEventListener("click", event => {
@@ -1573,7 +1680,7 @@ function bindInteractiveCatalogueControls() {
     if(similar){
       event.preventDefault();
       const id=decodeURIComponent(similar.dataset.similaritySeed||"");
-      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||trainingRouteMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
       if(map){
         const dialog=$("chartModal");if(dialog?.open&&typeof dialog.close==="function")dialog.close();
         setSimilaritySeed(map,false);
@@ -1584,7 +1691,7 @@ function bindInteractiveCatalogueControls() {
     if(favorite){
       event.preventDefault();
       const id=decodeURIComponent(favorite.dataset.favoriteMap||"");
-      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||trainingRouteMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
       if(map){
         toggleFavoriteMap(map);
         const dialog=$("chartModal");
@@ -1596,7 +1703,7 @@ function bindInteractiveCatalogueControls() {
     if(share){
       event.preventDefault();
       const id=decodeURIComponent(share.dataset.shareMap||"");
-      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||relationGraphMaps.get(id)||trainingRouteMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
       if(map)copyMapShareLink(map);
       return;
     }
