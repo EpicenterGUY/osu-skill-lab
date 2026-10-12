@@ -97,12 +97,41 @@ async function analyzeReplay(recordId,button){
 function scheduleReplayWatch(){
   clearTimeout(replayWatchTimer);
   const enabled=Boolean($("clientReplayWatch")?.checked);
-  if(!enabled||isHosted())return;
+  if(!enabled||isHosted()||Boolean(lastStatus?.watch?.enabled))return;
   replayWatchTimer=setTimeout(async()=>{
     const panel=$("client");
     if(panel?.classList.contains("active"))await startReplayScan(true);
     scheduleReplayWatch();
   },12000);
+}
+
+function renderWatcherStatus(data){
+  const state=$("clientWatcherStatus"),enabledEl=$("clientWatcherEnabled"),intervalEl=$("clientWatcherInterval"),save=$("clientWatcherSave");
+  if(!state)return;
+  const hosted=isHosted(),watch=data?.watch||{};
+  if(enabledEl&&document.activeElement!==enabledEl)enabledEl.checked=Boolean(watch.enabled);
+  if(intervalEl&&document.activeElement!==intervalEl)intervalEl.value=String(Number(watch.interval_s||30));
+  if(hosted){
+    state.innerHTML='<b>웹/PWA 모드</b><span>상시 watcher는 로컬 OSL Client 서버에서만 동작합니다.</span>';
+    if(enabledEl)enabledEl.disabled=true;if(intervalEl)intervalEl.disabled=true;if(save)save.disabled=true;return;
+  }
+  const active=Boolean(watch.enabled),running=Boolean(watch.thread_running);
+  state.innerHTML='<b>'+(active?(running?'✓ 상시 watcher 동작 중':'Watcher 시작 대기'):'상시 watcher 꺼짐')+'</b><span>'+
+    (active?esc(watch.message||"변경 확인 대기")+" · "+Number(watch.interval_s||30)+"초 간격":"필요할 때만 수동 스캔합니다.")+
+    (watch.last_check?' · 마지막 확인 '+esc(formatWhen(watch.last_check)):'')+
+    (watch.last_change?' · 마지막 변경 '+esc(formatWhen(watch.last_change)):'')+
+    (watch.triggered_scans?' · 자동 스캔 '+Number(watch.triggered_scans).toLocaleString()+"회":'')+
+    '</span>';
+}
+async function saveWatcher(){
+  if(isHosted())return;
+  const button=$("clientWatcherSave");if(button)button.disabled=true;
+  const enabled=Boolean($("clientWatcherEnabled")?.checked),interval_s=Number($("clientWatcherInterval")?.value||30);
+  try{
+    await api("/api/client/watch/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled,interval_s})});
+    await refreshStatus();scheduleReplayWatch();
+  }catch(err){alert("상시 watcher 설정 실패: "+err.message)}
+  finally{if(button)button.disabled=false}
 }
 
 function dominantDna(dna){
@@ -160,10 +189,11 @@ function renderStatus(data){
   if(path&&document.activeElement!==path)path.value=data?.songs_path||"";
   renderReplayStatus(data);
   renderDnaStatus(data);
+  renderWatcherStatus(data);
   if(hosted){
     state.innerHTML='<b>GitHub Pages · OSL Client Bridge 비활성</b><span>로컬 파일 시스템 접근은 실행.bat / server.py로 연 PC 서버에서만 동작합니다.</span>';
     progress.classList.remove("running");progress.querySelector("span").textContent="웹/PWA 모드";
-    ["clientSongsPath","clientAutoDetect","clientSavePath","clientScan","clientSearch","clientQuery","clientReplayPath","clientReplayAutoDetect","clientReplaySavePath","clientReplayScan","clientReplayWatch","clientDnaLimit","clientDnaStart","clientDnaStop"].forEach(id=>{const el=$(id);if(el)el.disabled=true});
+    ["clientSongsPath","clientAutoDetect","clientSavePath","clientScan","clientSearch","clientQuery","clientReplayPath","clientReplayAutoDetect","clientReplaySavePath","clientReplayScan","clientReplayWatch","clientDnaLimit","clientDnaStart","clientDnaStop","clientWatcherEnabled","clientWatcherInterval","clientWatcherSave"].forEach(id=>{const el=$(id);if(el)el.disabled=true});
     return;
   }
   const scan=data?.scan||{},exists=Boolean(data?.path_exists);
@@ -180,10 +210,12 @@ async function refreshStatus(){
   if(isHosted()){renderStatus({maps:0,beatmapsets:0});return null}
   try{
     const data=await api("/api/client/status");renderStatus(data);
-    if(data?.scan?.running||data?.replay_scan?.running||data?.dna?.running){clearTimeout(pollTimer);pollTimer=setTimeout(refreshStatus,900)}
+    clearTimeout(pollTimer);
+    if(data?.scan?.running||data?.replay_scan?.running||data?.dna?.running)pollTimer=setTimeout(refreshStatus,900);
     else {
       if(lastStatus?.maps) await searchLibrary(false);
       await refreshReplays(false);
+      if(data?.watch?.enabled&&$("client")?.classList.contains("active"))pollTimer=setTimeout(refreshStatus,5000);
     }
     return data;
   }catch(err){
@@ -252,6 +284,7 @@ function bind(){
   $("clientReplayScan")?.addEventListener("click",()=>startReplayScan(false));
   $("clientDnaStart")?.addEventListener("click",startDna);
   $("clientDnaStop")?.addEventListener("click",stopDna);
+  $("clientWatcherSave")?.addEventListener("click",saveWatcher);
   const watch=$("clientReplayWatch");
   if(watch){
     try{watch.checked=localStorage.getItem("osl-client-replay-watch")==="1"}catch(_){}
@@ -266,5 +299,5 @@ function bind(){
   });
 }
 bind();refreshStatus();scheduleReplayWatch();
-window.OSLClientBridge={refresh:refreshStatus,search:searchLibrary,scan:startScan,replays:refreshReplays,replayScan:startReplayScan,dnaStart:startDna,dnaStop:stopDna};
+window.OSLClientBridge={refresh:refreshStatus,search:searchLibrary,scan:startScan,replays:refreshReplays,replayScan:startReplayScan,dnaStart:startDna,dnaStop:stopDna,watchSave:saveWatcher};
 })();
