@@ -859,8 +859,7 @@ async function runGlobalMetaSimilarity(seed,mode,limit,token){
     const batch=await Promise.allSettled(shards.slice(i,i+8).map(async sh=>{
       const key=sh.path+"@"+(sh.version||catalogSummary.updated_at||"1");
       if(indexedYearCache.has(key))return indexedYearCache.get(key);
-      const rows=await fetchCatalogJson(sh.path,sh.version||catalogSummary.updated_at);
-      indexedYearCache.set(key,rows);return rows;
+      return fetchCatalogJson(sh.path,sh.version||catalogSummary.updated_at);
     }));
     for(const r of batch){
       scanned++;
