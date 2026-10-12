@@ -16,6 +16,9 @@ CLIENT_REPLAY_SCAN={'running':False,'scanned':0,'updated':0,'reused':0,'errors':
 CLIENT_DNA_LOCK=threading.Lock()
 CLIENT_DNA_STOP=threading.Event()
 CLIENT_DNA={'running':False,'processed':0,'analyzed':0,'errors':0,'limit':0,'remaining':0,'cached':0,'started_at':None,'finished_at':None,'message':'대기 중'}
+CLIENT_WATCH_LOCK=threading.Lock()
+CLIENT_WATCH_WAKE=threading.Event()
+CLIENT_WATCH={'thread_running':False,'enabled':False,'interval_s':30,'last_check':None,'last_change':None,'checks':0,'triggered_scans':0,'message':'대기 중'}
 
 def client_now():
     return datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
@@ -29,6 +32,101 @@ def client_json_write(path,data):
     tmp=path.with_suffix(path.suffix+'.tmp')
     tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8')
     tmp.replace(path)
+
+def client_watch_settings():
+    cfg=client_json_read(CLIENT_CONFIG,{})
+    enabled=bool(cfg.get('watch_enabled',False))
+    try:interval=max(15,min(600,int(cfg.get('watch_interval_s',30) or 30)))
+    except:interval=30
+    return enabled,interval
+
+def client_tree_signature(root,suffix):
+    if not root:return None
+    root=Path(root).resolve();count=0;latest=0;total=0
+    digest=hashlib.blake2b(digest_size=12)
+    for dirpath,dirnames,filenames in os.walk(root):
+        dirnames.sort(key=str.casefold);filenames.sort(key=str.casefold)
+        for name in filenames:
+            if not name.lower().endswith(suffix):continue
+            path=Path(dirpath)/name
+            try:st=path.stat()
+            except OSError:continue
+            count+=1;latest=max(latest,int(st.st_mtime_ns));total+=int(st.st_size)
+            try:rel=str(path.relative_to(root)).replace('\\','/')
+            except:rel=str(path)
+            digest.update(rel.encode('utf-8','replace'));digest.update(b'\0')
+            digest.update(str(int(st.st_mtime_ns)).encode());digest.update(b':')
+            digest.update(str(int(st.st_size)).encode());digest.update(b'\n')
+    return {'count':count,'latest_mtime_ns':latest,'total_size':total,'digest':digest.hexdigest()}
+
+def client_watch_status():
+    enabled,interval=client_watch_settings()
+    with CLIENT_WATCH_LOCK:state=dict(CLIENT_WATCH)
+    state.update({'enabled':enabled,'interval_s':interval})
+    return state
+
+def client_watch_config(enabled=None,interval_s=None):
+    cfg=client_json_read(CLIENT_CONFIG,{})
+    if enabled is not None:cfg['watch_enabled']=bool(enabled)
+    if interval_s is not None:
+        try:cfg['watch_interval_s']=max(15,min(600,int(interval_s)))
+        except:raise ValueError('Watcher 간격은 15~600초 숫자여야 합니다.')
+    cfg['updated_at']=client_now();client_json_write(CLIENT_CONFIG,cfg)
+    CLIENT_WATCH_WAKE.set()
+    return client_watch_status()
+
+def client_watch_loop():
+    previous_songs=None;previous_replays=None;previous_song_root=None;previous_replay_root=None
+    with CLIENT_WATCH_LOCK:CLIENT_WATCH['thread_running']=True
+    while True:
+        enabled,interval=client_watch_settings()
+        with CLIENT_WATCH_LOCK:
+            CLIENT_WATCH['enabled']=enabled;CLIENT_WATCH['interval_s']=interval
+        if not enabled:
+            previous_songs=previous_replays=previous_song_root=previous_replay_root=None
+            with CLIENT_WATCH_LOCK:CLIENT_WATCH['message']='상시 감시 꺼짐'
+            CLIENT_WATCH_WAKE.wait(2);CLIENT_WATCH_WAKE.clear();continue
+        songs,_=client_resolve_songs();replays,_=client_resolve_replays()
+        song_root=str(songs) if songs else None;replay_root=str(replays) if replays else None
+        try:
+            song_sig=client_tree_signature(songs,'.osu') if songs else None
+            replay_sig=client_tree_signature(replays,'.osr') if replays else None
+            initial=(previous_songs is None and song_sig is not None) or (previous_replays is None and replay_sig is not None)
+            song_changed=previous_songs is not None and song_sig!=previous_songs
+            replay_changed=previous_replays is not None and replay_sig!=previous_replays
+            roots_changed=(previous_song_root is not None and song_root!=previous_song_root) or (previous_replay_root is not None and replay_root!=previous_replay_root)
+            triggered=0
+            if initial or roots_changed or song_changed:
+                if songs:
+                    started=client_start_scan()
+                    if started.get('started'):triggered+=1
+            if initial or roots_changed or replay_changed:
+                if replays:
+                    started=client_start_replay_scan()
+                    if started.get('started'):triggered+=1
+            now=client_now()
+            with CLIENT_WATCH_LOCK:
+                CLIENT_WATCH['last_check']=now;CLIENT_WATCH['checks']+=1
+                if song_changed or replay_changed or roots_changed:
+                    CLIENT_WATCH['last_change']=now
+                CLIENT_WATCH['triggered_scans']+=triggered
+                parts=[]
+                if song_changed:parts.append('Songs 변경')
+                if replay_changed:parts.append('Replay 변경')
+                if roots_changed:parts.append('경로 변경')
+                if initial:parts.append('초기 동기화')
+                CLIENT_WATCH['message']=(' · '.join(parts)+' 감지 → 증분 스캔') if parts else f'변경 없음 · {interval}초 간격'
+            previous_songs,previous_replays=song_sig,replay_sig
+            previous_song_root,previous_replay_root=song_root,replay_root
+        except Exception as exc:
+            with CLIENT_WATCH_LOCK:
+                CLIENT_WATCH['last_check']=client_now();CLIENT_WATCH['message']='Watcher 확인 실패: '+str(exc)
+        CLIENT_WATCH_WAKE.wait(interval);CLIENT_WATCH_WAKE.clear()
+
+def client_start_watch_thread():
+    with CLIENT_WATCH_LOCK:
+        if CLIENT_WATCH['thread_running']:return
+    threading.Thread(target=client_watch_loop,daemon=True,name='osl-file-watcher').start()
 
 def client_candidates():
     out=[]
@@ -389,7 +487,8 @@ def client_status():
     with CLIENT_REPLAY_LOCK:replay_scan=dict(CLIENT_REPLAY_SCAN)
     with CLIENT_DNA_LOCK:dna=dict(CLIENT_DNA)
     dna.update({'cached':dna_cached,'remaining':dna_remaining,'last_run':last_dna_run})
-    return {'local_server':True,'client_version':'0.3.0','songs_path':str(root) if root else None,'path_source':source,'path_exists':bool(root),'maps':count,'beatmapsets':sets,'last_scan':last_scan,'scan':scan,'dna':dna,
+    watch=client_watch_status()
+    return {'local_server':True,'client_version':'0.4.0','songs_path':str(root) if root else None,'path_source':source,'path_exists':bool(root),'maps':count,'beatmapsets':sets,'last_scan':last_scan,'scan':scan,'dna':dna,'watch':watch,
       'replay_path':str(replay_root) if replay_root else None,'replay_path_source':replay_source,'replay_path_exists':bool(replay_root),'replays':replay_count,'last_replay_scan':last_replay_scan,'replay_scan':replay_scan}
 
 def client_search(q='',limit=40):
@@ -597,6 +696,7 @@ class H(BaseHTTPRequestHandler):
                 if p=='/api/client/library': return self.sendj({'maps':client_search(q.get('q',[''])[0],q.get('limit',['40'])[0])})
                 if p=='/api/client/replays': return self.sendj({'replays':client_replay_list(q.get('limit',['30'])[0])})
                 if p=='/api/client/dna/status': return self.sendj(client_status().get('dna',{}))
+                if p=='/api/client/watch/status': return self.sendj(client_watch_status())
                 return self.sendj({'error':'Not found'},404)
             except Exception as exc: return self.sendj({'error':str(exc)},400)
         if p in ('/','/index.html'):
@@ -632,13 +732,13 @@ class H(BaseHTTPRequestHandler):
             if p=='/api/client/scan':
                 return self.sendj(client_start_scan(),202)
             if p=='/api/client/config':
-                data=json.loads(b.decode('utf-8') or '{}');raw=str(data.get('songs_path') or '').strip()
+                data=json.loads(b.decode('utf-8') or '{}');raw=str(data.get('songs_path') or '').strip();cfg=client_json_read(CLIENT_CONFIG,{})
                 if not raw:
-                    client_json_write(CLIENT_CONFIG,{})
+                    cfg.pop('songs_path',None);cfg['updated_at']=client_now();client_json_write(CLIENT_CONFIG,cfg);CLIENT_WATCH_WAKE.set()
                     return self.sendj(client_status())
                 songs=Path(raw).expanduser()
                 if not songs.exists() or not songs.is_dir():raise ValueError('존재하는 Songs 폴더 경로를 입력해 주세요.')
-                client_json_write(CLIENT_CONFIG,{'songs_path':str(songs.resolve()),'updated_at':client_now()})
+                cfg['songs_path']=str(songs.resolve());cfg['updated_at']=client_now();client_json_write(CLIENT_CONFIG,cfg);CLIENT_WATCH_WAKE.set()
                 return self.sendj(client_status())
             if p=='/api/client/analyze':
                 data=json.loads(b.decode('utf-8') or '{}')
@@ -648,6 +748,9 @@ class H(BaseHTTPRequestHandler):
                 return self.sendj(client_start_dna(data.get('limit',200)),202)
             if p=='/api/client/dna/stop':
                 return self.sendj(client_stop_dna(),202)
+            if p=='/api/client/watch/config':
+                data=json.loads(b.decode('utf-8') or '{}') if b else {}
+                return self.sendj(client_watch_config(data.get('enabled'),data.get('interval_s')))
             if p=='/api/client/replays/scan':
                 return self.sendj(client_start_replay_scan(),202)
             if p=='/api/client/replays/config':
@@ -659,7 +762,7 @@ class H(BaseHTTPRequestHandler):
                     cfg['replay_path']=str(replay_path.resolve())
                 else:
                     cfg.pop('replay_path',None)
-                cfg['updated_at']=client_now();client_json_write(CLIENT_CONFIG,cfg)
+                cfg['updated_at']=client_now();client_json_write(CLIENT_CONFIG,cfg);CLIENT_WATCH_WAKE.set()
                 return self.sendj(client_status())
             if p=='/api/client/replays/analyze':
                 data=json.loads(b.decode('utf-8') or '{}')
@@ -672,6 +775,7 @@ class H(BaseHTTPRequestHandler):
     def log_message(self,*a):pass
 
 def main():
+    client_start_watch_thread()
     s=ThreadingHTTPServer(('127.0.0.1',0),H);u=f'http://127.0.0.1:{s.server_port}';print('osu! Skill Lab local PC server:',u);threading.Timer(.7,lambda:webbrowser.open(u)).start()
     try:s.serve_forever()
     except KeyboardInterrupt:pass
