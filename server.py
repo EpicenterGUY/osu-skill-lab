@@ -479,6 +479,7 @@ class H(BaseHTTPRequestHandler):
                 if p=='/api/osu/search': return self.sendj(osu_api.search_ranked(q.get('q',[''])[0],q.get('page',['1'])[0]))
                 if p=='/api/client/status': return self.sendj(client_status())
                 if p=='/api/client/library': return self.sendj({'maps':client_search(q.get('q',[''])[0],q.get('limit',['40'])[0])})
+                if p=='/api/client/replays': return self.sendj({'replays':client_replay_list(q.get('limit',['30'])[0])})
                 return self.sendj({'error':'Not found'},404)
             except Exception as exc: return self.sendj({'error':str(exc)},400)
         if p in ('/','/index.html'):
@@ -525,6 +526,22 @@ class H(BaseHTTPRequestHandler):
             if p=='/api/client/analyze':
                 data=json.loads(b.decode('utf-8') or '{}')
                 return self.sendj(client_analyze(data.get('md5'),data.get('beatmap_id')))
+            if p=='/api/client/replays/scan':
+                return self.sendj(client_start_replay_scan(),202)
+            if p=='/api/client/replays/config':
+                data=json.loads(b.decode('utf-8') or '{}');raw=str(data.get('replay_path') or '').strip()
+                cfg=client_json_read(CLIENT_CONFIG,{})
+                if raw:
+                    replay_path=Path(raw).expanduser()
+                    if not replay_path.exists() or not replay_path.is_dir():raise ValueError('존재하는 Replay 폴더 경로를 입력해 주세요.')
+                    cfg['replay_path']=str(replay_path.resolve())
+                else:
+                    cfg.pop('replay_path',None)
+                cfg['updated_at']=client_now();client_json_write(CLIENT_CONFIG,cfg)
+                return self.sendj(client_status())
+            if p=='/api/client/replays/analyze':
+                data=json.loads(b.decode('utf-8') or '{}')
+                return self.sendj(client_replay_analyze(data.get('record_id')))
             if n<1:raise ValueError('파일은 비어 있을 수 없습니다.')
             if p=='/api/map':return self.sendj(parse_map(b))
             if p=='/api/replay':return self.sendj(parse_replay(b))
