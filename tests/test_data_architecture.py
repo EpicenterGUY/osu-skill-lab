@@ -21,6 +21,10 @@ class DataArchitectureTests(unittest.TestCase):
         commit_line = next(line for line in DNA_WORKFLOW.splitlines() if "git add -A --" in line)
         self.assertNotIn("data/ranked-search", commit_line)
 
+    def test_similarity_index_has_resolution_hints(self):
+        self.assertIn('"year":date_year(m)', BUILD)
+        self.assertIn('"similarity_index": similarity_targets', BUILD)
+
     def test_dna_request_rate_stays_capped(self):
         self.assertIn("--delay 1", DNA_WORKFLOW)
         self.assertIn("--max-minutes 32", DNA_WORKFLOW)
