@@ -1624,6 +1624,15 @@ function replayMetricValue(record,metric){
 function replayMetricName(metric){
   return ({accuracy:"정확도 %",miss:"Miss 수",non300_rate:"Non-300 비율",combo:"Max Combo"})[metric]||metric;
 }
+function replayModsLabel(mods){
+  const value=Number(mods||0);if(!value)return "NM";
+  const defs=[[1,"NF"],[2,"EZ"],[8,"HD"],[16,"HR"],[32,"SD"],[64,"DT"],[128,"RX"],[256,"HT"],[512,"NC"],[1024,"FL"],[2048,"AT"],[4096,"SO"],[8192,"AP"],[16384,"PF"]];
+  const labels=[];
+  for(const [bit,name] of defs)if(value&bit)labels.push(name);
+  if(value&512){const i=labels.indexOf("DT");if(i>=0)labels.splice(i,1);}
+  if(value&16384){const i=labels.indexOf("SD");if(i>=0)labels.splice(i,1);}
+  return labels.join("")||("Mods "+value);
+}
 function replayAverage(records,getter){
   const values=records.map(getter).map(Number).filter(Number.isFinite);
   return values.length?values.reduce((a,b)=>a+b,0)/values.length:null;
@@ -1676,10 +1685,17 @@ function renderReplayPracticeCompare(){
   const completion=firstTrainingCompletionByMap(),groups=replayGroups(),rows=[];
   for(const group of groups){
     const id=String(group.map?.beatmap_id||""),cut=completion.get(id);if(!id||!Number.isFinite(cut))continue;
-    const stamped=group.records.filter(replayTrueTimestamp).map(r=>({r,t:Date.parse(r.played_at||"")})).filter(x=>Number.isFinite(x.t));
-    const before=stamped.filter(x=>x.t<cut).map(x=>x.r),after=stamped.filter(x=>x.t>=cut).map(x=>x.r);
-    if(!before.length||!after.length)continue;
-    rows.push({group,before,after,cut});
+    const byMods=new Map();
+    for(const r of group.records.filter(replayTrueTimestamp)){
+      const t=Date.parse(r.played_at||"");if(!Number.isFinite(t))continue;
+      const key=String(Number(r.mods||0));if(!byMods.has(key))byMods.set(key,[]);
+      byMods.get(key).push({r,t});
+    }
+    for(const [mods,stamped] of byMods){
+      const before=stamped.filter(x=>x.t<cut).map(x=>x.r),after=stamped.filter(x=>x.t>=cut).map(x=>x.r);
+      if(!before.length||!after.length)continue;
+      rows.push({group,before,after,cut,mods:Number(mods)});
+    }
   }
   if(!rows.length){host.innerHTML='<div class="empty">같은 채보에서 Practice Route 완료 이전·이후의 실제 replay timestamp 표본이 각각 1개 이상 필요합니다.</div>';return;}
   const allBefore=rows.flatMap(x=>x.before),allAfter=rows.flatMap(x=>x.after);
@@ -1691,8 +1707,8 @@ function renderReplayPracticeCompare(){
     '<div><span>Non-300 전 → 후</span><b>'+(bn==null?"—":bn.toFixed(2))+' → '+(an==null?"—":an.toFixed(2))+'%</b><small>Δ '+delta(bn,an,2)+'pp</small></div></div>'+
     '<div class="replay-before-after-list">'+rows.slice(0,8).map(x=>{
       const bacc=replayAverage(x.before,r=>r.accuracy),aacc=replayAverage(x.after,r=>r.accuracy),bmiss=replayAverage(x.before,r=>r.hits?.miss),amiss=replayAverage(x.after,r=>r.hits?.miss),id=String(x.group.map?.beatmap_id||"");
-      return '<button type="button" class="replay-compare-map" data-ranked-detail="'+encodeURIComponent(id)+'"><b>'+cx(replayGroupLabel(x.group))+'</b><small>전 '+x.before.length+' / 후 '+x.after.length+' · ACC '+(bacc==null?"—":bacc.toFixed(2))+' → '+(aacc==null?"—":aacc.toFixed(2))+'% · Miss '+(bmiss==null?"—":bmiss.toFixed(2))+' → '+(amiss==null?"—":amiss.toFixed(2))+'</small></button>';
-    }).join("")+'</div><p class="hint-text">기준선은 각 채보의 첫 Practice Route 완료 시각입니다. 표본 선택·난이도·mods 등 다른 요인이 통제되지 않은 단순 시간 전후 비교입니다.</p>';
+      return '<button type="button" class="replay-compare-map" data-ranked-detail="'+encodeURIComponent(id)+'"><b>'+cx(replayGroupLabel(x.group))+' · '+cx(replayModsLabel(x.mods))+'</b><small>전 '+x.before.length+' / 후 '+x.after.length+' · ACC '+(bacc==null?"—":bacc.toFixed(2))+' → '+(aacc==null?"—":aacc.toFixed(2))+'% · Miss '+(bmiss==null?"—":bmiss.toFixed(2))+' → '+(amiss==null?"—":amiss.toFixed(2))+'</small></button>';
+    }).join("")+'</div><p class="hint-text">기준선은 각 채보의 첫 Practice Route 완료 시각입니다. 같은 Mods 조합 안에서만 전/후를 묶지만 플레이 컨디션·세션 선택·Mod 세부 효과 등은 통제되지 않은 단순 시간 전후 비교입니다.</p>';
 }
 function renderReplayRepeatedSignals(){
   const host=$("replayRepeatedSignals");if(!host)return;
@@ -1707,15 +1723,15 @@ function renderReplayRepeatedSignals(){
   const rows=[...groups.entries()].filter(([,rs])=>rs.length>=2).map(([skill,rs])=>{
     const sorted=[...rs].sort((a,b)=>Date.parse(a.played_at||a.imported_at||0)-Date.parse(b.played_at||b.imported_at||0)),half=Math.max(1,Math.floor(sorted.length/2));
     const older=sorted.slice(0,half),recent=sorted.slice(half);
-    const acc=replayAverage(rs,r=>r.accuracy),miss=replayAverage(rs,r=>r.miss_rate),non=replayAverage(rs,r=>r.non300_rate),oldAcc=replayAverage(older,r=>r.accuracy),recentAcc=replayAverage(recent,r=>r.accuracy);
-    return {skill,rs,acc,miss,non,trend:Number.isFinite(oldAcc)&&Number.isFinite(recentAcc)?recentAcc-oldAcc:null};
+    const acc=replayAverage(rs,r=>r.accuracy),miss=replayAverage(rs,r=>r.miss_rate),non=replayAverage(rs,r=>r.non300_rate),oldAcc=replayAverage(older,r=>r.accuracy),recentAcc=replayAverage(recent,r=>r.accuracy),modCount=new Set(rs.map(r=>Number(r.mods||0))).size;
+    return {skill,rs,acc,miss,non,modCount,trend:Number.isFinite(oldAcc)&&Number.isFinite(recentAcc)?recentAcc-oldAcc:null};
   }).sort((a,b)=>b.rs.length-a.rs.length);
   if(!rows.length){host.innerHTML='<div class="empty">같은 DNA 주축에 연결된 리플레이가 2개 이상인 표본이 아직 없습니다.</div>';return;}
   const diff=(v,b,d=2)=>Number.isFinite(v)&&Number.isFinite(b)?((v-b)>=0?"+":"")+(v-b).toFixed(d):"—";
   host.innerHTML=rows.map(x=>{
     const sample=x.rs.length<4?"표본 적음":x.rs.length<8?"표본 보통":"표본 많음";
-    return '<div class="replay-repeat-row"><div><span>'+x.skill.toUpperCase()+'</span><b>'+x.rs.length+'회 · '+sample+'</b></div><div><small>ACC</small><b>'+(x.acc==null?"—":x.acc.toFixed(2)+"%")+'</b><span>전체 DNA표본 대비 '+diff(x.acc,baseAcc,2)+'pp</span></div><div><small>Miss rate</small><b>'+(x.miss==null?"—":x.miss.toFixed(2)+"%")+'</b><span>전체 대비 '+diff(x.miss,baseMiss,2)+'pp</span></div><div><small>Non-300</small><b>'+(x.non==null?"—":x.non.toFixed(2)+"%")+'</b><span>전체 대비 '+diff(x.non,baseNon,2)+'pp</span></div><div><small>최근 절반 ACC</small><b>'+(x.trend==null?"—":(x.trend>=0?"+":"")+x.trend.toFixed(2)+"pp")+'</b><span>동일 축 내 시간순 비교</span></div></div>';
-  }).join("")+'<p class="hint-text">DNA 주축은 해당 채보에서 가장 큰 자체 휴리스틱 축입니다. 결과 차이는 요구축과 성과의 인과관계나 개인 약점을 의미하지 않습니다.</p>';
+    return '<div class="replay-repeat-row"><div><span>'+x.skill.toUpperCase()+'</span><b>'+x.rs.length+'회 · '+sample+'</b><small>Mods 조합 '+x.modCount+'종</small></div><div><small>ACC</small><b>'+(x.acc==null?"—":x.acc.toFixed(2)+"%")+'</b><span>전체 DNA표본 대비 '+diff(x.acc,baseAcc,2)+'pp</span></div><div><small>Miss rate</small><b>'+(x.miss==null?"—":x.miss.toFixed(2)+"%")+'</b><span>전체 대비 '+diff(x.miss,baseMiss,2)+'pp</span></div><div><small>Non-300</small><b>'+(x.non==null?"—":x.non.toFixed(2)+"%")+'</b><span>전체 대비 '+diff(x.non,baseNon,2)+'pp</span></div><div><small>최근 절반 ACC</small><b>'+(x.trend==null?"—":(x.trend>=0?"+":"")+x.trend.toFixed(2)+"pp")+'</b><span>동일 축 내 시간순 비교</span></div></div>';
+  }).join("")+'<p class="hint-text">DNA 주축은 기본 채보에서 가장 큰 자체 휴리스틱 축입니다. Mod 적용 난이도는 별도 보정하지 않으며, 결과 차이는 요구축과 성과의 인과관계나 개인 약점을 의미하지 않습니다.</p>';
 }
 function renderReplayTrendLab(){
   const select=$("replayTrendMap"),summary=$("replayTrendSummary"),chart=$("replayTrendChart");
@@ -1730,7 +1746,13 @@ function renderReplayTrendLab(){
     chart.innerHTML='<div class="empty">추이 그래프 대기 중</div>';
     renderReplayPracticeCompare();renderReplayRepeatedSignals();return;
   }
-  const metric=$("replayTrendMetric")?.value||"accuracy",windowValue=$("replayTrendWindow")?.value||"10",limit=windowValue==="all"?group.records.length:Number(windowValue),records=group.records.slice(-Math.max(2,limit));
+  const modsSelect=$("replayTrendMods"),previousMods=modsSelect?.value||"all",modValues=[...new Set(group.records.map(r=>Number(r.mods||0)))].sort((a,b)=>a-b);
+  if(modsSelect){
+    modsSelect.innerHTML='<option value="all">모든 Mods · '+group.records.length+'회</option>'+modValues.map(v=>'<option value="'+v+'">'+cx(replayModsLabel(v))+' · '+group.records.filter(r=>Number(r.mods||0)===v).length+'회</option>').join("");
+    if([...modsSelect.options].some(o=>o.value===previousMods))modsSelect.value=previousMods;
+  }
+  const selectedMods=modsSelect?.value||"all",scopedRecords=selectedMods==="all"?group.records:group.records.filter(r=>String(Number(r.mods||0))===selectedMods);
+  const metric=$("replayTrendMetric")?.value||"accuracy",windowValue=$("replayTrendWindow")?.value||"10",limit=windowValue==="all"?scopedRecords.length:Number(windowValue),records=scopedRecords.slice(-Math.max(2,limit));
   const first=records[0],last=records.at(-1),fa=Number(first.accuracy),la=Number(last.accuracy),fm=Number(first.hits?.miss),lm=Number(last.hits?.miss),fn=Number(first.non300_rate),ln=Number(last.non300_rate);
   const delta=(a,b,d=2)=>Number.isFinite(a)&&Number.isFinite(b)?((b-a)>=0?"+":"")+(b-a).toFixed(d):"—";
   const trueTimes=records.filter(replayTrueTimestamp).length;
@@ -1743,6 +1765,7 @@ function renderReplayTrendLab(){
   renderReplayPracticeCompare();renderReplayRepeatedSignals();
 }
 $("replayTrendMap")?.addEventListener("change",renderReplayTrendLab);
+$("replayTrendMods")?.addEventListener("change",renderReplayTrendLab);
 $("replayTrendMetric")?.addEventListener("change",renderReplayTrendLab);
 $("replayTrendWindow")?.addEventListener("change",renderReplayTrendLab);
 
@@ -1825,7 +1848,7 @@ $("importReplaySignals")?.addEventListener("change",async event=>{
       const accuracy=Number(r.accuracy),missRate=Number(r.miss_rate),non300=Number(r.non300_rate);
       return {
         id:String(r.id||("import-replay-"+Date.now()+"-"+i)).slice(0,180),imported_at:r.imported_at||new Date().toISOString(),played_at:r.played_at||r.imported_at||new Date().toISOString(),
-        played_at_source:r.played_at_source==="replay_timestamp"?"replay_timestamp":"imported_at_fallback",
+        played_at_source:(r.played_at_source==="replay_timestamp"||(r.played_at&&r.imported_at&&Math.abs(Date.parse(r.played_at)-Date.parse(r.imported_at))>5000))?"replay_timestamp":"imported_at_fallback",
         filename:String(r.filename||"").slice(0,180),player:String(r.player||"").slice(0,120),map_hash:String(r.map_hash||"").toLowerCase().slice(0,32),
         replay_hash:String(r.replay_hash||"").slice(0,80),score:Number(r.score||0),combo:Number(r.combo||0),mods:Number(r.mods||0),perfect:Boolean(r.perfect),
         accuracy:Number.isFinite(accuracy)?accuracy:null,hits,judged:judged||Number(r.judged||0),
