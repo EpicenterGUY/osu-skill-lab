@@ -2067,7 +2067,7 @@ function replayAlignmentSafe(raw){
     regions:Array.isArray(a.regions)?a.regions.slice(0,20).map(r=>({
       start:Number(r.start||0),end:Number(r.end||0),objects:Number(r.objects||0),matched:Number(r.matched||0),unmatched:Number(r.unmatched||0),
       early:Number(r.early||0),late:Number(r.late||0),mean_abs_ms:n(r.mean_abs_ms),mean_cursor_px:n(r.mean_cursor_px),
-      strain:n(r.strain),pattern:String(r.pattern||"").slice(0,80),score:n(r.score)
+      strain:n(r.strain),pattern:String(r.pattern||"").slice(0,80),fingerprint:replayStoredFingerprint(r),score:n(r.score)
     })):[],
   };
 }
