@@ -1580,8 +1580,12 @@ function replayDisplayMap(record){
   const live=id?(rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||trainingRouteMaps.get(id)||replaySignalMaps.get(id)||favoriteMaps.get(id)):null;
   return live?{...map,...live}:map;
 }
+function replayNumeric(value){
+  if(value==null||value==="")return NaN;
+  const n=Number(value);return Number.isFinite(n)?n:NaN;
+}
 function replayMedian(values){
-  const xs=values.map(Number).filter(Number.isFinite).sort((a,b)=>a-b);
+  const xs=values.map(replayNumeric).filter(Number.isFinite).sort((a,b)=>a-b);
   if(!xs.length)return null;
   const i=Math.floor(xs.length/2);return xs.length%2?xs[i]:(xs[i-1]+xs[i])/2;
 }
@@ -1615,10 +1619,10 @@ function replayGroups(){
   });
 }
 function replayMetricValue(record,metric){
-  if(metric==="accuracy")return Number(record?.accuracy);
-  if(metric==="miss")return Number(record?.hits?.miss);
-  if(metric==="non300_rate")return Number(record?.non300_rate);
-  if(metric==="combo")return Number(record?.combo);
+  if(metric==="accuracy")return replayNumeric(record?.accuracy);
+  if(metric==="miss")return replayNumeric(record?.hits?.miss);
+  if(metric==="non300_rate")return replayNumeric(record?.non300_rate);
+  if(metric==="combo")return replayNumeric(record?.combo);
   return NaN;
 }
 function replayMetricName(metric){
@@ -1634,7 +1638,7 @@ function replayModsLabel(mods){
   return labels.join("")||("Mods "+value);
 }
 function replayAverage(records,getter){
-  const values=records.map(getter).map(Number).filter(Number.isFinite);
+  const values=records.map(getter).map(replayNumeric).filter(Number.isFinite);
   return values.length?values.reduce((a,b)=>a+b,0)/values.length:null;
 }
 function firstTrainingCompletionByMap(){
@@ -1773,7 +1777,7 @@ function renderReplaySignals(){
   const kpis=$("replaySignalKpis"),judgements=$("replayJudgementMix"),bands=$("replayAccuracyBands"),timing=$("replayTimingSignals"),dnaHost=$("replayDnaSignals"),list=$("replaySignalList"),summary=$("replaySignalSummary");
   if(!kpis||!judgements||!bands||!timing||!dnaHost||!list)return;
   replaySignalMaps.clear();
-  const rows=replaySignalHistory,linked=rows.filter(r=>r.map),acc=rows.map(r=>Number(r.accuracy)).filter(Number.isFinite),avgAcc=acc.length?acc.reduce((a,b)=>a+b,0)/acc.length:null;
+  const rows=replaySignalHistory,linked=rows.filter(r=>r.map),acc=rows.map(r=>replayNumeric(r.accuracy)).filter(Number.isFinite),avgAcc=acc.length?acc.reduce((a,b)=>a+b,0)/acc.length:null;
   for(const r of rows){const map=replayDisplayMap(r),id=String(map?.beatmap_id||"");if(id)replaySignalMaps.set(id,map);}
   const totals={great:0,good:0,meh:0,miss:0};for(const r of rows)for(const k of Object.keys(totals))totals[k]+=Number(r.hits?.[k]||0);
   kpis.innerHTML='<div class="dash-kpi"><span>저장 리플레이</span><b>'+ct(rows.length)+'</b><small>이 브라우저</small></div>'+
@@ -1790,7 +1794,7 @@ function renderReplaySignals(){
   bands.innerHTML=acc.length?Object.entries(accBands).map(([label,count])=>
     '<div class="training-dist-row"><span>'+cx(label)+'</span><div><i style="width:'+(count/accMax*100)+'%"></i></div><b>'+ct(count)+'</b></div>'
   ).join(""):'<div class="empty">정확도 표본이 없습니다.</div>';
-  const detailed=rows.filter(r=>!r.header_only&&(Number.isFinite(Number(r.median_gap))||Number.isFinite(Number(r.burst_std_median))));
+  const detailed=rows.filter(r=>!r.header_only&&(Number.isFinite(replayNumeric(r.median_gap))||Number.isFinite(replayNumeric(r.burst_std_median))));
   const medianGap=replayMedian(detailed.map(r=>r.median_gap)),burstStd=replayMedian(detailed.map(r=>r.burst_std_median)),tapMedian=replayMedian(detailed.map(r=>r.taps));
   timing.innerHTML=detailed.length?'<b>PC 상세 '+ct(detailed.length)+'개</b><span>키 입력 중앙 간격 '+(medianGap==null?"—":medianGap.toFixed(1)+"ms")+' · burst 간격 변동 중앙값 '+(burstStd==null?"—":burstStd.toFixed(1)+"ms")+' · 입력 수 중앙값 '+(tapMedian==null?"—":ct(Math.round(tapMedian)))+'</span><p class="hint-text">입력 프레임 기반 요약이며 100/50/Miss가 발생한 정확한 시점은 아닙니다.</p>':
     '<b>상세 표본 없음</b><span>웹 단독 .osr은 판정 헤더만 읽습니다. PC 서버에서 가져온 리플레이만 키 입력 간격 프록시가 추가됩니다.</span>';
@@ -1845,7 +1849,7 @@ $("importReplaySignals")?.addEventListener("change",async event=>{
     if(data?.format!=="osu-skill-lab-replay-signals"||!Array.isArray(data.replays))throw Error("지원하지 않는 Replay Signals 파일");
     const clean=data.replays.slice(0,400).map((r,i)=>{
       const hits=replayHits(r),judged=hits.great+hits.good+hits.meh+hits.miss,map=replayCompactMap(r.map);
-      const accuracy=Number(r.accuracy),missRate=Number(r.miss_rate),non300=Number(r.non300_rate);
+      const accuracy=replayNumeric(r.accuracy),missRate=replayNumeric(r.miss_rate),non300=replayNumeric(r.non300_rate);
       return {
         id:String(r.id||("import-replay-"+Date.now()+"-"+i)).slice(0,180),imported_at:r.imported_at||new Date().toISOString(),played_at:r.played_at||r.imported_at||new Date().toISOString(),
         played_at_source:(r.played_at_source==="replay_timestamp"||(r.played_at&&r.imported_at&&Math.abs(Date.parse(r.played_at)-Date.parse(r.imported_at))>5000))?"replay_timestamp":"imported_at_fallback",
