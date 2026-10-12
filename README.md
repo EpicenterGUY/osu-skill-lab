@@ -1,4 +1,4 @@
-# osu! Skill Lab — Rhythm Intelligence v2.8
+# osu! Skill Lab — Rhythm Intelligence v2.9
 
 Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analysis.
 **GitHub Pages:** https://epicenterguy.github.io/osu-skill-lab/
@@ -14,7 +14,7 @@ Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analys
 - **M4 · OSL Client — PLANNED**  
   Carry the recent **osu! Skill Lab client** direction into a dedicated desktop-client track instead of treating the project as web-only. The client milestone is to unify the existing public Ranked/Chart-DNA database with local `.osu` / `.osr` analysis in one desktop experience, while keeping the current web/PWA as a first-class lightweight front end. The current `server.py` / `실행.bat` local analyzer is the technical starting point; client-specific integrations should be added incrementally rather than blocking the website.
 - **M5 · Personal Rhythm Intelligence — EARLY PREVIEW**  
-  Practice Route Builder, the browser-local Training Journal, and period-comparison Training Insights now track user-controlled Chart-DNA practice exposure, session completion, feedback, and recent activity while explicitly avoiding pass/skill claims. Replay-driven weakness detection, better confidence estimates, failure-pattern analysis, and long-term performance modeling remain future work.
+  Practice Route Builder, the browser-local Training Journal, period-comparison Training Insights, and Replay Failure Signals now connect user-controlled Chart-DNA practice exposure with imported replay outcomes while explicitly avoiding pass/skill claims. Exact miss-location reconstruction, stronger replay/map alignment, confidence models, and long-term performance modeling remain future work.
 
 > The client milestone is a roadmap item, not a claim that a packaged desktop client or direct osu! game integration already exists.
 
@@ -45,6 +45,7 @@ Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analys
 - **Practice Route Builder** uses precomputed, diverse Chart DNA candidate pools by target skill and official SR band. It can auto-select the least-exposed local DNA dimension, creates 5/8/12-map sessions, persists completion locally, and is explicitly an exposure planner rather than a player-skill/pass-probability model.
 - **Training Journal** stores finished sessions only in the current browser, records per-map completion timestamps plus optional session feel/notes, shows 7/14/28-day activity and DNA-exposure summaries, and supports JSON export/import. Its adaptive SR-band option moves at most one band from the most relevant prior session using explicit user feedback; it is not a skill estimate.
 - **Training Insights** compares the latest 7/28/90-day window with the immediately preceding window of the same length. It summarizes completed-map count, activity days, recorded sessions, average official SR, Chart-DNA exposure composition, SR-band mix, target-skill mix and explicit session-feel mix. All deltas describe practice-record composition only, not performance improvement.
+- **Replay Failure Signals** stores imported .osr outcome headers locally, links replays back to Ranked maps through a lazy two-hex MD5 checksum index, and summarizes accuracy, judgement mix, misses, and available Chart-DNA demand context. Browser-only replay parsing stays header-only; the local PC server can add key-input timing proxies, but neither path claims exact miss timestamps or failure locations.
 - Sort by official SR, BPM, ranked date, play count, length, AR/OD, and available Chart DNA dimensions.
 - Full monthly metadata shards are not loaded by the page on entry; only the selected month/year search index is fetched on demand. Mobile, PWA, and desktop work with no browser OAuth credentials.
 - The optional **STATS → Ranked 색인 가져오기** button is only for importing additional local datasets.
@@ -101,6 +102,7 @@ Every run:
 - `data/ranked-summary.json` — precomputed small public statistics and descriptors for lazy derived datasets.
 - `data/ranked-search/*.json` — compact month-specific metadata search indexes, downloaded on demand.
 - `data/training-pools.json` — on-demand, diverse Chart-DNA practice candidates grouped by skill and official SR band; not a player-skill model.
+- `data/checksum-index/*.json` — 256 tiny MD5-prefix shards used only when an imported replay needs to resolve its beatmap checksum back to the collected Ranked catalogue.
 - `build_ranked_views.py` — stats/index generator requiring no API secrets, run by sync and Pages deployments.
 - `build_chart_dna.py` — optional small, rate-limited pilot analysis of real `.osu` object geometry, retaining only derived metrics.
 - `data/chart-dna/*.json` — experimental derived scores (not original `.osu` charts).
