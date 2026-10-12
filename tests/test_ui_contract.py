@@ -150,6 +150,16 @@ class UiContractTests(unittest.TestCase):
             self.assertIn(token, RANKED)
         self.assertIn('if(value==null||value==="")return NaN;', RANKED)
 
+    def test_pc_replay_alignment_is_wired(self):
+        for element_id in ("replayAlignmentSelect", "copyReplayAlignment", "replayAlignmentKpis",
+                           "replayAlignmentSummary", "replayAlignmentRegions"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', RANKED)
+        for token in ("buildReplayAlignment", "renderReplayAlignmentLab", "replayAlignmentSafe",
+                      "data-replay-alignment", "tap-head-nearest-keydown-v1",
+                      "DT/NC/HT 시간축 정렬은 아직 검증 전"):
+            self.assertIn(token, RANKED)
+
     def test_ranked_compare_workspace_is_wired(self):
         for element_id in ("compareTray", "compareTrayItems", "compareCount", "openCompare",
                            "compareNow", "clearCompare"):
