@@ -117,6 +117,18 @@ class UiContractTests(unittest.TestCase):
                       "trainingInsightsReportText", "trainingMetricDelta"):
             self.assertIn(token, RANKED)
 
+    def test_replay_signal_dashboard_is_wired(self):
+        for element_id in ("retryReplayLinks", "exportReplaySignals", "clearReplaySignals",
+                           "replaySignalKpis", "replayJudgementMix", "replayAccuracyBands",
+                           "replayTimingSignals", "replayDnaSignals", "replaySignalSummary",
+                           "replaySignalList"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', RANKED)
+        for token in ("osl-replay-signals", "recordReplaySignal", "resolveReplayMapHash",
+                      "renderReplaySignals", "window.OSLReplayBridge", "data-replay-route-complete"):
+            self.assertIn(token, RANKED)
+        self.assertIn("OSLReplayBridge?.record", HTML)
+
     def test_ranked_compare_workspace_is_wired(self):
         for element_id in ("compareTray", "compareTrayItems", "compareCount", "openCompare",
                            "compareNow", "clearCompare"):
