@@ -335,12 +335,22 @@ function renderCatalogSummary(s) {
   }
 
   const dnaMeta=s.chart_dna||{}, dnaYears=dnaMeta.coverage_by_year||[], lastBatch=dnaMeta.last_batch||{};
+  const dnaUpdatedMs=Date.parse(dnaMeta.updated_at||"");
+  const dnaAgeHours=Number.isFinite(dnaUpdatedMs)?Math.max(0,(Date.now()-dnaUpdatedMs)/3600000):null;
+  const dnaStaleAfter=Math.max(1,Number(dnaMeta.stale_after_hours||3));
+  const dnaDelayed=dnaAgeHours!=null&&dnaAgeHours>dnaStaleAfter;
+  const dnaUpdatedLabel=Number.isFinite(dnaUpdatedMs)?new Date(dnaUpdatedMs).toLocaleString("ko-KR",{timeZone:"Asia/Seoul"}):"확인 불가";
   const dnaDist=$("dnaDistribution");
   if(dnaDist){
     const elapsed=Number(lastBatch.elapsed_seconds||0), success=Number(lastBatch.succeeded||0), attempts=Number(lastBatch.attempted||0);
     const perMin=elapsed>0?success/(elapsed/60):0;
+    const healthClass=lastBatch.blocked||dnaDelayed?"collector-health delayed":"collector-health";
+    const healthTitle=lastBatch.blocked?"소스 제한 감지":dnaDelayed?("수집 지연 · "+dnaAgeHours.toFixed(1)+"시간"):"자동 수집 정상";
+    const healthDetail="최근 배치 "+ct(success)+" / "+ct(attempts)+" 성공"+(perMin?" · "+perMin.toFixed(1)+"채보/분":"")+
+      (lastBatch.blocked?" · 요청 제한 후 안전 중지":dnaDelayed?" · 예약 실행 지연 가능성":" · 정상 체크포인트")+
+      " · DNA 갱신 "+dnaUpdatedLabel;
     dnaDist.innerHTML=
-      '<div class="collector-health"><b>'+ct(success)+' / '+ct(attempts)+' 성공</b><span>최근 자동 배치'+(perMin?' · '+perMin.toFixed(1)+'채보/분':'')+(lastBatch.blocked?' · 소스 제한 감지 후 자동 중지':' · 정상 체크포인트')+'</span></div>'+
+      '<div class="'+healthClass+'"><b>'+cx(healthTitle)+'</b><span>'+cx(healthDetail)+'</span></div>'+
       '<div class="dna-era-list">'+dnaYears.map(x=>'<div><span>'+cx(x.year)+'</span><div class="coverage-track"><i style="width:'+Math.max(.25,Math.min(100,Number(x.coverage_percent||0)))+'%"></i></div><b>'+Number(x.coverage_percent||0).toFixed(Number(x.coverage_percent||0)<1?2:1)+'%</b><small>'+ct(x.analyzed)+' / '+ct(x.candidates)+'</small></div>').join('')+'</div>';
   }
 
