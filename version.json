@@ -1,7 +1,7 @@
 {
-  "version": "2.8.0",
+  "version": "2.9.0",
   "channel": "ranked",
-  "name": "Training Insights",
+  "name": "Replay Signals",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -55,6 +55,11 @@
     "Training Insights compares the latest 7, 28 or 90 days against the immediately previous equal-length period",
     "Period KPIs for completed maps, activity days, recorded sessions and average official SR exposure",
     "Current-versus-previous Chart DNA exposure bars plus SR-band, target-skill and explicit feel distributions",
-    "Copyable local training report that explicitly avoids performance or skill-improvement claims"
+    "Copyable local training report that explicitly avoids performance or skill-improvement claims",
+    "Replay Failure Signals keeps imported .osr outcome records locally with accuracy, judgement mix, combo and miss summaries",
+    "Lazy 256-shard checksum lookup resolves one replay MD5 back to a Ranked beatmap without loading the whole catalogue",
+    "Browser replay parsing now exposes replay timestamp, miss rate and non-300 rate while remaining explicitly header-only",
+    "PC replay parsing adds key-input median-gap and burst-variability proxies without claiming exact miss locations",
+    "Replay records can reopen linked map details and optionally mark the matching active Practice Route map complete"
   ]
 }
