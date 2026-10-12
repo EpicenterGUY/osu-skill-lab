@@ -2105,6 +2105,36 @@ function renderReplayAlignmentLab(){
   }).join(""):'<div class="empty">3개 이상 tap-head가 있는 이상 후보 구간이 없습니다.</div>';
   renderReplayRepeatRegions();
 }
+function replayFingerprintLabel(code){
+  return ({stream:"Stream / Burst",jump:"Jump",tech:"Tech / Rhythm",slider:"Slider-heavy",dense:"Dense / Reading",flow:"Flow",mixed:"Mixed"})[code]||"Mixed";
+}
+function replayFingerprintMatch(fp,filter){
+  if(!filter||filter==="all")return true;
+  return fp?.primary===filter||fp?.tags?.includes(filter);
+}
+function replayAggregateFingerprints(fps){
+  const rows=(fps||[]).filter(Boolean);
+  if(!rows.length)return replayStoredFingerprint({});
+  const primaryCounts=new Map(),tagCounts=new Map();
+  for(const fp of rows){
+    primaryCounts.set(fp.primary,(primaryCounts.get(fp.primary)||0)+1);
+    for(const tag of fp.tags||[])tagCounts.set(tag,(tagCounts.get(tag)||0)+1);
+  }
+  const primary=[...primaryCounts.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||"mixed";
+  const tags=[...tagCounts.entries()].sort((a,b)=>b[1]-a[1]).filter(([,n])=>n>=Math.max(1,Math.ceil(rows.length*.4))).map(([tag])=>tag);
+  const avg=key=>{
+    const values=rows.map(x=>replayNumeric(x?.[key])).filter(Number.isFinite);
+    return values.length?values.reduce((a,b)=>a+b,0)/values.length:null;
+  };
+  return {
+    version:Math.max(...rows.map(x=>Number(x.version||0))),primary,label:replayFingerprintLabel(primary),tags,
+    samples:rows.length,detailed_samples:rows.filter(x=>Number(x.version||0)>=1).length,
+    objects:avg("objects"),density:avg("density"),mean_gap_ms:avg("mean_gap_ms"),gap_sd_ms:avg("gap_sd_ms"),rhythm_cv:avg("rhythm_cv"),
+    mean_spacing_px:avg("mean_spacing_px"),spacing_sd_px:avg("spacing_sd_px"),angle_sd_deg:avg("angle_sd_deg"),
+    fast_gap_pct:avg("fast_gap_pct"),very_fast_pct:avg("very_fast_pct"),large_jump_pct:avg("large_jump_pct"),
+    close_spacing_pct:avg("close_spacing_pct"),slider_pct:avg("slider_pct"),strain:avg("strain")
+  };
+}
 function replayLongestPresence(presence){
   let best=0,run=0;
   for(const hit of presence){run=hit?run+1:0;if(run>best)best=run;}
@@ -2112,7 +2142,8 @@ function replayLongestPresence(presence){
 }
 function replayRepeatRegionData(){
   const id=$("replayAlignmentSelect")?.value,seed=replaySignalHistory.find(r=>String(r.id)===String(id)&&r.alignment?.supported);
-  if(!seed)return {seed:null,records:[],regions:[],minimum:2};
+  const filter=$("replayFingerprintFilter")?.value||"all";
+  if(!seed)return {seed:null,records:[],regions:[],minimum:2,filter};
   const hash=String(seed.map_hash||seed.alignment?.checksum||"").toLowerCase(),mods=Number(seed.mods||0);
   let records=replaySignalHistory.filter(r=>r.alignment?.supported&&String(r.map_hash||r.alignment?.checksum||"").toLowerCase()===hash&&Number(r.mods||0)===mods)
     .sort((a,b)=>Date.parse(a.played_at||a.imported_at||0)-Date.parse(b.played_at||b.imported_at||0));
@@ -2124,7 +2155,7 @@ function replayRepeatRegionData(){
   records.forEach((record,index)=>{
     for(const region of record.alignment?.regions||[]){
       const start=Math.round(Number(region.start||0)/10000)*10000,key=String(start);
-      if(!buckets.has(key))buckets.set(key,{start,end:start+10000,presence:Array(records.length).fill(false),scores:[],unmatchedRates:[],residuals:[],cursor:[],strains:[],patterns:new Map()});
+      if(!buckets.has(key))buckets.set(key,{start,end:start+10000,presence:Array(records.length).fill(false),scores:[],unmatchedRates:[],residuals:[],cursor:[],strains:[],patterns:new Map(),fingerprints:[]});
       const b=buckets.get(key);b.presence[index]=true;
       const score=replayNumeric(region.score);if(Number.isFinite(score))b.scores.push(score);
       const objects=Number(region.objects||0),unmatched=Number(region.unmatched||0);if(objects>0)b.unmatchedRates.push(unmatched/objects*100);
@@ -2132,60 +2163,94 @@ function replayRepeatRegionData(){
       const cursor=replayNumeric(region.mean_cursor_px);if(Number.isFinite(cursor))b.cursor.push(cursor);
       const strain=replayNumeric(region.strain);if(Number.isFinite(strain))b.strains.push(strain);
       const pattern=String(region.pattern||"").trim();if(pattern)b.patterns.set(pattern,(b.patterns.get(pattern)||0)+1);
+      b.fingerprints.push(replayStoredFingerprint(region));
     }
   });
   const mean=xs=>xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:null;
-  const regions=[...buckets.values()].map(b=>{
+  const allRegions=[...buckets.values()].map(b=>{
     const count=b.presence.filter(Boolean).length,recurrence=records.length?count/records.length:0,longest=replayLongestPresence(b.presence);
     const pattern=[...b.patterns.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||"";
-    const avgScore=mean(b.scores),avgUnmatched=mean(b.unmatchedRates),avgResidual=mean(b.residuals),avgCursor=mean(b.cursor),avgStrain=mean(b.strains);
+    const avgScore=mean(b.scores),avgUnmatched=mean(b.unmatchedRates),avgResidual=mean(b.residuals),avgCursor=mean(b.cursor),avgStrain=mean(b.strains),fingerprint=replayAggregateFingerprints(b.fingerprints);
     const repeatScore=recurrence*70+(Number.isFinite(avgScore)?avgScore*.25:0)+Math.min(5,longest)*2;
-    return {...b,count,recurrence,longest,pattern,avgScore,avgUnmatched,avgResidual,avgCursor,avgStrain,repeatScore};
+    return {...b,count,recurrence,longest,pattern,avgScore,avgUnmatched,avgResidual,avgCursor,avgStrain,fingerprint,repeatScore};
   }).filter(r=>r.count>=minimum).sort((a,b)=>b.repeatScore-a.repeatScore||b.count-a.count||a.start-b.start);
-  return {seed,records,regions,minimum,mods,hash};
+  const regions=allRegions.filter(r=>replayFingerprintMatch(r.fingerprint,filter));
+  return {seed,records,regions,allRegions,minimum,mods,hash,filter};
+}
+function renderReplayFingerprintSummary(data){
+  const host=$("replayFingerprintSummary");if(!host)return;
+  if(!data?.seed||data.records.length<2){host.innerHTML='<div class="empty">새 PC 정렬 표본부터 상세 구조 지문을 저장합니다.</div>';return;}
+  const rows=data.allRegions||[],counts=new Map(),tagCounts=new Map();
+  for(const r of rows){
+    const fp=r.fingerprint||replayStoredFingerprint(r);
+    counts.set(fp.primary,(counts.get(fp.primary)||0)+1);
+    for(const tag of fp.tags||[])tagCounts.set(tag,(tagCounts.get(tag)||0)+1);
+  }
+  const detailed=rows.filter(r=>Number(r.fingerprint?.detailed_samples||0)>0).length;
+  const avg=key=>{
+    const vals=rows.map(r=>replayNumeric(r.fingerprint?.[key])).filter(Number.isFinite);
+    return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+  };
+  const primary=[...counts.entries()].sort((a,b)=>b[1]-a[1]);
+  const density=avg("density"),spacing=avg("mean_spacing_px"),fast=avg("fast_gap_pct"),slider=avg("slider_pct");
+  host.innerHTML='<div class="region-fingerprint-kpis"><div><span>상세 지문</span><b>'+detailed+'/'+rows.length+'</b><small>새 alignment 구조</small></div><div><span>주요 구조</span><b>'+(primary[0]?cx(replayFingerprintLabel(primary[0][0])):"—")+'</b><small>'+(primary[0]?primary[0][1]+"개 반복창":"구조 없음")+'</small></div><div><span>평균 밀도</span><b>'+(density==null?"—":density.toFixed(2))+'</b><small>tap-head / sec</small></div><div><span>평균 spacing</span><b>'+(spacing==null?"—":spacing.toFixed(0))+'</b><small>px</small></div></div>'+
+    '<div class="region-fingerprint-bars">'+primary.map(([code,n])=>'<button type="button" data-fingerprint-filter="'+cx(code)+'"><span>'+cx(replayFingerprintLabel(code))+'</span><div><i style="width:'+(rows.length?n/rows.length*100:0)+'%"></i></div><b>'+n+'</b></button>').join("")+'</div>'+
+    '<p class="hint-text">평균 fast-gap '+(fast==null?"—":fast.toFixed(1)+"%")+' · slider '+(slider==null?"—":slider.toFixed(1)+"%")+' · 구조 지문은 로컬 .osu 기하/리듬 휴리스틱이며 공식 난이도 분류가 아닙니다.</p>';
 }
 function renderReplayRepeatRegions(){
   const kpis=$("replayRepeatRegionKpis"),summary=$("replayRepeatRegionSummary"),host=$("replayRepeatRegionList");
   if(!kpis||!summary||!host)return;
   const data=replayRepeatRegionData(),n=data.records.length;
+  renderReplayFingerprintSummary(data);
   const emptyKpis='<div class="dash-kpi"><span>같은 조건 정렬</span><b>'+ct(n)+'</b><small>같은 MD5 + Mods</small></div><div class="dash-kpi"><span>반복 후보</span><b>0</b><small>최소 반복 조건</small></div><div class="dash-kpi"><span>최고 재등장률</span><b>—</b><small>top-candidate recurrence</small></div><div class="dash-kpi"><span>최장 연속</span><b>—</b><small>연속 정렬 표본</small></div>';
   if(!data.seed||n<2){
     kpis.innerHTML=emptyKpis;summary.innerHTML='<b>반복 정렬 표본 부족</b><span>같은 채보·같은 Mods의 PC Timeline Alignment가 2개 이상 필요합니다.</span>';host.innerHTML='<div class="empty">반복 후보가 아직 없습니다.</div>';return;
   }
-  const top=data.regions[0],map=replayDisplayMap(data.seed);
+  const top=data.regions[0],map=replayDisplayMap(data.seed),filterText=data.filter==="all"?"전체 구조":replayFingerprintLabel(data.filter);
   kpis.innerHTML='<div class="dash-kpi"><span>같은 조건 정렬</span><b>'+ct(n)+'</b><small>'+cx(replayModsLabel(data.mods))+'</small></div>'+
-    '<div class="dash-kpi"><span>반복 후보</span><b>'+ct(data.regions.length)+'</b><small>'+data.minimum+'회 이상</small></div>'+
+    '<div class="dash-kpi"><span>반복 후보</span><b>'+ct(data.regions.length)+'</b><small>'+data.minimum+'회 이상 · '+cx(filterText)+'</small></div>'+
     '<div class="dash-kpi"><span>최고 재등장률</span><b>'+(top?Math.round(top.recurrence*100)+"%":"—")+'</b><small>상위 후보 재등장</small></div>'+
     '<div class="dash-kpi"><span>최장 연속</span><b>'+(top?top.longest:"—")+'</b><small>정렬 표본 연속</small></div>';
   summary.innerHTML='<b>'+cx(map?.title?((map.artist||"?")+" — "+map.title+" ["+(map.version||"?")+"]"):(data.seed.filename||"PC replay"))+'</b>'+
-    '<span>'+cx(replayModsLabel(data.mods))+' · 최근 '+n+'개 정렬 · '+data.minimum+'회 이상 재등장한 10초 창 '+data.regions.length+'개</span>'+
+    '<span>'+cx(replayModsLabel(data.mods))+' · 최근 '+n+'개 정렬 · '+data.minimum+'회 이상 · '+cx(filterText)+' · 반복창 '+data.regions.length+'개</span>'+
     '<p class="hint-text">재등장률은 각 정렬의 상위 후보 목록 안에서 같은 10초 창이 다시 나타난 비율입니다.</p>';
-  if(!data.regions.length){host.innerHTML='<div class="empty">현재 최소 반복 조건을 만족한 구간이 없습니다.</div>';return;}
+  if(!data.regions.length){host.innerHTML='<div class="empty">현재 반복/구조 조건을 동시에 만족한 구간이 없습니다.</div>';return;}
   host.innerHTML=data.regions.slice(0,12).map((r,i)=>{
-    const severity=r.recurrence>=.75?"high":r.recurrence>=.5?"mid":"low";
+    const severity=r.recurrence>=.75?"high":r.recurrence>=.5?"mid":"low",fp=r.fingerprint||replayStoredFingerprint(r);
     const strip=r.presence.map((hit,j)=>'<i class="'+(hit?"hit":"")+'" title="'+cx(new Date(data.records[j].played_at||data.records[j].imported_at||Date.now()).toLocaleString())+'"></i>').join("");
-    return '<div class="replay-repeat-region-row '+severity+'"><b>#'+(i+1)+'</b><div class="replay-repeat-region-main"><span>'+replayClock(r.start)+'–'+replayClock(r.end)+(r.pattern?' · '+cx(r.pattern):'')+'</span><strong>'+r.count+'/'+n+'회 · 재등장 '+Math.round(r.recurrence*100)+'% · 최장 연속 '+r.longest+'</strong><small>평균 candidate score '+(r.avgScore==null?"—":r.avgScore.toFixed(1))+(r.avgUnmatched==null?"":" · 미매칭 비율 "+r.avgUnmatched.toFixed(1)+"%")+(r.avgResidual==null?"":" · |오차| "+r.avgResidual.toFixed(0)+"ms")+(r.avgCursor==null?"":" · cursor "+r.avgCursor.toFixed(0)+"px")+(r.avgStrain==null?"":" · strain "+r.avgStrain.toFixed(1))+'</small><div class="replay-repeat-strip">'+strip+'</div></div><em>'+r.repeatScore.toFixed(1)+'</em></div>';
+    const tags=(fp.tags||[]).map(tag=>'<i class="fingerprint-tag tag-'+cx(tag)+'">'+cx(replayFingerprintLabel(tag))+'</i>').join("");
+    const detail=Number(fp.version||0)>=1?('밀도 '+(fp.density==null?"—":fp.density.toFixed(2))+'/s · gap '+(fp.mean_gap_ms==null?"—":fp.mean_gap_ms.toFixed(0))+'ms · spacing '+(fp.mean_spacing_px==null?"—":fp.mean_spacing_px.toFixed(0))+'px · fast '+(fp.fast_gap_pct==null?"—":fp.fast_gap_pct.toFixed(0))+'% · slider '+(fp.slider_pct==null?"—":fp.slider_pct.toFixed(0))+'%'):'구형 alignment · 상세 구조 지문 없음';
+    return '<div class="replay-repeat-region-row '+severity+'"><b>#'+(i+1)+'</b><div class="replay-repeat-region-main"><span>'+replayClock(r.start)+'–'+replayClock(r.end)+' · <mark class="fingerprint-primary">'+cx(fp.label||replayFingerprintLabel(fp.primary))+'</mark>'+(r.pattern?' · '+cx(r.pattern):'')+'</span><strong>'+r.count+'/'+n+'회 · 재등장 '+Math.round(r.recurrence*100)+'% · 최장 연속 '+r.longest+'</strong><small>평균 candidate '+(r.avgScore==null?"—":r.avgScore.toFixed(1))+(r.avgUnmatched==null?"":" · 미매칭 "+r.avgUnmatched.toFixed(1)+"%")+(r.avgResidual==null?"":" · |오차| "+r.avgResidual.toFixed(0)+"ms")+(r.avgStrain==null?"":" · strain "+r.avgStrain.toFixed(1))+'</small><small>'+cx(detail)+'</small><div class="fingerprint-tags">'+tags+'</div><div class="replay-repeat-strip">'+strip+'</div></div><em>'+r.repeatScore.toFixed(1)+'</em></div>';
   }).join("");
 }
 function replayRepeatRegionReportText(){
   const data=replayRepeatRegionData();if(!data.seed||data.records.length<2)return "";
   const map=replayDisplayMap(data.seed),lines=[
-    "osu! Skill Lab Repeat Region Consensus",
+    "osu! Skill Lab Repeat Region Consensus + Region Fingerprint",
     map?.title?((map.artist||"?")+" — "+map.title+" ["+(map.version||"?")+"]"):(data.seed.filename||data.hash),
-    replayModsLabel(data.mods)+" · 정렬 "+data.records.length+"개 · 최소 "+data.minimum+"회",
+    replayModsLabel(data.mods)+" · 정렬 "+data.records.length+"개 · 최소 "+data.minimum+"회 · 구조 "+(data.filter==="all"?"전체":replayFingerprintLabel(data.filter)),
     "",
     "반복 상위 이상 후보"
   ];
   if(!data.regions.length)lines.push("조건을 만족한 반복 구간 없음");
-  for(const [i,r] of data.regions.slice(0,12).entries())lines.push((i+1)+". "+replayClock(r.start)+"–"+replayClock(r.end)+" · "+r.count+"/"+data.records.length+"회 ("+Math.round(r.recurrence*100)+"%) · 연속 "+r.longest+" · 평균 score "+(r.avgScore==null?"—":r.avgScore.toFixed(1))+(r.pattern?" · "+r.pattern:""));
-  lines.push("","※ 각 replay의 상위 alignment 후보 재등장 통계이며 실제 Miss 위치·고정 약점·인과관계를 확정하지 않습니다.");
+  for(const [i,r] of data.regions.slice(0,12).entries()){
+    const fp=r.fingerprint||replayStoredFingerprint(r);
+    lines.push((i+1)+". "+replayClock(r.start)+"–"+replayClock(r.end)+" · "+r.count+"/"+data.records.length+"회 ("+Math.round(r.recurrence*100)+"%) · "+(fp.label||replayFingerprintLabel(fp.primary))+" · 연속 "+r.longest+" · 평균 score "+(r.avgScore==null?"—":r.avgScore.toFixed(1))+(Number(fp.version||0)>=1?" · density "+(fp.density==null?"—":fp.density.toFixed(2))+"/s · spacing "+(fp.mean_spacing_px==null?"—":fp.mean_spacing_px.toFixed(0))+"px":"")+(r.pattern?" · "+r.pattern:""));
+  }
+  lines.push("","※ 반복 후보와 구조 지문은 alignment 및 로컬 채보 휴리스틱이며 실제 Miss 위치·고정 약점·인과관계를 확정하지 않습니다.");
   return lines.join("\n");
 }
 $("replayRepeatWindow")?.addEventListener("change",renderReplayRepeatRegions);
 $("replayRepeatMin")?.addEventListener("change",renderReplayRepeatRegions);
+$("replayFingerprintFilter")?.addEventListener("change",renderReplayRepeatRegions);
+document.addEventListener("click",event=>{
+  const b=event.target.closest("[data-fingerprint-filter]");if(!b)return;
+  const filter=b.dataset.fingerprintFilter||"all",select=$("replayFingerprintFilter");
+  if(select&&[...select.options].some(o=>o.value===filter)){select.value=filter;renderReplayRepeatRegions();}
+});
 $("copyReplayRepeatRegions")?.addEventListener("click",async()=>{
   const report=replayRepeatRegionReportText();if(!report){alert("복사할 반복 정렬 표본이 없습니다.");return;}
-  try{await navigator.clipboard.writeText(report);alert("Repeat Region 리포트를 복사했습니다.");}
+  try{await navigator.clipboard.writeText(report);alert("Repeat Region + Fingerprint 리포트를 복사했습니다.");}
   catch(_){prompt("Repeat Region 리포트를 복사하세요.",report);}
 });
 
