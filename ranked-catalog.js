@@ -618,7 +618,7 @@ function renderSearchWorkspace(){
   }
 }
 function applySearchStateToControls(state){
-  const set=(id,value)=>{const el=$(id);if(el&&[...el.options||[]].some?.(o=>o.value===String(value)))el.value=String(value);};
+  const set=(id,value)=>{const el=$(id);if(el&&Array.from(el.options||[]).some(o=>o.value===String(value)))el.value=String(value);};
   if($("indexedQuery"))$("indexedQuery").value=state.q||"";
   set("indexedMinSr",state.minSr??0);set("indexedMaxSr",state.maxSr??0);
   set("indexedMinBpm",state.minBpm??0);set("indexedMaxBpm",state.maxBpm??0);
