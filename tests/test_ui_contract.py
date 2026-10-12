@@ -228,6 +228,15 @@ class UiContractTests(unittest.TestCase):
                       "Always-on watcher ✓"):
             self.assertIn(token, CLIENT + HTML)
 
+    def test_osl_client_updater_is_wired(self):
+        for element_id in ("clientUpdateLocal", "clientUpdateRemote", "clientUpdateCheck",
+                           "clientUpdateApply", "clientUpdateStatus", "clientUpdateProgress"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', CLIENT)
+        for token in ("renderUpdaterStatus", "checkUpdate", "applyUpdate",
+                      "/api/client/update/check", "/api/client/update/apply", "Updater ✓"):
+            self.assertIn(token, CLIENT + HTML)
+
     def test_osl_client_replay_inbox_is_wired(self):
         for element_id in ("clientReplayPath", "clientReplayAutoDetect", "clientReplaySavePath",
                            "clientReplayScan", "clientReplayStatus", "clientReplayWatch",
