@@ -1,7 +1,7 @@
 {
-  "version": "2.15.0",
-  "channel": "ranked",
-  "name": "Failure Structure Profile",
+  "version": "2.16.0",
+  "channel": "client",
+  "name": "OSL Client Bridge",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -92,6 +92,13 @@
     "Cross-map structure composition reports candidate-window counts, average recurrence, alignment score and unmatched share",
     "Failure Structure Profile supports all-time, 30-day and 90-day scopes plus minimum alignment-group size",
     "Structure bars link back to the matching Repeat Region structural filter",
-    "Failure Structure wording explicitly uses repeated saved anomaly candidates as its denominator instead of total play time or failure probability"
+    "Failure Structure wording explicitly uses repeated saved anomaly candidates as its denominator instead of total play time or failure probability",
+    "M4 OSL Client moves from planned to building with a local Songs Library Bridge",
+    "Local server auto-detects common osu! stable Songs paths and supports an explicit manual path",
+    "Incremental SQLite library index reuses unchanged .osu files by mtime and size while storing metadata and MD5 locally",
+    "Local Library Search can analyze an indexed .osu directly into existing Chart X-Ray and Skill DNA without a file picker",
+    "Client scan runs in a background server thread with live scanned, updated, reused and error counters",
+    "Indexed file analysis is constrained to the configured Songs root and the server remains bound to 127.0.0.1",
+    "GitHub Pages keeps the Client UI read-only and never attempts local file-system access"
   ]
 }
