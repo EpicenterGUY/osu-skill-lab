@@ -1,7 +1,7 @@
 {
-  "version": "2.11.0",
+  "version": "2.12.0",
   "channel": "ranked",
-  "name": "Replay Profile",
+  "name": "PC Timeline Alignment",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -70,6 +70,12 @@
     "A-D data sufficiency grade uses only sample count, replay timestamp provenance, map linkage and Mods separation",
     "Per-Mod technical statistics compare repeated outcome samples without difficulty adjustment or causal claims",
     "Automatic replay observations appear only from repeated samples and stay descriptive rather than skill labels",
-    "Replay metric aggregation is null-safe so missing accuracy or timing values are never treated as zero"
+    "Replay metric aggregation is null-safe so missing accuracy or timing values are never treated as zero",
+    "Experimental PC Timeline Alignment matches circle and slider-head timestamps to one replay keydown each on checksum-identical local maps",
+    "10-second anomaly candidate regions summarize unmatched tap heads, early/late residuals, cursor distance, local strain and overlapping stream/burst context",
+    "Alignment reports explicitly separate replay total misses from unmatched-object candidates and never claim exact judgement locations",
+    "DT, NC and HT replays are excluded from timeline alignment until clock-rate transformation is validated",
+    "Local PC server now serves Ranked UI assets and public data shards required by Replay Signals, Trends, Profile and Alignment",
+    "Local hitobject feature vectors retain x/y coordinates for optional cursor-distance alignment"
   ]
 }
