@@ -454,3 +454,15 @@ dialog.chart-modal::backdrop{background:#030812ce;backdrop-filter:blur(6px)}
 .replay-profile-signals ul{display:grid;gap:6px;margin:0;padding:0;list-style:none}.replay-profile-signals li{padding:7px 8px;border:1px solid #34485e;border-radius:8px;background:#111d2c;color:#aebfd0;font-size:8px;line-height:1.45}
 @media(max-width:1150px){.replay-profile-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:650px){.replay-profile-head{flex-direction:column}.replay-profile-head .ghost-btn{width:100%}.replay-profile-grid{grid-template-columns:1fr}.replay-profile-mod-row{grid-template-columns:1fr 1fr}.replay-profile-mod-row>div:first-child{grid-column:1/-1}}
+
+/* v2.9 PC Timeline Alignment */
+.replay-alignment-section{margin-top:14px;padding:14px;border:1px solid #31475e;border-radius:14px;background:linear-gradient(145deg,#101a28,#0c151f)}
+.replay-alignment-controls{display:grid;grid-template-columns:minmax(260px,1fr) auto;gap:8px;align-items:end;margin:10px 0 12px}
+.replay-alignment-controls label{display:grid;gap:5px;color:#95a9be;font-size:10px;font-weight:760}.replay-alignment-controls .ghost-btn{min-height:38px}
+.replay-alignment-regions{display:grid;gap:7px;margin-top:10px}
+.replay-alignment-row{display:grid;grid-template-columns:34px minmax(0,1fr) 48px;gap:9px;align-items:center;padding:10px 11px;border:1px solid #30445a;border-radius:11px;background:#111b29}
+.replay-alignment-row>b{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#1a2a3e;color:#a8bbce;font-size:9px}
+.replay-alignment-row>div{min-width:0}.replay-alignment-row span,.replay-alignment-row strong,.replay-alignment-row small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.replay-alignment-row span{color:#9eb1c5;font-size:8px}.replay-alignment-row strong{margin:3px 0;font-size:9px}.replay-alignment-row small{color:#8296ac;font-size:8px}
+.replay-alignment-row>em{font-style:normal;text-align:right;font-size:11px;font-weight:850;color:#9fb3c8}
+.replay-alignment-row.mid{border-color:#6f5b42}.replay-alignment-row.mid>em{color:#e5bf82}.replay-alignment-row.high{border-color:#7d455b;background:#211522}.replay-alignment-row.high>em{color:#ff9fc4}.replay-alignment-row.high>b{background:#3a1e2c;color:#ffc3da}
+@media(max-width:700px){.replay-alignment-controls{grid-template-columns:1fr}.replay-alignment-controls .ghost-btn{width:100%}.replay-alignment-row{grid-template-columns:30px minmax(0,1fr) 42px}.replay-alignment-row span,.replay-alignment-row strong,.replay-alignment-row small{white-space:normal}}
