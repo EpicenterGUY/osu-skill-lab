@@ -38,7 +38,8 @@ let rankedSearchHistory = [];
 let sharedSearchHandled = false;
 let trainingPoolCache = null;
 let trainingRouteGeneration = 0;
-let trainingRouteState = {skill:null,band:null,mode:null,scope:null,maps:[],done:[],created_at:null};
+let trainingRouteState = {skill:null,band:null,mode:null,scope:null,maps:[],done:[],done_at:{},feel:"",note:"",created_at:null};
+let trainingHistory = [];
 const trainingRouteMaps = new Map();
 try {
   const savedCompare = JSON.parse(localStorage.getItem("osl-ranked-compare") || "[]");
@@ -64,7 +65,11 @@ try {
 } catch (_) {}
 try {
   const saved = JSON.parse(localStorage.getItem("osl-training-route") || "null");
-  if(saved && Array.isArray(saved.maps)) trainingRouteState = {...trainingRouteState,...saved,maps:saved.maps.slice(0,20),done:Array.isArray(saved.done)?saved.done:[]};
+  if(saved && Array.isArray(saved.maps)) trainingRouteState = {...trainingRouteState,...saved,maps:saved.maps.slice(0,20),done:Array.isArray(saved.done)?saved.done:[],done_at:saved.done_at&&typeof saved.done_at==="object"?saved.done_at:{}};
+} catch (_) {}
+try {
+  const saved = JSON.parse(localStorage.getItem("osl-training-history") || "[]");
+  if(Array.isArray(saved)) trainingHistory = saved.filter(x=>x&&Array.isArray(x.maps)).slice(0,80);
 } catch (_) {}
 
 try {
@@ -1443,6 +1448,81 @@ function trainingRouteSkill(){
 function persistTrainingRoute(){
   try{localStorage.setItem("osl-training-route",JSON.stringify(trainingRouteState));}catch(_){}
 }
+function persistTrainingHistory(){
+  try{localStorage.setItem("osl-training-history",JSON.stringify(trainingHistory.slice(0,80)));}catch(_){}
+}
+function trainingRouteEmptyState(){
+  return {skill:null,band:null,mode:null,scope:null,maps:[],done:[],done_at:{},feel:"",note:"",created_at:null};
+}
+function trainingSessionFeelLabel(value){
+  return ({easy:"여유",good:"적당",hard:"도전적",too_hard:"너무 어려움"})[value]||"미기록";
+}
+function trainingSessionStatus(session){
+  const total=session?.maps?.length||0,done=(session?.done||[]).length;
+  return done>=total&&total?"완료":done?"부분 완료":"미완료";
+}
+function trainingSessionEvents(includeActive=true){
+  const sessions=[...trainingHistory];
+  if(includeActive&&trainingRouteState.maps?.length&&trainingRouteState.done?.length){
+    sessions.unshift({...trainingRouteState,id:"active",ended_at:null,status:"active"});
+  }
+  const out=[];
+  for(const session of sessions){
+    const done=new Set((session.done||[]).map(String)),byId=new Map((session.maps||[]).map(m=>[String(m.beatmap_id),m]));
+    for(const id of done){
+      const map=byId.get(id);if(!map)continue;
+      const ts=session.done_at?.[id]||session.ended_at||session.created_at;
+      const time=Date.parse(ts||"");
+      if(!Number.isFinite(time))continue;
+      out.push({time,map,skill:session.skill||"overall",session_id:session.id||"",active:session.id==="active"});
+    }
+  }
+  return out;
+}
+function renderTrainingJournal(){
+  const kpis=$("trainingJournalKpis"),activity=$("trainingActivity14"),exposure=$("trainingExposure28"),list=$("trainingJournalList"),summary=$("trainingJournalSummary");
+  if(!kpis||!activity||!exposure||!list)return;
+  const now=Date.now(),day=86400000,events=trainingSessionEvents(true),last7=events.filter(e=>e.time>=now-day*7),last28=events.filter(e=>e.time>=now-day*28);
+  const activeDays=new Set(last28.map(e=>{const d=new Date(e.time);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")})).size;
+  const minutes=Math.round(last7.reduce((n,e)=>n+Number(e.map.total_length||0),0)/60);
+  kpis.innerHTML='<div class="dash-kpi"><span>최근 7일 완료</span><b>'+ct(last7.length)+'</b><small>채보</small></div>'+
+    '<div class="dash-kpi"><span>활동일</span><b>'+ct(activeDays)+'</b><small>최근 28일</small></div>'+
+    '<div class="dash-kpi"><span>기록 세션</span><b>'+ct(trainingHistory.length)+'</b><small>이 브라우저</small></div>'+
+    '<div class="dash-kpi"><span>채보 길이 합</span><b>'+ct(minutes)+'m</b><small>최근 7일 완료분</small></div>';
+
+  const days=[];let maxCount=1;
+  for(let i=13;i>=0;i--){
+    const start=new Date();start.setHours(0,0,0,0);start.setDate(start.getDate()-i);
+    const end=start.getTime()+day,count=events.filter(e=>e.time>=start.getTime()&&e.time<end).length;
+    maxCount=Math.max(maxCount,count);days.push({start,count});
+  }
+  activity.innerHTML=days.map(x=>'<div class="activity-day" title="'+cx(x.start.toLocaleDateString())+' · '+x.count+'개"><i style="height:'+Math.max(x.count?8:2,x.count/maxCount*56)+'px"></i><b>'+x.count+'</b><small>'+String(x.start.getMonth()+1)+'/'+String(x.start.getDate())+'</small></div>').join("");
+
+  const skills=["aim","stream","speed","stamina","tech","reading","flow"],avgs={};
+  for(const skill of skills){
+    const vals=last28.map(e=>Number(e.map?.dna?.skills?.[skill])).filter(Number.isFinite);
+    avgs[skill]=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+  }
+  const anySkill=Object.values(avgs).some(Number.isFinite);
+  exposure.innerHTML=anySkill?skills.map(skill=>{
+    const v=avgs[skill];return '<div class="skill"><span>'+skill.toUpperCase()+'</span><div class="bar"><i style="width:'+(Number.isFinite(v)?Math.max(2,Math.min(100,v)):0)+'%"></i></div><b>'+(Number.isFinite(v)?v.toFixed(1):"—")+'</b></div>';
+  }).join(""):'<div class="empty">최근 28일 완료 기록에 Chart DNA가 없습니다.</div>';
+
+  if(summary)summary.textContent=trainingHistory.length?trainingHistory.length+"세션 · 완료 처리 "+events.filter(e=>!e.active).length+"채보":"기록 없음";
+  list.innerHTML=trainingHistory.length?trainingHistory.slice(0,20).map(session=>{
+    const total=session.maps?.length||0,done=session.done?.length||0,date=new Date(session.ended_at||session.created_at||Date.now());
+    const id=encodeURIComponent(String(session.id||""));
+    return '<div class="training-journal-row"><div><span>'+cx(date.toLocaleDateString())+' · '+cx(trainingSessionStatus(session))+'</span><b>'+cx(String(session.skill||"overall").toUpperCase())+' · '+cx(session.band||"all")+' · '+cx(session.mode||"—")+'</b><small>'+done+'/'+total+' 완료 · 체감 '+cx(trainingSessionFeelLabel(session.feel))+(session.note?' · '+cx(session.note):'')+'</small></div><div class="training-journal-actions"><button type="button" class="ghost-btn" data-training-history-replay="'+id+'">조건 다시 사용</button><button type="button" class="ghost-btn" data-training-history-remove="'+id+'">삭제</button></div></div>';
+  }).join(""):'<div class="empty">종료한 세션 기록이 없습니다.</div>';
+}
+function archiveTrainingRoute(reason="finished",clear=true){
+  if(!trainingRouteState.maps?.length)return false;
+  const feel=$("trainingSessionFeel")?.value||trainingRouteState.feel||"",note=($("trainingSessionNote")?.value||trainingRouteState.note||"").trim().slice(0,120);
+  const session={...trainingRouteState,id:"session-"+Date.now()+"-"+Math.random().toString(36).slice(2,7),maps:trainingRouteState.maps.map(compactStoredMap),done:[...(trainingRouteState.done||[])],done_at:{...(trainingRouteState.done_at||{})},feel,note,ended_at:new Date().toISOString(),reason};
+  trainingHistory=[session,...trainingHistory].slice(0,80);persistTrainingHistory();
+  if(clear){trainingRouteGeneration++;trainingRouteState=trainingRouteEmptyState();persistTrainingRoute();renderTrainingRoute();}
+  renderTrainingJournal();return true;
+}
 function trainingBandBounds(band){
   if(!band||band==="all")return [0,99];
   const [lo,hi]=band.split("-").map(Number);return [Number.isFinite(lo)?lo:0,Number.isFinite(hi)?hi:99];
@@ -1485,9 +1565,13 @@ function renderTrainingRoute(){
   const done=new Set((trainingRouteState.done||[]).map(String)),total=trainingRouteState.maps?.length||0,completed=[...done].filter(id=>trainingRouteMaps.has(id)).length;
   if(text)text.textContent=completed+" / "+total;
   if(bar)bar.style.width=(total?completed/total*100:0)+"%";
+  const feel=$("trainingSessionFeel"),note=$("trainingSessionNote");
+  if(feel&&feel.value!==String(trainingRouteState.feel||""))feel.value=trainingRouteState.feel||"";
+  if(note&&note.value!==String(trainingRouteState.note||""))note.value=trainingRouteState.note||"";
   if(!total){
     host.innerHTML='<div class="empty">아직 만든 연습 세션이 없습니다.</div>';
     if(status)status.textContent="현재 Ranked 결과 또는 분석 완료 DNA 전체에서 후보를 만들 수 있습니다.";
+    if(feel)feel.value="";if(note)note.value="";
     return;
   }
   const skill=(trainingRouteState.skill||"overall").toUpperCase();
@@ -1499,6 +1583,10 @@ function renderTrainingRoute(){
 }
 async function buildTrainingRoute(){
   if(!catalogSummary){alert("Ranked DB 준비 후 다시 시도해 주세요.");return;}
+  if(trainingRouteState.maps?.length&&trainingRouteState.done?.length){
+    if(!confirm("진행 중인 세션에 완료 기록이 있습니다. 현재 세션을 기록하고 새 세션을 만들까요?"))return;
+    archiveTrainingRoute("replaced",true);
+  }
   const token=++trainingRouteGeneration,skillInfo=trainingRouteSkill(),skill=skillInfo.skill,band=$("trainingRouteStars")?.value||"5-6",mode=$("trainingRouteMode")?.value||"ramp",scope=$("trainingRouteScope")?.value||"loaded",count=Number($("trainingRouteCount")?.value||8),status=$("trainingRouteStatus"),button=$("buildTrainingRoute");
   if(button)button.disabled=true;if(status)status.textContent="훈련 후보 계산 중…";
   try{
@@ -1514,20 +1602,49 @@ async function buildTrainingRoute(){
     const ranked=source.map(map=>({map,score:trainingRouteScore(map,skill,band,mode)})).sort((a,b)=>b.score-a.score);
     const picked=diversifyTrainingRows(ranked,count,mode).map(x=>x.map);
     if(!picked.length)throw Error("조건에 맞는 Chart DNA 분석 채보가 없습니다.");
-    trainingRouteState={skill,auto_skill:skillInfo.auto,band,mode,scope,maps:picked,done:[],created_at:new Date().toISOString()};
+    trainingRouteState={skill,auto_skill:skillInfo.auto,band,mode,scope,maps:picked,done:[],done_at:{},feel:"",note:"",created_at:new Date().toISOString()};
     persistTrainingRoute();renderTrainingRoute();
   }catch(err){if(status)status.textContent="세션 생성 실패 · "+err.message;}
   finally{if(token===trainingRouteGeneration&&button)button.disabled=false;}
 }
 $("buildTrainingRoute")?.addEventListener("click",buildTrainingRoute);
-$("clearTrainingRoute")?.addEventListener("click",()=>{trainingRouteGeneration++;trainingRouteState={skill:null,band:null,mode:null,scope:null,maps:[],done:[],created_at:null};persistTrainingRoute();renderTrainingRoute();});
+$("clearTrainingRoute")?.addEventListener("click",()=>{
+  if(trainingRouteState.done?.length&&!confirm("완료 처리한 기록이 있습니다. 기록하지 않고 현재 세션을 비울까요?"))return;
+  trainingRouteGeneration++;trainingRouteState=trainingRouteEmptyState();persistTrainingRoute();renderTrainingRoute();renderTrainingJournal();
+});
+$("finishTrainingRoute")?.addEventListener("click",()=>{if(!trainingRouteState.maps?.length){alert("기록할 현재 세션이 없습니다.");return;}archiveTrainingRoute("finished",true);});
+$("trainingSessionFeel")?.addEventListener("change",e=>{trainingRouteState.feel=e.target.value||"";persistTrainingRoute();});
+$("trainingSessionNote")?.addEventListener("input",e=>{trainingRouteState.note=String(e.target.value||"").slice(0,120);persistTrainingRoute();});
+$("exportTrainingJournal")?.addEventListener("click",()=>{
+  const payload={format:"osu-skill-lab-training-journal",version:1,exported_at:new Date().toISOString(),note:"Local completion/exposure records only; not a skill model.",sessions:trainingHistory};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;a.download="osu-skill-lab-training-journal-"+new Date().toISOString().slice(0,10)+".json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+});
+$("clearTrainingJournal")?.addEventListener("click",()=>{if(!trainingHistory.length)return;if(!confirm("이 브라우저의 종료된 훈련 세션 기록을 모두 지울까요? 현재 진행 중 세션은 유지됩니다."))return;trainingHistory=[];persistTrainingHistory();renderTrainingJournal();});
 document.addEventListener("click",event=>{
-  const b=event.target.closest("[data-training-toggle]");if(!b)return;
-  const id=decodeURIComponent(b.dataset.trainingToggle||""),done=new Set((trainingRouteState.done||[]).map(String));
-  if(done.has(id))done.delete(id);else done.add(id);
-  trainingRouteState.done=[...done];persistTrainingRoute();renderTrainingRoute();
+  const toggle=event.target.closest("[data-training-toggle]");
+  if(toggle){
+    const id=decodeURIComponent(toggle.dataset.trainingToggle||""),done=new Set((trainingRouteState.done||[]).map(String)),times={...(trainingRouteState.done_at||{})};
+    if(done.has(id)){done.delete(id);delete times[id];}else{done.add(id);times[id]=new Date().toISOString();}
+    trainingRouteState.done=[...done];trainingRouteState.done_at=times;persistTrainingRoute();renderTrainingRoute();renderTrainingJournal();return;
+  }
+  const replay=event.target.closest("[data-training-history-replay]");
+  if(replay){
+    const id=decodeURIComponent(replay.dataset.trainingHistoryReplay||""),session=trainingHistory.find(x=>String(x.id)===id);if(!session)return;
+    const skill=$("trainingRouteSkill");if(skill)skill.value=session.auto_skill?"auto":(session.skill||"overall");
+    if($("trainingRouteStars"))$("trainingRouteStars").value=session.band||"all";
+    if($("trainingRouteMode"))$("trainingRouteMode").value=session.mode||"ramp";
+    if($("trainingRouteScope"))$("trainingRouteScope").value=session.scope||"global";
+    if($("trainingRouteCount"))$("trainingRouteCount").value=String(Math.min(12,Math.max(5,session.maps?.length||8)));
+    $("buildTrainingRoute")?.scrollIntoView({behavior:"smooth",block:"center"});return;
+  }
+  const remove=event.target.closest("[data-training-history-remove]");
+  if(remove){
+    const id=decodeURIComponent(remove.dataset.trainingHistoryRemove||"");trainingHistory=trainingHistory.filter(x=>String(x.id)!==id);persistTrainingHistory();renderTrainingJournal();
+  }
 });
 renderTrainingRoute();
+renderTrainingJournal();
 
 function readLocalDnaRows() {
   try {
