@@ -1,7 +1,7 @@
 {
-  "version": "2.17.0",
-  "channel": "data",
-  "name": "DNA Backfill Throughput",
+  "version": "2.18.0",
+  "channel": "client",
+  "name": "Replay Inbox",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -104,6 +104,12 @@
     "Chart DNA CI time budget increases from 32 to 40 minutes only for the same capped request cadence",
     "Method-ineligible too-short charts are marked terminal and skipped instead of being re-requested indefinitely",
     "Ranked summary now exposes unsupported, resolved, remaining and successful-request-throughput DNA metrics",
-    "Adaptive DNA batches cool down to smaller targets when the prior run was blocked or had lower success"
+    "Adaptive DNA batches cool down to smaller targets when the prior run was blocked or had lower success",
+    "M4 Phase 2 adds a local Replay Inbox for actual .osr files under an auto-detected or explicitly configured replay folder",
+    "Replay Inbox is incrementally indexed in the same local SQLite database with replay timestamp, score, combo, Mods, accuracy and beatmap checksum",
+    "Replay Inbox rows join back to the active Songs library by beatmap MD5 without exposing local filesystem paths to the browser",
+    "One-click Replay Inbox analysis loads the matching local .osu when available and feeds Replay Signals plus PC Timeline Alignment",
+    "Optional tab-open replay watch rescans about every 12 seconds only while the Client tab is open and does not claim to capture every osu! play",
+    "Replay file reads are constrained to the configured replay root and replay-to-map joins are constrained to the active Songs root"
   ]
 }
