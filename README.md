@@ -1,4 +1,4 @@
-# osu! Skill Lab — Rhythm Intelligence v2.12
+# osu! Skill Lab — Rhythm Intelligence v2.13
 
 Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analysis.
 **GitHub Pages:** https://epicenterguy.github.io/osu-skill-lab/
@@ -14,7 +14,7 @@ Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analys
 - **M4 · OSL Client — PLANNED**  
   Carry the recent **osu! Skill Lab client** direction into a dedicated desktop-client track instead of treating the project as web-only. The client milestone is to unify the existing public Ranked/Chart-DNA database with local `.osu` / `.osr` analysis in one desktop experience, while keeping the current web/PWA as a first-class lightweight front end. The current `server.py` / `실행.bat` local analyzer is the technical starting point; client-specific integrations should be added incrementally rather than blocking the website.
 - **M5 · Personal Rhythm Intelligence — EARLY PREVIEW**  
-  Practice Route Builder, the browser-local Training Journal, period-comparison Training Insights, Replay Failure Signals, same-map Replay Trends, and descriptive Replay Profiles now connect user-controlled Chart-DNA practice exposure with imported replay outcomes while explicitly avoiding pass/skill claims. Exact miss-location reconstruction, stronger replay/map alignment, confidence models, and long-term performance modeling remain future work.
+  Practice Route Builder, the browser-local Training Journal, period-comparison Training Insights, Replay Failure Signals, same-map Replay Trends/Profile, PC Timeline Alignment, and repeated-region consensus now connect user-controlled Chart-DNA practice exposure with imported replay outcomes while explicitly avoiding pass/skill claims. Exact miss-location reconstruction, stronger replay/map alignment, confidence models, and long-term performance modeling remain future work.
 
 > The client milestone is a roadmap item, not a claim that a packaged desktop client or direct osu! game integration already exists.
 
@@ -49,6 +49,7 @@ Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analys
 - **Replay Trend Lab** groups repeated replays of the same beatmap, filters same-map trends by Mods, plots accuracy/miss/non-300/combo history, compares replay samples before/after the first recorded Practice Route completion only within the same Mods combination, and summarizes repeated outcome samples by the map's dominant base Chart-DNA axis. These are temporal/sample comparisons, not causal training-effect or weakness claims.
 - **Replay Profile** summarizes the currently selected same-map/Mods replay window with descriptive sample standard deviation, observed ranges, per-Mod technical statistics, timestamp provenance, map-link state, and an A–D **data sufficiency** grade. That grade only reflects sample quantity/metadata quality and never claims skill, training effect, statistical significance, or causal confidence.
 - **PC Timeline Alignment** is an experimental local-only bridge between a checksum-matching selected .osu and PC-decoded .osr keydown frames. It greedily aligns circle/slider-head timestamps to one keydown each, estimates a small global offset, summarizes timing/cursor residuals, and ranks 10-second anomaly-candidate windows. It does **not** recreate osu!'s judgement engine or identify exact miss locations; DT/NC/HT are intentionally excluded until clock-rate alignment is validated.
+- **Repeat Region Consensus** compares multiple supported PC alignments of the same beatmap and exact Mods combination. It reports which fixed 10-second windows repeatedly reappear in each replay's top anomaly candidates, plus recurrence, longest consecutive appearance and averaged candidate signals. Absence from a replay means only “not in that replay's saved top candidate set”, never “confirmed clean” or “no miss”.
 - Sort by official SR, BPM, ranked date, play count, length, AR/OD, and available Chart DNA dimensions.
 - Full monthly metadata shards are not loaded by the page on entry; only the selected month/year search index is fetched on demand. Mobile, PWA, and desktop work with no browser OAuth credentials.
 - The optional **STATS → Ranked 색인 가져오기** button is only for importing additional local datasets.
