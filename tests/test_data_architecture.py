@@ -40,9 +40,15 @@ class DataArchitectureTests(unittest.TestCase):
         commit_line = next(line for line in DNA_WORKFLOW.splitlines() if "git add -A --" in line)
         self.assertIn("data/checksum-index", commit_line)
 
+    def test_dna_backfill_reports_resolved_progress(self):
+        self.assertIn('"unsupported_difficulties": int(dna_state.get("terminal_failed_count") or 0)', BUILD)
+        self.assertIn('"resolved_percent":', BUILD)
+        self.assertIn('"successful_requests_per_minute":', BUILD)
+
     def test_dna_request_rate_stays_capped(self):
         self.assertIn("--delay 1", DNA_WORKFLOW)
-        self.assertIn("--max-minutes 32", DNA_WORKFLOW)
+        self.assertIn("--max-minutes 40", DNA_WORKFLOW)
+        self.assertIn("2200", DNA_WORKFLOW)
 
 
 if __name__ == "__main__":
