@@ -1,4 +1,4 @@
-# osu! Skill Lab — Rhythm Intelligence v2.16
+# osu! Skill Lab — Rhythm Intelligence v2.17
 
 Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analysis.
 **GitHub Pages:** https://epicenterguy.github.io/osu-skill-lab/
@@ -94,7 +94,9 @@ Workflow: `.github/workflows/sync-ranked.yml`.
 6. Subsequent syncs are scheduled hourly (GitHub may delay or suspend scheduled runs). The same workflow deploys the refreshed site; code pushes also deploy it.
 
 Every run:
-- Tries up to 10 recent actual `.osu` charts through the public osu! map-file endpoint, spaced at least 5 seconds apart. Stops on 403/429/503 and tolerates temporary unavailability. This is **experimental partial Chart DNA coverage**; no chart files are redistributed, and the resulting custom scores are NOT official SR or pp.
+- The dedicated Chart DNA backfill remains capped at **one request start per second**. Its hourly work budget is adaptive: blocked/low-success runs cool down, while a healthy previous batch can target up to 2,200 charts and use at most 40 minutes of the 50-minute job.
+- Charts that cannot satisfy the current DNA method because they contain too few playable tap/slider-head objects are recorded as method-unsupported and skipped on future runs instead of being re-requested forever. The summary distinguishes analyzed coverage from resolved progress.
+- The normal metadata sync still tries only a small recent actual-`.osu` pilot batch. All published DNA is derived numeric data; raw chart files are never committed, and custom scores are NOT official SR or pp.
 - Scans the newest ranked-search page independently for new maps.
 - Advances up to 200 historical pages per scheduled run using `data/ranked-state.json` cursor (resuming earlier work).
 - Deduplicates by beatmap ID and groups by ranking month in `data/ranked/YYYY-MM.json`.
