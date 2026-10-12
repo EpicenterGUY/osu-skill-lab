@@ -41,6 +41,7 @@ let trainingRouteGeneration = 0;
 let trainingRouteState = {skill:null,requested_band:null,band:null,mode:null,scope:null,maps:[],done:[],done_at:{},feel:"",note:"",created_at:null};
 let trainingHistory = [];
 let replaySignalHistory = [];
+let replayAutoRelinkVersion = "";
 const replayChecksumShardCache = new Map();
 const replaySignalMaps = new Map();
 const trainingRouteMaps = new Map();
@@ -281,6 +282,11 @@ $("obsMetric")?.addEventListener("change",renderEraComparison);
 function renderCatalogSummary(s) {
   const count = s.counts || {};
   setupEraComparison(s);
+  const replayLinkVersion=String(s.replay_lookup?.entries||0)+"@"+String(s.updated_at||"");
+  if(s.replay_lookup?.versions&&replaySignalHistory.some(r=>!r.map?.beatmap_id||r.link_type==="ranked-checksum-id")&&replayAutoRelinkVersion!==replayLinkVersion){
+    replayAutoRelinkVersion=replayLinkVersion;
+    queueMicrotask(()=>relinkReplaySignals(true).catch(err=>console.warn("Replay auto-relink failed",err)));
+  }
   const avg = s.averages || {};
   const oldest = (s.date_range?.oldest || "").slice(0, 10);
   const newest = (s.date_range?.newest || "").slice(0, 10);
@@ -1542,7 +1548,8 @@ async function recordReplaySignal(raw,selectedLocal=null){
   const accuracy=raw.accuracy==null?(judged?(300*hits.great+100*hits.good+50*hits.meh)/(300*judged)*100:null):Number(raw.accuracy);
   let resolved={map:null,link_type:"unresolved"};
   try{resolved=await resolveReplayMapHash(raw.map_hash,selectedLocal);}catch(err){console.warn("Replay map link failed",err);}
-  const localFallback=selectedLocal?replayLocalMap(selectedLocal,String(raw.map_hash||"").toLowerCase()):null;
+  const selectedHash=String(selectedLocal?.md5||"").toLowerCase(), replayHash=String(raw.map_hash||"").toLowerCase();
+  const localFallback=selectedLocal&&selectedHash===replayHash?replayLocalMap(selectedLocal,replayHash):null;
   const map=resolved.map||localFallback;
   const id=replayRecordId(raw),importedAt=new Date().toISOString(),playedAt=raw.replay_timestamp||importedAt;
   const burstStd=raw.burst_std_median!=null?Number(raw.burst_std_median):
@@ -1625,8 +1632,8 @@ function renderReplaySignals(){
       '<button type="button" class="ghost-btn" data-replay-signal-remove="'+encodeURIComponent(String(r.id))+'">삭제</button></div></div>';
   }).join(""):'<div class="empty">Replay Lab에서 .osr을 가져오면 자동 기록됩니다.</div>';
 }
-async function relinkReplaySignals(){
-  if(!replaySignalHistory.length)return;
+async function relinkReplaySignals(silent=false){
+  if(!replaySignalHistory.length)return 0;
   const button=$("retryReplayLinks");if(button)button.disabled=true;
   let changed=0;
   try{
@@ -1640,7 +1647,8 @@ async function relinkReplaySignals(){
       }catch(err){console.warn("Replay relink failed",err);}
     }
     if(changed)persistReplaySignals();renderReplaySignals();
-    alert(changed?"리플레이 "+changed+"개 맵 연결을 갱신했습니다.":"새로 연결된 리플레이가 없습니다.");
+    if(!silent)alert(changed?"리플레이 "+changed+"개 맵 연결을 갱신했습니다.":"새로 연결된 리플레이가 없습니다.");
+    return changed;
   }finally{if(button)button.disabled=false;}
 }
 $("retryReplayLinks")?.addEventListener("click",relinkReplaySignals);
