@@ -19,6 +19,13 @@ let indexedGeneration = 0;
 let indexedLoadedKey = "";
 let indexedLoadPromise = null;
 let indexedSearchTimer = null;
+let lastFilteredRows = [];
+const compareMaps = new Map();
+try {
+  const savedCompare = JSON.parse(localStorage.getItem("osl-ranked-compare") || "[]");
+  if (Array.isArray(savedCompare)) for (const m of savedCompare.slice(0,4))
+    if (m?.beatmap_id) compareMaps.set(String(m.beatmap_id), m);
+} catch (_) {}
 
 try {
   const saved = JSON.parse(localStorage.getItem("osl-ranked-index") || "[]");
@@ -445,43 +452,67 @@ function renderRecentPreview() {
     '<span class="recent-sr">★' + Number(m.official_sr || 0).toFixed(2) +
     '</span></div>').join("") : '<div class="empty">최근 Ranked 데이터가 아직 없습니다.</div>';
 }
+function rankedLengthMatch(seconds, mode) {
+  const n=Number(seconds||0);
+  if(mode==="lt60") return n<60;
+  if(mode==="60-120") return n>=60&&n<120;
+  if(mode==="120-180") return n>=120&&n<180;
+  if(mode==="180-300") return n>=180&&n<300;
+  if(mode==="gte300") return n>=300;
+  return true;
+}
 function renderIndexed() {
-  const q = $("indexedQuery").value.trim().toLocaleLowerCase();
-  const minSr = Number($("indexedMinSr")?.value || 0), minBpm = Number($("indexedMinBpm")?.value || 0);
-  const rows = rankedIndex.filter(m => (!$('dnaOnly').checked || Boolean(m.dna?.skills)) &&
-    Number(m.official_sr || 0) >= minSr && Number(m.bpm || 0) >= minBpm && (!q ||
-    [m.artist, m.title, m.creator, m.version, m.beatmap_id].some(v =>
-      String(v ?? "").toLocaleLowerCase().includes(q))));
-  const sort = $("indexedSort").value;
-  const numeric = (m, field) => Number(m[field]) || 0;
-  rows.sort((a, b) => {
-    if (sort.startsWith("dna_")) {const k=sort.slice(4);return numeric(b.dna?.skills||{},k)-numeric(a.dna?.skills||{},k);}
-    if (sort === "sr_asc") return numeric(a, "official_sr") - numeric(b, "official_sr");
-    if (sort === "recent") return String(b.ranked_date || "").localeCompare(String(a.ranked_date || ""));
-    if (sort === "bpm_desc") return numeric(b, "bpm") - numeric(a, "bpm");
-    if (sort === "plays") return numeric(b, "playcount") - numeric(a, "playcount");
-    return numeric(b, "official_sr") - numeric(a, "official_sr");
+  const q = ($("indexedQuery")?.value || "").trim().toLocaleLowerCase();
+  const minSr=Number($("indexedMinSr")?.value||0), maxSr=Number($("indexedMaxSr")?.value||0);
+  const minBpm=Number($("indexedMinBpm")?.value||0), maxBpm=Number($("indexedMaxBpm")?.value||0);
+  const minAr=Number($("indexedMinAr")?.value||0), minOd=Number($("indexedMinOd")?.value||0);
+  const lengthMode=$("indexedLength")?.value||"all", status=$("indexedStatus")?.value||"all";
+  const dnaOnly=Boolean($("dnaOnly")?.checked);
+  const rows = rankedIndex.filter(m => {
+    const sr=Number(m.official_sr||0), bpm=Number(m.bpm||0), ar=Number(m.ar||0), od=Number(m.od||0);
+    if(dnaOnly&&!m.dna?.skills)return false;
+    if(sr<minSr||(maxSr&&sr>maxSr)||bpm<minBpm||(maxBpm&&bpm>maxBpm)||ar<minAr||od<minOd)return false;
+    if(status!=="all"&&String(m.status||"").toLowerCase()!==status)return false;
+    if(!rankedLengthMatch(m.total_length,lengthMode))return false;
+    return !q || [m.artist,m.title,m.creator,m.version,m.beatmap_id,m.beatmapset_id].some(v=>String(v??"").toLocaleLowerCase().includes(q));
   });
-  $("indexedCount").textContent = ct(rows.length) + " / " + ct(rankedIndex.length) +
-    "채보 · 현재 로드한 연도/미리보기 기준";
-  const rs = $("rankedResultSummary");
-  if (rs) {
-    const avgSr = rows.length ? rows.reduce((n,m)=>n+Number(m.official_sr||0),0)/rows.length : 0;
-    const avgBpm = rows.length ? rows.reduce((n,m)=>n+Number(m.bpm||0),0)/rows.length : 0;
-    rs.innerHTML = '<span><b>' + ct(rows.length) + '</b> 결과</span><span>평균 <b>★' +
-      avgSr.toFixed(2) + '</b></span><span>평균 <b>' + avgBpm.toFixed(0) + ' BPM</b></span>';
+  const sort = $("indexedSort")?.value || "sr_desc";
+  const numeric=(m,field)=>Number(m?.[field])||0;
+  rows.sort((a,b)=>{
+    if(sort.startsWith("dna_")){const k=sort.slice(4);return numeric(b.dna?.skills||{},k)-numeric(a.dna?.skills||{},k);}
+    if(sort==="sr_asc")return numeric(a,"official_sr")-numeric(b,"official_sr");
+    if(sort==="recent")return String(b.ranked_date||"").localeCompare(String(a.ranked_date||""));
+    if(sort==="bpm_desc")return numeric(b,"bpm")-numeric(a,"bpm");
+    if(sort==="plays")return numeric(b,"playcount")-numeric(a,"playcount");
+    if(sort==="length_desc")return numeric(b,"total_length")-numeric(a,"total_length");
+    if(sort==="ar_desc")return numeric(b,"ar")-numeric(a,"ar");
+    if(sort==="od_desc")return numeric(b,"od")-numeric(a,"od");
+    return numeric(b,"official_sr")-numeric(a,"official_sr");
+  });
+  lastFilteredRows=rows;
+  const countEl=$("indexedCount");
+  if(countEl) countEl.textContent=ct(rows.length)+" / "+ct(rankedIndex.length)+"채보 · 현재 로드 범위";
+  const rs=$("rankedResultSummary");
+  if(rs){
+    const avg=(field)=>rows.length?rows.reduce((n,m)=>n+Number(m[field]||0),0)/rows.length:0;
+    const srVals=rows.map(m=>Number(m.official_sr||0)).filter(Number.isFinite);
+    rs.innerHTML='<span><b>'+ct(rows.length)+'</b> 결과</span><span>평균 <b>★'+avg("official_sr").toFixed(2)+'</b></span>'+
+      '<span>평균 <b>'+avg("bpm").toFixed(0)+' BPM</b></span>'+
+      (srVals.length?'<span>범위 <b>★'+Math.min(...srVals).toFixed(2)+'–'+Math.max(...srVals).toFixed(2)+'</b></span>':'');
   }
-  $("indexedList").innerHTML = rows.slice(0, indexedLimit).map(m =>
-    '<div class="dbitem"><b>' + officialMapLink(m) + '</b><div class="muted">' +
-    cx(m.creator) + ' · ★' + Number(m.official_sr || 0).toFixed(2) +
-    ' · ' + Number(m.bpm || 0).toFixed(0) + ' BPM · AR' +
-    cx(m.ar) + ' OD' + cx(m.od) + ' · ' +
-    cx((m.ranked_date || "").slice(0, 10)) + '</div>' +
-    '<button type="button" class="ghost-btn" data-ranked-detail="'+encodeURIComponent(String(m.beatmap_id))+'">상세 분석 ↗</button>' + (m.dna?.skills ? '<button type="button" class="ghost-btn" data-dna-id="' +
-      encodeURIComponent(String(m.beatmap_id)) + '">Chart DNA 자세히 ↗</button>' :
-      '<span class="chip">공식 메타데이터</span>') + '</div>').join("") ||
-    '<div class="empty">검색 결과 없음</div>';
-  $("indexedMore").style.display = rows.length > indexedLimit ? "block" : "none";
+  const list=$("indexedList");
+  if(list) list.innerHTML=rows.slice(0,indexedLimit).map(m=>{
+    const id=String(m.beatmap_id), selected=compareMaps.has(id);
+    return '<div class="dbitem ranked-result-card"><b>'+officialMapLink(m)+'</b><div class="muted">'+
+      cx(m.creator)+' · ★'+Number(m.official_sr||0).toFixed(2)+' · '+Number(m.bpm||0).toFixed(0)+' BPM · AR'+cx(m.ar)+' OD'+cx(m.od)+
+      ' · '+Math.floor(Number(m.total_length||0)/60)+':'+String(Math.round(Number(m.total_length||0)%60)).padStart(2,"0")+
+      ' · '+cx((m.ranked_date||"").slice(0,10))+'</div><div class="ranked-result-actions">'+
+      '<button type="button" class="ghost-btn" data-ranked-detail="'+encodeURIComponent(id)+'">상세 분석 ↗</button>'+
+      (m.dna?.skills?'<button type="button" class="ghost-btn" data-dna-id="'+encodeURIComponent(id)+'">Chart DNA ↗</button>':'<span class="chip">공식 메타데이터</span>')+
+      '<button type="button" class="ghost-btn compare-toggle '+(selected?"active":"")+'" data-compare-map="'+encodeURIComponent(id)+'">'+(selected?"비교함 ✓":"비교 +")+'</button></div></div>';
+  }).join("")||'<div class="empty">검색 결과 없음 · 필터를 완화해 보세요.</div>';
+  const more=$("indexedMore"); if(more) more.style.display=rows.length>indexedLimit?"block":"none";
+  renderCompareTray();
 }
 function scheduleIndexedRender() {
   clearTimeout(indexedSearchTimer);
@@ -506,6 +537,8 @@ document.querySelectorAll("[data-ranked-jump]").forEach(b => b.addEventListener(
 document.querySelectorAll("[data-ranked-preset]").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll("[data-ranked-preset]").forEach(x=>x.classList.toggle("active",x===b));
   const p=b.dataset.rankedPreset, sr=$("indexedMinSr"), bpm=$("indexedMinBpm"), sort=$("indexedSort");
+  for(const id of ["indexedMaxSr","indexedMaxBpm","indexedMinAr","indexedMinOd"]){const el=$(id);if(el)el.value="0";}
+  if($("indexedLength"))$("indexedLength").value="all";if($("indexedStatus"))$("indexedStatus").value="all";
   if(sr) sr.value = p==="hard" ? "6" : "0";
   if(bpm) bpm.value = p==="fast" ? "200" : "0";
   if(sort) sort.value = p==="popular" ? "plays" : p==="recent" ? "recent" : p==="fast" ? "bpm_desc" : "sr_desc";
@@ -518,6 +551,73 @@ $("dnaOnly")?.addEventListener("change", async () => {
 });
 $("indexedMore")?.addEventListener("click", () => {indexedLimit += 20; renderIndexed();});
 $("indexedYear")?.addEventListener("change", () => {indexedLoadedKey = ""; loadRankedSearch();});
+
+function resetRankedFilters() {
+  const defaults={indexedMinSr:"0",indexedMaxSr:"0",indexedMinBpm:"0",indexedMaxBpm:"0",indexedMinAr:"0",indexedMinOd:"0",indexedLength:"all",indexedStatus:"all",indexedSort:"sr_desc"};
+  for(const [id,value] of Object.entries(defaults)){const el=$(id);if(el)el.value=value;}
+  const dna=$("dnaOnly");if(dna)dna.checked=false;
+  const q=$("indexedQuery");if(q)q.value="";
+  document.querySelectorAll("[data-ranked-preset]").forEach(x=>x.classList.toggle("active",x.dataset.rankedPreset==="all"));
+  indexedLimit=20;renderIndexed();
+}
+function saveCompareMaps(){
+  try{localStorage.setItem("osl-ranked-compare",JSON.stringify([...compareMaps.values()].slice(0,4)));}catch(_){}
+}
+function renderCompareTray(){
+  const tray=$("compareTray"), items=$("compareTrayItems"), count=$("compareCount");
+  if(count)count.textContent=String(compareMaps.size);
+  if(!tray||!items)return;
+  tray.hidden=compareMaps.size===0;
+  items.innerHTML=[...compareMaps.values()].map(m=>'<button type="button" class="compare-chip" data-compare-remove="'+encodeURIComponent(String(m.beatmap_id))+'"><span>'+cx(m.title||"?")+'</span><small>★'+Number(m.official_sr||0).toFixed(2)+' · '+Number(m.bpm||0).toFixed(0)+' BPM</small><b>×</b></button>').join("");
+}
+function toggleCompareMap(map){
+  if(!map?.beatmap_id)return;
+  const id=String(map.beatmap_id);
+  if(compareMaps.has(id))compareMaps.delete(id);
+  else{
+    if(compareMaps.size>=4){alert("채보 비교는 최대 4개까지 가능합니다.");return;}
+    compareMaps.set(id,{...map});
+  }
+  saveCompareMaps();renderCompareTray();renderIndexed();
+}
+function showCompareMaps(){
+  const maps=[...compareMaps.values()];
+  if(!maps.length){alert("비교할 채보를 먼저 추가해 주세요.");return;}
+  const body=$("chartModalBody"), dialog=$("chartModal");if(!body||!dialog)return;
+  const fields=[
+    ["공식 SR",m=>"★"+Number(m.official_sr||0).toFixed(2)],
+    ["BPM",m=>Number(m.bpm||0).toFixed(1)],
+    ["AR",m=>m.ar??"—"],["OD",m=>m.od??"—"],["CS",m=>m.cs??"—"],["HP",m=>m.hp??"—"],
+    ["길이",m=>Math.floor(Number(m.total_length||0)/60)+"m "+Math.round(Number(m.total_length||0)%60)+"s"],
+    ["플레이",m=>ct(m.playcount)],["Ranked",m=>String(m.ranked_date||"—").slice(0,10)]
+  ];
+  const headers=maps.map((m,i)=>'<th><span>#'+(i+1)+'</span>'+cx(m.title||"?")+'<small>['+cx(m.version||"?")+'] · '+cx(m.creator||"?")+'</small></th>').join("");
+  const rows=fields.map(([name,get])=>'<tr><th>'+cx(name)+'</th>'+maps.map(m=>'<td>'+cx(get(m))+'</td>').join("")+'</tr>').join("");
+  const skillKeys=["aim","stream","speed","stamina","tech","reading","flow","overall"];
+  const dnaRows=skillKeys.map(k=>'<tr><th>DNA '+k.toUpperCase()+'</th>'+maps.map(m=>'<td>'+(m.dna?.skills?.[k]==null?"—":Number(m.dna.skills[k]).toFixed(1))+'</td>').join("")+'</tr>').join("");
+  body.innerHTML='<span class="chart-dna-badge">Ranked Compare · 최대 4채보</span><h2>채보 직접 비교</h2>'+
+    '<div class="compare-table-wrap"><table class="compare-table"><thead><tr><th>항목</th>'+headers+'</tr></thead><tbody>'+rows+dnaRows+'</tbody></table></div>'+
+    '<p class="hint-text">공식 메타데이터는 osu! 수집 DB 기준입니다. DNA 행은 실제 .osu 분석이 완료된 채보에만 표시되며 공식 난이도/pp가 아닙니다.</p>';
+  if(typeof dialog.showModal==="function"&&!dialog.open)dialog.showModal();else dialog.setAttribute("open","");
+}
+for(const id of ["indexedMaxSr","indexedMaxBpm","indexedMinAr","indexedMinOd","indexedLength","indexedStatus"]){
+  $(id)?.addEventListener("change",()=>{indexedLimit=20;renderIndexed();});
+}
+$("resetRankedFilters")?.addEventListener("click",resetRankedFilters);
+$("randomRanked")?.addEventListener("click",()=>{
+  if(!lastFilteredRows.length){alert("현재 필터에 맞는 채보가 없습니다.");return;}
+  showRankedDetails(lastFilteredRows[Math.floor(Math.random()*lastFilteredRows.length)]);
+});
+$("openCompare")?.addEventListener("click",()=>{if(compareMaps.size)showCompareMaps();else $("compareTray")?.scrollIntoView({behavior:"smooth",block:"center"});});
+$("compareNow")?.addEventListener("click",showCompareMaps);
+$("clearCompare")?.addEventListener("click",()=>{compareMaps.clear();saveCompareMaps();renderCompareTray();renderIndexed();});
+document.addEventListener("click",event=>{
+  const add=event.target.closest("[data-compare-map]");
+  if(add){event.preventDefault();const id=decodeURIComponent(add.dataset.compareMap||"");const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id);toggleCompareMap(map);return;}
+  const remove=event.target.closest("[data-compare-remove]");
+  if(remove){event.preventDefault();compareMaps.delete(decodeURIComponent(remove.dataset.compareRemove||""));saveCompareMaps();renderCompareTray();renderIndexed();}
+});
+renderCompareTray();
 
 async function loadLegacyRanked() {
   if (legacyLoaded) return;
