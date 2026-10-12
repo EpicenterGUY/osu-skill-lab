@@ -251,6 +251,11 @@ class UiContractTests(unittest.TestCase):
         self.assertIn("loadDnaOverlayYears", RANKED)
         self.assertIn("chart_dna?.shards", RANKED)
 
+    def test_dna_collector_delay_state_is_visible(self):
+        for token in ("dnaUpdatedMs", "dnaAgeHours", "dnaStaleAfter", "dnaDelayed",
+                      "수집 지연", "예약 실행 지연 가능성", "DNA 갱신"):
+            self.assertIn(token, RANKED)
+
     def test_modal_controls_exist(self):
         self.assertIn('id="chartModal"', HTML)
         self.assertIn('id="chartModalClose"', HTML)
