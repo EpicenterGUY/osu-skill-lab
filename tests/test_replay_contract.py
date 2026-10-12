@@ -26,6 +26,10 @@ class ReplayContractTests(unittest.TestCase):
         self.assertIn("'replay_timestamp'", SERVER)
         self.assertIn("'miss_rate'", SERVER)
 
+    def test_local_pc_server_serves_replay_alignment_frontend(self):
+        for token in ("'/ranked-catalog.js'", "'/mobile-replay.js'", "'/app-shell.css'", "p.startswith('/data/')"):
+            self.assertIn(token, SERVER)
+
     def test_map_features_keep_coordinates_for_pc_alignment(self):
         self.assertIn("'x':o['x'],'y':o['y']", SERVER)
 
