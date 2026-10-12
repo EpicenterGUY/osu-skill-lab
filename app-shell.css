@@ -382,3 +382,23 @@ dialog.chart-modal::backdrop{background:#030812ce;backdrop-filter:blur(6px)}
 .training-journal-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.training-journal-actions .ghost-btn{min-height:34px;padding:7px 9px;font-size:9px}
 @media(max-width:850px){.training-session-footer{grid-template-columns:1fr 1fr}.training-session-footer .training-note-label{grid-column:1/-1}.training-session-footer>button{grid-column:1/-1;width:100%}.training-journal-grid{grid-template-columns:1fr}}
 @media(max-width:600px){.training-activity-chart{gap:3px;overflow-x:auto;padding-bottom:3px}.activity-day{min-width:24px}.training-journal-toolbar{align-items:stretch;flex-direction:column}.training-journal-toolbar>div:last-child{display:grid;grid-template-columns:1fr 1fr}.training-journal-row{grid-template-columns:1fr}.training-journal-actions{justify-content:flex-start}.training-journal-actions .ghost-btn{flex:1 1 120px}}
+
+/* v2.5 Training Insights period comparison */
+.training-insights-card{overflow:hidden}
+.training-insights-controls{display:flex;align-items:end;justify-content:flex-end;gap:8px;margin:8px 0 12px}
+.training-insights-controls label{display:grid;gap:5px;color:#95a9be;font-size:10px;font-weight:760;min-width:130px}
+.training-insights-grid{display:grid;grid-template-columns:1.35fr 1fr 1fr 1fr;gap:10px;margin:12px 0}
+.training-insights-grid>div{min-width:0;padding:12px;border:1px solid #30445b;border-radius:13px;background:#111b29}
+.training-insights-grid h3{margin:0 0 10px;font-size:11px}
+.training-exposure-compare,.training-band-chart,.training-target-mix,.training-feel-mix{display:grid;gap:7px}
+.exposure-compare-row{display:grid;grid-template-columns:58px minmax(70px,1fr) 38px 42px;gap:7px;align-items:center}
+.exposure-compare-row>span{font-size:8px;font-weight:850;color:#b2c5d8}.exposure-compare-row>b{text-align:right;font-size:9px}.exposure-compare-row>small{text-align:right;color:#8fa3b8;font-size:8px}
+.exposure-compare-bars{position:relative;height:12px;border-radius:999px;background:#0d1520;overflow:hidden}
+.exposure-compare-bars i{position:absolute;left:0;border-radius:999px}.exposure-compare-bars .prev{top:7px;height:3px;background:#687890;opacity:.8}.exposure-compare-bars .now{top:2px;height:5px;background:linear-gradient(90deg,#ff8fbd,#8d7cff);z-index:1}
+.training-dist-row{display:grid;grid-template-columns:54px minmax(60px,1fr) 30px;gap:7px;align-items:center}
+.training-dist-row>span{font-size:8px;color:#aabdd0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.training-dist-row>div{height:7px;border-radius:999px;background:#0d1520;overflow:hidden}.training-dist-row>div>i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#7f91ff,#ff8fbd)}.training-dist-row>b{text-align:right;font-size:9px}
+.training-insights-summary{margin-top:10px}
+.training-insight-callouts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.training-insight-callouts>div{padding:11px;border:1px solid #33485f;border-radius:12px;background:#121d2c;min-width:0}.training-insight-callouts span,.training-insight-callouts small{display:block;color:#8fa3b8;font-size:8px}.training-insight-callouts b{display:block;margin:5px 0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:1050px){.training-insights-grid{grid-template-columns:1fr 1fr}.training-insight-callouts{grid-template-columns:1fr 1fr}}
+@media(max-width:650px){.training-insights-controls{align-items:stretch;flex-direction:column}.training-insights-controls label,.training-insights-controls .ghost-btn{width:100%}.training-insights-grid{grid-template-columns:1fr}.training-insight-callouts{grid-template-columns:1fr 1fr}.exposure-compare-row{grid-template-columns:52px minmax(60px,1fr) 34px 38px}}
