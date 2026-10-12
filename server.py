@@ -175,12 +175,29 @@ class H(BaseHTTPRequestHandler):
                 if p=='/api/osu/search': return self.sendj(osu_api.search_ranked(q.get('q',[''])[0],q.get('page',['1'])[0]))
                 return self.sendj({'error':'Not found'},404)
             except Exception as exc: return self.sendj({'error':str(exc)},400)
-        if p in ('/manifest.webmanifest','/sw.js','/mobile-analyzer.js'):
-            fp=BASE/p.lstrip('/');b=fp.read_bytes();ct='application/manifest+json' if p.endswith('.webmanifest') else ('text/javascript; charset=utf-8' if p.endswith('.js') else 'application/octet-stream');self.send_response(200);self.send_header('Content-Type',ct);self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b);return
-        if p=='/version.json':
-            b=(BASE/'version.json').read_bytes();self.send_response(200);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b);return
-        if p not in ('/','/index.html'):self.send_error(404);return
-        b=(BASE/'index.html').read_bytes();self.send_response(200);self.send_header('Content-Type','text/html; charset=utf-8');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b)
+        if p in ('/','/index.html'):
+            fp=BASE/'index.html';ct='text/html; charset=utf-8'
+        elif p.startswith('/data/') and p.endswith('.json'):
+            fp=(BASE/p.lstrip('/')).resolve()
+            data_root=(BASE/'data').resolve()
+            if data_root not in fp.parents:self.send_error(404);return
+            ct='application/json; charset=utf-8'
+        else:
+            allowed={
+                '/manifest.webmanifest':'application/manifest+json',
+                '/sw.js':'text/javascript; charset=utf-8',
+                '/mobile-analyzer.js':'text/javascript; charset=utf-8',
+                '/mobile-replay.js':'text/javascript; charset=utf-8',
+                '/ranked-catalog.js':'text/javascript; charset=utf-8',
+                '/profile.js':'text/javascript; charset=utf-8',
+                '/app-shell.css':'text/css; charset=utf-8',
+                '/version.json':'application/json; charset=utf-8',
+            }
+            ct=allowed.get(p)
+            if not ct:self.send_error(404);return
+            fp=BASE/p.lstrip('/')
+        if not fp.exists() or not fp.is_file():self.send_error(404);return
+        b=fp.read_bytes();self.send_response(200);self.send_header('Content-Type',ct);self.send_header('Cache-Control','no-cache');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b)
     def do_POST(self):
         try:
             n=int(self.headers.get('Content-Length','0'))
@@ -191,7 +208,7 @@ class H(BaseHTTPRequestHandler):
     def log_message(self,*a):pass
 
 def main():
-    s=ThreadingHTTPServer(('127.0.0.1',0),H);u=f'http://127.0.0.1:{s.server_port}';print('osu! Skill Lab Ranked Edition v0.2:',u);threading.Timer(.7,lambda:webbrowser.open(u)).start()
+    s=ThreadingHTTPServer(('127.0.0.1',0),H);u=f'http://127.0.0.1:{s.server_port}';print('osu! Skill Lab local PC server:',u);threading.Timer(.7,lambda:webbrowser.open(u)).start()
     try:s.serve_forever()
     except KeyboardInterrupt:pass
 if __name__=='__main__':main()
