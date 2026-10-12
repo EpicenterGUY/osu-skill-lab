@@ -2256,6 +2256,125 @@ $("copyReplayRepeatRegions")?.addEventListener("click",async()=>{
   catch(_){prompt("Repeat Region 리포트를 복사하세요.",report);}
 });
 
+function failureStructureData(){
+  const scope=$("failureStructureScope")?.value||"all",minAlignments=Math.max(2,Number($("failureStructureMinAlignments")?.value||2));
+  const now=Date.now(),cutoff=scope==="all"?null:now-Number(scope)*86400000;
+  const eligible=replaySignalHistory.filter(r=>{
+    if(!r.alignment?.supported)return false;
+    if(cutoff==null)return true;
+    const t=Date.parse(r.played_at||r.imported_at||"");return Number.isFinite(t)&&t>=cutoff;
+  });
+  const groups=new Map();
+  for(const record of eligible){
+    const hash=String(record.map_hash||record.alignment?.checksum||"").toLowerCase();if(!hash)continue;
+    const key=hash+"|"+Number(record.mods||0);
+    if(!groups.has(key))groups.set(key,{key,hash,mods:Number(record.mods||0),records:[]});
+    groups.get(key).records.push(record);
+  }
+  const usable=[...groups.values()].filter(g=>g.records.length>=minAlignments);
+  const windows=[];
+  for(const group of usable){
+    group.records.sort((a,b)=>Date.parse(a.played_at||a.imported_at||0)-Date.parse(b.played_at||b.imported_at||0));
+    const buckets=new Map();
+    group.records.forEach((record,index)=>{
+      for(const region of record.alignment?.regions||[]){
+        const start=Math.round(Number(region.start||0)/10000)*10000,key=String(start);
+        if(!buckets.has(key))buckets.set(key,{start,end:start+10000,presence:Array(group.records.length).fill(false),fingerprints:[],scores:[],unmatched:[],residuals:[],strains:[]});
+        const b=buckets.get(key);b.presence[index]=true;b.fingerprints.push(replayStoredFingerprint(region));
+        const score=replayNumeric(region.score);if(Number.isFinite(score))b.scores.push(score);
+        const objects=Number(region.objects||0),miss=Number(region.unmatched||0);if(objects>0)b.unmatched.push(miss/objects*100);
+        const residual=replayNumeric(region.mean_abs_ms);if(Number.isFinite(residual))b.residuals.push(residual);
+        const strain=replayNumeric(region.strain);if(Number.isFinite(strain))b.strains.push(strain);
+      }
+    });
+    const mean=xs=>xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:null;
+    const record=group.records.at(-1),map=replayDisplayMap(record);
+    for(const bucket of buckets.values()){
+      const count=bucket.presence.filter(Boolean).length;if(count<2)continue;
+      const recurrence=count/group.records.length,fingerprint=replayAggregateFingerprints(bucket.fingerprints),longest=replayLongestPresence(bucket.presence);
+      const avgScore=mean(bucket.scores),avgUnmatched=mean(bucket.unmatched),avgResidual=mean(bucket.residuals),avgStrain=mean(bucket.strains);
+      const repeatScore=recurrence*70+(Number.isFinite(avgScore)?avgScore*.25:0)+Math.min(5,longest)*2;
+      windows.push({
+        group_key:group.key,hash:group.hash,mods:group.mods,group_size:group.records.length,map,record,start:bucket.start,end:bucket.end,count,recurrence,longest,
+        fingerprint,avgScore,avgUnmatched,avgResidual,avgStrain,repeatScore
+      });
+    }
+  }
+  const structures=new Map();
+  for(const w of windows){
+    const key=w.fingerprint?.primary||"mixed";
+    if(!structures.has(key))structures.set(key,{key,label:replayFingerprintLabel(key),windows:[],groups:new Set(),maps:new Set(),recurrence:[],scores:[],unmatched:[],residuals:[],detailed:0});
+    const s=structures.get(key);s.windows.push(w);s.groups.add(w.group_key);
+    if(w.map?.beatmap_id)s.maps.add(String(w.map.beatmap_id));else s.maps.add(w.hash);
+    s.recurrence.push(w.recurrence);if(Number.isFinite(w.avgScore))s.scores.push(w.avgScore);if(Number.isFinite(w.avgUnmatched))s.unmatched.push(w.avgUnmatched);if(Number.isFinite(w.avgResidual))s.residuals.push(w.avgResidual);
+    if(Number(w.fingerprint?.detailed_samples||0)>0)s.detailed++;
+  }
+  const avg=xs=>xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:null;
+  const rows=[...structures.values()].map(s=>({
+    ...s,count:s.windows.length,group_count:s.groups.size,map_count:s.maps.size,
+    avg_recurrence:avg(s.recurrence),avg_score:avg(s.scores),avg_unmatched:avg(s.unmatched),avg_residual:avg(s.residuals),
+    detailed_pct:s.windows.length?s.detailed/s.windows.length*100:0
+  })).sort((a,b)=>b.count-a.count||Number(b.avg_recurrence||0)-Number(a.avg_recurrence||0));
+  const detailed=windows.filter(w=>Number(w.fingerprint?.detailed_samples||0)>0).length;
+  const topExamples=[...windows].sort((a,b)=>b.repeatScore-a.repeatScore||b.recurrence-a.recurrence).slice(0,10);
+  return {scope,minAlignments,eligible,groups:usable,windows,rows,detailed,topExamples};
+}
+function renderFailureStructureProfile(){
+  const kpis=$("failureStructureKpis"),summary=$("failureStructureSummary"),bars=$("failureStructureBars"),table=$("failureStructureTable"),examples=$("failureStructureExamples");
+  if(!kpis||!summary||!bars||!table||!examples)return;
+  const data=failureStructureData(),top=data.rows[0],windowCount=data.windows.length,detailedPct=windowCount?data.detailed/windowCount*100:0;
+  kpis.innerHTML='<div class="dash-kpi"><span>비교 그룹</span><b>'+ct(data.groups.length)+'</b><small>checksum + Mods</small></div>'+
+    '<div class="dash-kpi"><span>반복 후보 창</span><b>'+ct(windowCount)+'</b><small>2회+ 재등장</small></div>'+
+    '<div class="dash-kpi"><span>상세 Fingerprint</span><b>'+Math.round(detailedPct)+'%</b><small>'+data.detailed+'/'+windowCount+' 창</small></div>'+
+    '<div class="dash-kpi"><span>가장 많은 구조</span><b>'+(top?cx(top.label):"—")+'</b><small>'+(top?top.count+"개 후보창":"표본 없음")+'</small></div>';
+  const scopeText=data.scope==="all"?"전체 정렬 기록":"최근 "+data.scope+"일";
+  if(!data.groups.length){
+    summary.innerHTML='<b>집계 표본 부족</b><span>'+cx(scopeText)+'에서 같은 checksum + Mods 정렬이 '+data.minAlignments+'개 이상인 그룹이 필요합니다.</span>';
+    bars.innerHTML='<div class="empty">집계 가능한 반복 후보가 없습니다.</div>';table.innerHTML='<div class="empty">구조별 표본이 없습니다.</div>';examples.innerHTML='<div class="empty">대표 반복 구간이 아직 없습니다.</div>';return;
+  }
+  summary.innerHTML='<b>'+cx(scopeText)+' · '+data.groups.length+'개 비교 그룹</b><span>각 그룹에서 상위 alignment 후보 중 같은 10초 창이 2회 이상 다시 등장한 '+windowCount+'개 창을 구조별로 요약했습니다.</span>'+
+    '<p class="hint-text">그룹 최소 정렬 '+data.minAlignments+'개 · 전체 지원 alignment '+data.eligible.length+'개 · 구조 라벨은 기본 로컬 채보 기준</p>';
+  if(!windowCount){
+    bars.innerHTML='<div class="empty">2회 이상 재등장한 후보 창이 없습니다.</div>';table.innerHTML='<div class="empty">구조별 표본이 없습니다.</div>';examples.innerHTML='<div class="empty">대표 반복 구간이 아직 없습니다.</div>';return;
+  }
+  const maxCount=Math.max(1,...data.rows.map(r=>r.count));
+  bars.innerHTML=data.rows.map(r=>
+    '<button type="button" data-failure-structure="'+cx(r.key)+'"><span>'+cx(r.label)+'</span><div><i style="width:'+(r.count/maxCount*100)+'%"></i></div><b>'+r.count+'</b><small>'+Math.round(r.count/windowCount*100)+'%</small></button>'
+  ).join("");
+  table.innerHTML=data.rows.map(r=>
+    '<div class="failure-structure-row"><div><mark class="fingerprint-primary">'+cx(r.label)+'</mark><b>'+r.count+'개 창</b><small>'+r.group_count+'그룹 · '+r.map_count+'채보</small></div><div><span>평균 재등장</span><b>'+(r.avg_recurrence==null?"—":Math.round(r.avg_recurrence*100)+"%")+'</b></div><div><span>평균 candidate</span><b>'+(r.avg_score==null?"—":r.avg_score.toFixed(1))+'</b></div><div><span>평균 미매칭</span><b>'+(r.avg_unmatched==null?"—":r.avg_unmatched.toFixed(1)+"%")+'</b></div><div><span>상세 지문</span><b>'+Math.round(r.detailed_pct)+'%</b></div></div>'
+  ).join("");
+  examples.innerHTML='<div class="failure-example-head"><b>대표 반복 후보</b><span>repeat score 상위 · 구조 분류 자체가 위험도 순위는 아님</span></div>'+
+    data.topExamples.map((w,i)=>{
+      const map=w.map,label=map?.title?((map.artist||"?")+" — "+map.title+" ["+(map.version||"?")+"]"):("MD5 "+String(w.hash).slice(0,10)+"…"),id=String(map?.beatmap_id||"");
+      return '<div class="failure-example-row"><b>#'+(i+1)+'</b><div><span>'+cx(label)+' · '+cx(replayModsLabel(w.mods))+'</span><strong>'+replayClock(w.start)+'–'+replayClock(w.end)+' · '+cx(w.fingerprint?.label||replayFingerprintLabel(w.fingerprint?.primary))+'</strong><small>'+w.count+'/'+w.group_size+'회 · 재등장 '+Math.round(w.recurrence*100)+'% · candidate '+(w.avgScore==null?"—":w.avgScore.toFixed(1))+(w.avgUnmatched==null?"":" · 미매칭 "+w.avgUnmatched.toFixed(1)+"%")+'</small></div>'+(id?'<button type="button" class="ghost-btn" data-ranked-detail="'+encodeURIComponent(id)+'">채보</button>':'')+'</div>';
+    }).join("");
+}
+function failureStructureReportText(){
+  const data=failureStructureData();if(!data.groups.length)return "";
+  const scopeText=data.scope==="all"?"전체 정렬 기록":"최근 "+data.scope+"일",lines=[
+    "osu! Skill Lab Failure Structure Profile",
+    scopeText+" · 비교 그룹 "+data.groups.length+" · 반복 후보 창 "+data.windows.length,
+    "분모: 각 checksum+Mods 그룹에서 alignment 상위 후보로 2회 이상 반복된 10초 창",
+    ""
+  ];
+  for(const r of data.rows)lines.push(r.label+": "+r.count+"개 ("+(data.windows.length?Math.round(r.count/data.windows.length*100):0)+"%) · "+r.group_count+"그룹 · 평균 재등장 "+(r.avg_recurrence==null?"—":Math.round(r.avg_recurrence*100)+"%")+" · 평균 candidate "+(r.avg_score==null?"—":r.avg_score.toFixed(1)));
+  lines.push("","※ 이 구성은 저장된 반복 anomaly 후보의 구조 분포이며 전체 플레이 시간, 실패 확률, 개인 약점 또는 인과관계를 뜻하지 않습니다.");
+  return lines.join("\n");
+}
+$("failureStructureScope")?.addEventListener("change",renderFailureStructureProfile);
+$("failureStructureMinAlignments")?.addEventListener("change",renderFailureStructureProfile);
+$("copyFailureStructureProfile")?.addEventListener("click",async()=>{
+  const report=failureStructureReportText();if(!report){alert("복사할 Failure Structure Profile 표본이 없습니다.");return;}
+  try{await navigator.clipboard.writeText(report);alert("Failure Structure Profile을 복사했습니다.");}
+  catch(_){prompt("Failure Structure Profile을 복사하세요.",report);}
+});
+document.addEventListener("click",event=>{
+  const b=event.target.closest("[data-failure-structure]");if(!b)return;
+  const filter=b.dataset.failureStructure||"all",select=$("replayFingerprintFilter");
+  if(select&&[...select.options].some(o=>o.value===filter)){select.value=filter;renderReplayRepeatRegions();$("replayRepeatRegionSummary")?.scrollIntoView({behavior:"smooth",block:"center"});}
+});
+
 function replayAlignmentReportText(){
   const id=$("replayAlignmentSelect")?.value,record=replaySignalHistory.find(r=>String(r.id)===String(id)&&r.alignment?.supported);
   if(!record)return "";
@@ -2329,6 +2448,7 @@ function renderReplaySignals(){
   }).join(""):'<div class="empty">Replay Lab에서 .osr을 가져오면 자동 기록됩니다.</div>';
   renderReplayTrendLab();
   renderReplayAlignmentLab();
+  renderFailureStructureProfile();
 }
 async function relinkReplaySignals(silent=false){
   if(!replaySignalHistory.length)return 0;
