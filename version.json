@@ -1,7 +1,7 @@
 {
-  "version": "2.7.0",
+  "version": "2.8.0",
   "channel": "ranked",
-  "name": "Training Journal",
+  "name": "Training Insights",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -51,6 +51,10 @@
     "7-day completion KPIs, 14-day activity bars and 28-day Chart DNA exposure averages",
     "Optional session feel and notes with JSON journal export/import",
     "Feedback-adaptive SR band suggestion that moves conservatively from prior explicit session feedback",
-    "Recorded training sessions can restore their Practice Route configuration"
+    "Recorded training sessions can restore their Practice Route configuration",
+    "Training Insights compares the latest 7, 28 or 90 days against the immediately previous equal-length period",
+    "Period KPIs for completed maps, activity days, recorded sessions and average official SR exposure",
+    "Current-versus-previous Chart DNA exposure bars plus SR-band, target-skill and explicit feel distributions",
+    "Copyable local training report that explicitly avoids performance or skill-improvement claims"
   ]
 }
