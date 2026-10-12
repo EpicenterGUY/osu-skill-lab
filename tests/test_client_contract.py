@@ -68,6 +68,18 @@ class ClientContractTests(unittest.TestCase):
         self.assertIn("cfg.pop('songs_path',None)", SERVER)
         self.assertNotIn("client_json_write(CLIENT_CONFIG,{})", SERVER)
 
+    def test_verified_self_updater_is_restricted_and_recoverable(self):
+        for token in ("UPDATE_RAW_BASE='https://raw.githubusercontent.com/EpicenterGUY/osu-skill-lab/main/'",
+                      "UPDATE_FILES=", "client_fetch_update_manifest", "client_git_blob_sha",
+                      "client_update_worker", "client_prune_backups", "os.replace(temp_target,target)",
+                      "업데이트 실패 · 기존 파일 유지/복구"):
+            self.assertIn(token, SERVER)
+        for endpoint in ("/api/client/update/status", "/api/client/update/check", "/api/client/update/apply"):
+            self.assertIn(endpoint, SERVER)
+        self.assertIn("if path not in UPDATE_FILES", SERVER)
+        self.assertIn("client_git_blob_sha(blob)!=row['git_blob_sha']", SERVER)
+        self.assertIn("restart_required", SERVER)
+
     def test_browser_replay_watch_is_explicitly_tab_open_only(self):
         for token in ("osl-client-replay-watch", "scheduleReplayWatch",
                       "panel?.classList.contains(\"active\")", "12000",
