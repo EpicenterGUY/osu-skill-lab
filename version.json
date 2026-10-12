@@ -1,7 +1,7 @@
 {
-  "version": "2.16.0",
-  "channel": "client",
-  "name": "OSL Client Bridge",
+  "version": "2.17.0",
+  "channel": "data",
+  "name": "DNA Backfill Throughput",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -99,6 +99,11 @@
     "Local Library Search can analyze an indexed .osu directly into existing Chart X-Ray and Skill DNA without a file picker",
     "Client scan runs in a background server thread with live scanned, updated, reused and error counters",
     "Indexed file analysis is constrained to the configured Songs root and the server remains bound to 127.0.0.1",
-    "GitHub Pages keeps the Client UI read-only and never attempts local file-system access"
+    "GitHub Pages keeps the Client UI read-only and never attempts local file-system access",
+    "Healthy Chart DNA backfill batches can target up to 2200 charts while preserving the one-request-per-second cap",
+    "Chart DNA CI time budget increases from 32 to 40 minutes only for the same capped request cadence",
+    "Method-ineligible too-short charts are marked terminal and skipped instead of being re-requested indefinitely",
+    "Ranked summary now exposes unsupported, resolved, remaining and successful-request-throughput DNA metrics",
+    "Adaptive DNA batches cool down to smaller targets when the prior run was blocked or had lower success"
   ]
 }
