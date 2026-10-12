@@ -44,6 +44,15 @@ class ClientContractTests(unittest.TestCase):
             self.assertIn(endpoint, SERVER)
         self.assertIn("Replay 폴더 밖의 파일은 읽지 않습니다.", SERVER)
 
+    def test_background_dna_queue_is_local_and_bounded(self):
+        for token in ("CREATE TABLE IF NOT EXISTS dna_cache", "client_dna_worker", "client_start_dna",
+                      "client_stop_dna", "client_dna_counts", "min(5000"):
+            self.assertIn(token, SERVER)
+        for endpoint in ("/api/client/dna/status", "/api/client/dna/start", "/api/client/dna/stop"):
+            self.assertIn(endpoint, SERVER)
+        self.assertIn("root not in path.parents", SERVER)
+        self.assertIn("summary_json", SERVER)
+
     def test_browser_replay_watch_is_explicitly_tab_open_only(self):
         for token in ("osl-client-replay-watch", "scheduleReplayWatch",
                       "panel?.classList.contains(\"active\")", "12000",
@@ -54,6 +63,9 @@ class ClientContractTests(unittest.TestCase):
         self.assertIn('location.hostname.endsWith(".github.io")', CLIENT)
         self.assertIn("GitHub Pages · OSL Client Bridge 비활성", CLIENT)
         self.assertIn("OSLClientAcceptMap", CLIENT)
+        for token in ("renderDnaStatus", "startDna", "stopDna", "dominantDna",
+                      "/api/client/dna/start", "/api/client/dna/stop"):
+            self.assertIn(token, CLIENT)
 
     def test_pwa_shell_includes_client_bridge(self):
         self.assertIn("./client-bridge.js", SW)
