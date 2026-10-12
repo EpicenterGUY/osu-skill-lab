@@ -285,7 +285,10 @@ def main():
         if len(candidates)>1800:
             step=max(1,len(candidates)//1800);candidates=candidates[::step][:1800]
         nearest=sorted(((sim_dist(target,m),m) for m in candidates),key=lambda x:x[0])[:8]
-        similarity_targets[str(target["beatmap_id"])]=[{"beatmap_id":m.get("beatmap_id"),"distance":round(d,3)} for d,m in nearest]
+        similarity_targets[str(target["beatmap_id"])]=[
+            {"beatmap_id":m.get("beatmap_id"),"year":date_year(m),"distance":round(d,3)}
+            for d,m in nearest
+        ]
     # Metadata oddities are useful before full DNA coverage exists.
     oddities = []
     for m in values:
