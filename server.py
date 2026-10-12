@@ -2,7 +2,8 @@
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
-import struct,lzma,json,math,statistics,webbrowser,threading,hashlib,os,sqlite3,time,uuid
+from urllib.request import Request, urlopen
+import struct,lzma,json,math,statistics,webbrowser,threading,hashlib,os,sqlite3,time,uuid,shutil
 from datetime import datetime, timezone
 import osu_api
 BASE=Path(__file__).resolve().parent; MAX_UPLOAD=25*1024*1024
@@ -19,6 +20,12 @@ CLIENT_DNA={'running':False,'processed':0,'analyzed':0,'errors':0,'limit':0,'rem
 CLIENT_WATCH_LOCK=threading.Lock()
 CLIENT_WATCH_WAKE=threading.Event()
 CLIENT_WATCH={'thread_running':False,'enabled':False,'interval_s':30,'last_check':None,'last_change':None,'checks':0,'triggered_scans':0,'message':'대기 중'}
+UPDATE_RAW_BASE='https://raw.githubusercontent.com/EpicenterGUY/osu-skill-lab/main/'
+UPDATE_MANIFEST_URL=UPDATE_RAW_BASE+'client-update-manifest.json'
+UPDATE_FILES=('server.py','osu_api.py','index.html','app-shell.css','ranked-catalog.js','profile.js','client-bridge.js','mobile-analyzer.js','mobile-replay.js','manifest.webmanifest','sw.js','version.json','실행.bat')
+CLIENT_UPDATE_LOCK=threading.Lock()
+CLIENT_UPDATE={'checking':False,'applying':False,'remote_version':None,'update_available':False,'restart_required':False,
+  'checked_at':None,'applied_at':None,'progress_done':0,'progress_total':0,'last_backup':None,'message':'업데이트 확인 전'}
 
 def client_now():
     return datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
@@ -32,6 +39,149 @@ def client_json_write(path,data):
     tmp=path.with_suffix(path.suffix+'.tmp')
     tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8')
     tmp.replace(path)
+
+def client_version_parts(value):
+    out=[]
+    for part in str(value or '0').split('.')[:3]:
+        clean=part.split('-',1)[0].split('+',1)[0]
+        try:out.append(int(clean))
+        except:out.append(0)
+    while len(out)<3:out.append(0)
+    return tuple(out)
+
+def client_local_version():
+    return str(client_json_read(BASE/'version.json',{}).get('version') or '0.0.0')
+
+def client_update_status():
+    with CLIENT_UPDATE_LOCK:state=dict(CLIENT_UPDATE)
+    state['local_version']=client_local_version()
+    return state
+
+def client_fetch_update_bytes(url,max_bytes=8*1024*1024):
+    if not str(url).startswith(UPDATE_RAW_BASE):raise ValueError('허용되지 않은 업데이트 출처입니다.')
+    req=Request(url,headers={'User-Agent':'osu-skill-lab-client-updater/1.0','Accept':'application/octet-stream'})
+    with urlopen(req,timeout=18) as response:
+        final=str(response.geturl())
+        if not final.startswith(UPDATE_RAW_BASE):raise ValueError('업데이트 다운로드가 허용되지 않은 주소로 이동했습니다.')
+        if getattr(response,'status',200)!=200:raise ValueError('업데이트 다운로드 HTTP '+str(getattr(response,'status','?')))
+        blob=response.read(max_bytes+1)
+    if len(blob)>max_bytes:raise ValueError('업데이트 파일이 허용 크기를 초과했습니다.')
+    return blob
+
+def client_git_blob_sha(blob):
+    return hashlib.sha1(b'blob '+str(len(blob)).encode()+b'\0'+blob).hexdigest()
+
+def client_validate_update_manifest(manifest):
+    if not isinstance(manifest,dict) or manifest.get('format')!='osu-skill-lab-client-update':
+        raise ValueError('지원하지 않는 업데이트 manifest입니다.')
+    version=str(manifest.get('version') or '').strip()
+    if not version:raise ValueError('업데이트 버전이 없습니다.')
+    rows=manifest.get('files')
+    if not isinstance(rows,list) or not rows or len(rows)>len(UPDATE_FILES):
+        raise ValueError('업데이트 파일 목록이 올바르지 않습니다.')
+    clean=[];seen=set()
+    for row in rows:
+        if not isinstance(row,dict):raise ValueError('업데이트 파일 항목이 올바르지 않습니다.')
+        path=str(row.get('path') or '')
+        sha=str(row.get('git_blob_sha') or '').lower()
+        try:size=int(row.get('size'))
+        except:raise ValueError('업데이트 파일 크기가 올바르지 않습니다.')
+        if path not in UPDATE_FILES or path in seen:raise ValueError('허용되지 않은 업데이트 파일: '+path)
+        if len(sha)!=40 or any(ch not in '0123456789abcdef' for ch in sha):raise ValueError('업데이트 해시가 올바르지 않습니다: '+path)
+        if size<0 or size>8*1024*1024:raise ValueError('업데이트 파일 크기 제한 초과: '+path)
+        clean.append({'path':path,'git_blob_sha':sha,'size':size});seen.add(path)
+    if 'server.py' not in seen or 'version.json' not in seen:
+        raise ValueError('핵심 Client 파일이 업데이트 목록에서 누락되었습니다.')
+    return {'version':version,'files':clean}
+
+def client_fetch_update_manifest():
+    raw=client_fetch_update_bytes(UPDATE_MANIFEST_URL,512*1024)
+    try:data=json.loads(raw.decode('utf-8'))
+    except Exception as exc:raise ValueError('업데이트 manifest JSON을 읽지 못했습니다.') from exc
+    return client_validate_update_manifest(data)
+
+def client_check_update():
+    with CLIENT_UPDATE_LOCK:
+        if CLIENT_UPDATE['applying']:return client_update_status()
+        CLIENT_UPDATE.update({'checking':True,'message':'GitHub 최신 버전 확인 중…'})
+    try:
+        manifest=client_fetch_update_manifest();local=client_local_version();remote=manifest['version']
+        available=client_version_parts(remote)>client_version_parts(local)
+        with CLIENT_UPDATE_LOCK:
+            CLIENT_UPDATE.update({'remote_version':remote,'update_available':available,'checked_at':client_now(),
+              'message':('새 버전 '+remote+' 사용 가능' if available else '현재 최신 버전입니다.')})
+    except Exception as exc:
+        with CLIENT_UPDATE_LOCK:CLIENT_UPDATE['message']='업데이트 확인 실패: '+str(exc)
+        raise
+    finally:
+        with CLIENT_UPDATE_LOCK:CLIENT_UPDATE['checking']=False
+    return client_update_status()
+
+def client_prune_backups():
+    root=CLIENT_HOME/'backups'
+    if not root.exists():return
+    dirs=sorted((p for p in root.iterdir() if p.is_dir()),key=lambda p:p.stat().st_mtime,reverse=True)
+    for old in dirs[3:]:
+        shutil.rmtree(old,ignore_errors=True)
+
+def client_update_worker():
+    stage=None
+    with CLIENT_UPDATE_LOCK:
+        CLIENT_UPDATE.update({'applying':True,'checking':False,'progress_done':0,'progress_total':0,'message':'업데이트 준비 중…'})
+    try:
+        manifest=client_fetch_update_manifest();remote=manifest['version'];local=client_local_version()
+        if client_version_parts(remote)<=client_version_parts(local):
+            with CLIENT_UPDATE_LOCK:
+                CLIENT_UPDATE.update({'remote_version':remote,'update_available':False,'message':'이미 최신 버전입니다.'})
+            return
+        token=uuid.uuid4().hex
+        stage=CLIENT_HOME/'updates'/('stage-'+token);stage.mkdir(parents=True,exist_ok=False)
+        rows=manifest['files']
+        with CLIENT_UPDATE_LOCK:
+            CLIENT_UPDATE.update({'remote_version':remote,'update_available':True,'progress_total':len(rows),'message':'업데이트 파일 검증 중…'})
+        for i,row in enumerate(rows,1):
+            blob=client_fetch_update_bytes(UPDATE_RAW_BASE+row['path'])
+            if len(blob)!=row['size']:raise ValueError('업데이트 파일 크기 불일치: '+row['path'])
+            if client_git_blob_sha(blob)!=row['git_blob_sha']:raise ValueError('업데이트 파일 해시 불일치: '+row['path'])
+            out=stage/row['path'];out.write_bytes(blob)
+            with CLIENT_UPDATE_LOCK:
+                CLIENT_UPDATE.update({'progress_done':i,'message':f'다운로드/검증 {i}/{len(rows)} · '+row['path']})
+        stamp=datetime.now().strftime('%Y%m%d-%H%M%S')
+        backup=CLIENT_HOME/'backups'/(stamp+'-'+local);backup.mkdir(parents=True,exist_ok=False)
+        order=[row['path'] for row in rows if row['path']!='server.py']+['server.py']
+        replaced=[]
+        try:
+            for path in order:
+                target=(BASE/path).resolve()
+                if target.parent!=BASE.resolve():raise ValueError('업데이트 대상 경로 검증 실패: '+path)
+                source=stage/path
+                old=backup/path
+                if target.exists():shutil.copy2(target,old)
+                source.replace(target);replaced.append(path)
+        except Exception:
+            for path in reversed(replaced):
+                target=BASE/path;old=backup/path
+                try:
+                    if old.exists():shutil.copy2(old,target)
+                    elif target.exists():target.unlink()
+                except:pass
+            raise
+        client_prune_backups()
+        with CLIENT_UPDATE_LOCK:
+            CLIENT_UPDATE.update({'update_available':False,'restart_required':True,'applied_at':client_now(),
+              'last_backup':str(backup),'message':'업데이트 설치 완료 · OSL Client를 재시작해 주세요.'})
+    except Exception as exc:
+        with CLIENT_UPDATE_LOCK:CLIENT_UPDATE['message']='업데이트 실패 · 기존 파일 유지/복구: '+str(exc)
+    finally:
+        if stage is not None:shutil.rmtree(stage,ignore_errors=True)
+        with CLIENT_UPDATE_LOCK:CLIENT_UPDATE['applying']=False
+
+def client_start_update():
+    with CLIENT_UPDATE_LOCK:
+        if CLIENT_UPDATE['applying']:return {'ok':True,'started':False,'update':client_update_status()}
+        CLIENT_UPDATE['message']='업데이트 시작 중…'
+    threading.Thread(target=client_update_worker,daemon=True,name='osl-self-updater').start()
+    return {'ok':True,'started':True,'update':client_update_status()}
 
 def client_watch_settings():
     cfg=client_json_read(CLIENT_CONFIG,{})
@@ -487,8 +637,8 @@ def client_status():
     with CLIENT_REPLAY_LOCK:replay_scan=dict(CLIENT_REPLAY_SCAN)
     with CLIENT_DNA_LOCK:dna=dict(CLIENT_DNA)
     dna.update({'cached':dna_cached,'remaining':dna_remaining,'last_run':last_dna_run})
-    watch=client_watch_status()
-    return {'local_server':True,'client_version':'0.4.0','songs_path':str(root) if root else None,'path_source':source,'path_exists':bool(root),'maps':count,'beatmapsets':sets,'last_scan':last_scan,'scan':scan,'dna':dna,'watch':watch,
+    watch=client_watch_status();update=client_update_status()
+    return {'local_server':True,'client_version':'0.5.0','songs_path':str(root) if root else None,'path_source':source,'path_exists':bool(root),'maps':count,'beatmapsets':sets,'last_scan':last_scan,'scan':scan,'dna':dna,'watch':watch,'update':update,
       'replay_path':str(replay_root) if replay_root else None,'replay_path_source':replay_source,'replay_path_exists':bool(replay_root),'replays':replay_count,'last_replay_scan':last_replay_scan,'replay_scan':replay_scan}
 
 def client_search(q='',limit=40):
@@ -689,7 +839,7 @@ class H(BaseHTTPRequestHandler):
         if p.startswith('/api/'):
             try:
                 q=parse_qs(urlparse(self.path).query)
-                if p=='/api/osu/status': return self.sendj({'configured':osu_api.configured(),'version':'0.4.0'})
+                if p=='/api/osu/status': return self.sendj({'configured':osu_api.configured(),'version':'0.5.0'})
                 if p=='/api/osu/lookup': return self.sendj(osu_api.lookup_md5(q.get('checksum',[''])[0]))
                 if p=='/api/osu/search': return self.sendj(osu_api.search_ranked(q.get('q',[''])[0],q.get('page',['1'])[0]))
                 if p=='/api/client/status': return self.sendj(client_status())
@@ -697,6 +847,7 @@ class H(BaseHTTPRequestHandler):
                 if p=='/api/client/replays': return self.sendj({'replays':client_replay_list(q.get('limit',['30'])[0])})
                 if p=='/api/client/dna/status': return self.sendj(client_status().get('dna',{}))
                 if p=='/api/client/watch/status': return self.sendj(client_watch_status())
+                if p=='/api/client/update/status': return self.sendj(client_update_status())
                 return self.sendj({'error':'Not found'},404)
             except Exception as exc: return self.sendj({'error':str(exc)},400)
         if p in ('/','/index.html'):
@@ -751,6 +902,10 @@ class H(BaseHTTPRequestHandler):
             if p=='/api/client/watch/config':
                 data=json.loads(b.decode('utf-8') or '{}') if b else {}
                 return self.sendj(client_watch_config(data.get('enabled'),data.get('interval_s')))
+            if p=='/api/client/update/check':
+                return self.sendj(client_check_update())
+            if p=='/api/client/update/apply':
+                return self.sendj(client_start_update(),202)
             if p=='/api/client/replays/scan':
                 return self.sendj(client_start_replay_scan(),202)
             if p=='/api/client/replays/config':
