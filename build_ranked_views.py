@@ -276,7 +276,7 @@ def main():
                 row = mini(r)
                 skills = (r.get("dna") or {}).get("skills", {})
                 row["dna_focus"] = round(number(skills.get(skill)), 1)
-                row["dna_overall"] = round(number(skills.get("overall")), 1)
+                row["dna"] = {"skills": {k: round(number(skills.get(k)), 1) for k in skill_names}}
                 picked.append(row)
                 if sid:
                     set_seen.add(sid)
