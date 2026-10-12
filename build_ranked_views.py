@@ -15,6 +15,7 @@ DATA = ROOT / "data"
 RANKED = DATA / "ranked"
 SEARCH = DATA / "ranked-search"
 SUMMARY = DATA / "ranked-summary.json"
+TRAINING_POOLS = DATA / "training-pools.json"
 MANIFEST = DATA / "ranked-manifest.json"
 
 FIELDS = (
@@ -233,6 +234,70 @@ def main():
         dna_rankings[skill] = sorted(
             dna_rows, key=lambda r: number((r.get("dna") or {}).get("skills", {}).get(skill)), reverse=True
         )[:20]
+
+    # Practice Route pools: precompute a small, diverse set of DNA-analyzed maps per
+    # skill and official SR band. Browsers can build useful sessions without scanning
+    # the entire DNA corpus or downloading every year overlay.
+    training_bands = (
+        ("all", 0.0, 99.0),
+        ("3-4", 3.0, 4.0),
+        ("4-5", 4.0, 5.0),
+        ("5-6", 5.0, 6.0),
+        ("6-7", 6.0, 7.0),
+        ("7-8", 7.0, 8.0),
+        ("8-99", 8.0, 99.0),
+    )
+    training_pools = {}
+    training_coverage = {}
+    for skill in skill_names:
+        skill_pools = {}
+        for band, lo, hi in training_bands:
+            candidates = [
+                r for r in dna_rows
+                if lo <= number(r.get("official_sr")) < hi
+            ]
+            training_coverage[f"{skill}:{band}"] = len(candidates)
+            candidates.sort(
+                key=lambda r: (
+                    number((r.get("dna") or {}).get("skills", {}).get(skill)),
+                    number((r.get("dna") or {}).get("skills", {}).get("overall")),
+                    number(r.get("official_sr")),
+                ),
+                reverse=True,
+            )
+            picked, set_seen, mapper_seen = [], set(), Counter()
+            for r in candidates:
+                sid = str(r.get("beatmapset_id") or "")
+                mapper = str(r.get("creator") or "Unknown")
+                if sid and sid in set_seen:
+                    continue
+                if mapper_seen[mapper] >= 3:
+                    continue
+                row = mini(r)
+                skills = (r.get("dna") or {}).get("skills", {})
+                row["dna_focus"] = round(number(skills.get(skill)), 1)
+                row["dna_overall"] = round(number(skills.get("overall")), 1)
+                picked.append(row)
+                if sid:
+                    set_seen.add(sid)
+                mapper_seen[mapper] += 1
+                if len(picked) >= 48:
+                    break
+            skill_pools[band] = picked
+        training_pools[skill] = skill_pools
+    training_payload = {
+        "format": "osu-skill-lab-training-pools",
+        "version": 1,
+        "method": "chart-dna-pilot-v1",
+        "status": "experimental partial coverage",
+        "note": "Practice exposure candidates only; not a player skill or pass-probability model.",
+        "skills": list(skill_names),
+        "bands": [band for band, _, _ in training_bands],
+        "coverage": training_coverage,
+        "pools": training_pools,
+    }
+    publish(TRAINING_POOLS, training_payload)
+    training_pool_version = hashlib.sha256(TRAINING_POOLS.read_bytes()).hexdigest()[:12]
     # Nearest-neighbour pairs in the current analyzed sample. Limit work to a recent/representative window.
     pair_pool = dna_rows[:1500]
     twin_pairs = []
@@ -416,6 +481,12 @@ def main():
             "highest_sr": [searchable(m) for m in sorted(values, key=lambda m:number(m.get("official_sr")), reverse=True)[:8]],
             "highest_bpm": [searchable(m) for m in sorted(values, key=lambda m:number(m.get("bpm")), reverse=True)[:8]],
             "longest": [searchable(m) for m in sorted(values, key=lambda m:number(m.get("total_length")), reverse=True)[:8]],
+        },
+        "training_pool": {
+            "path": "data/training-pools.json",
+            "version": training_pool_version,
+            "rows": sum(len(rows) for skill in training_pools.values() for rows in skill.values()),
+            "status": "experimental partial Chart DNA coverage",
         },
         "research": {
             "dna_rankings": dna_rankings,
