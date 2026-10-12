@@ -1514,7 +1514,111 @@ function renderTrainingJournal(){
     const id=encodeURIComponent(String(session.id||""));
     return '<div class="training-journal-row"><div><span>'+cx(date.toLocaleDateString())+' · '+cx(trainingSessionStatus(session))+'</span><b>'+cx(String(session.skill||"overall").toUpperCase())+' · '+cx(session.band||"all")+' · '+cx(session.mode||"—")+'</b><small>'+done+'/'+total+' 완료 · 체감 '+cx(trainingSessionFeelLabel(session.feel))+(session.note?' · '+cx(session.note):'')+'</small></div><div class="training-journal-actions"><button type="button" class="ghost-btn" data-training-history-replay="'+id+'">조건 다시 사용</button><button type="button" class="ghost-btn" data-training-history-remove="'+id+'">삭제</button></div></div>';
   }).join(""):'<div class="empty">종료한 세션 기록이 없습니다.</div>';
+  renderTrainingInsights();
 }
+function trainingPeriodMetrics(days,offset=0){
+  const now=Date.now(),span=Math.max(1,Number(days)||28)*86400000,end=now-span*offset,start=end-span;
+  const events=trainingSessionEvents(true).filter(e=>e.time>=start&&e.time<end);
+  const sessions=trainingHistory.filter(session=>{
+    const t=Date.parse(session.ended_at||session.created_at||"");return Number.isFinite(t)&&t>=start&&t<end;
+  });
+  const localDayKey=time=>{const d=new Date(time);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
+  const activeDays=new Set(events.map(e=>localDayKey(e.time))).size;
+  const minutes=Math.round(events.reduce((n,e)=>n+Number(e.map?.total_length||0),0)/60);
+  const srValues=events.map(e=>Number(e.map?.official_sr)).filter(Number.isFinite);
+  const avgSr=srValues.length?srValues.reduce((a,b)=>a+b,0)/srValues.length:null;
+  const skills=["aim","stream","speed","stamina","tech","reading","flow"],exposure={};
+  for(const skill of skills){
+    const values=events.map(e=>Number(e.map?.dna?.skills?.[skill])).filter(Number.isFinite);
+    exposure[skill]=values.length?values.reduce((a,b)=>a+b,0)/values.length:null;
+  }
+  const srBands={"<3":0,"3–4":0,"4–5":0,"5–6":0,"6–7":0,"7–8":0,"8+":0};
+  for(const e of events){
+    const sr=Number(e.map?.official_sr);if(!Number.isFinite(sr))continue;
+    if(sr<3)srBands["<3"]++;else if(sr<4)srBands["3–4"]++;else if(sr<5)srBands["4–5"]++;else if(sr<6)srBands["5–6"]++;else if(sr<7)srBands["6–7"]++;else if(sr<8)srBands["7–8"]++;else srBands["8+"]++;
+  }
+  const targets={},feels={};
+  for(const session of sessions){
+    const skill=String(session.skill||"overall").toUpperCase();targets[skill]=(targets[skill]||0)+1;
+    if(session.feel){const label=trainingSessionFeelLabel(session.feel);feels[label]=(feels[label]||0)+1;}
+  }
+  return {days,start,end,events,sessions,activeDays,minutes,avgSr,exposure,srBands,targets,feels};
+}
+function trainingMetricDelta(current,previous,digits=0,suffix=""){
+  if(current==null||!Number.isFinite(Number(current)))return "데이터 없음";
+  if(previous==null||!Number.isFinite(Number(previous)))return "이전 기간 기록 없음";
+  const diff=Number(current)-Number(previous),sign=diff>0?"+":"";
+  return sign+diff.toFixed(digits)+suffix+" vs 이전";
+}
+function renderTrainingInsights(){
+  const kpis=$("trainingInsightsKpis"),exposureHost=$("trainingExposureCompare"),bandsHost=$("trainingSrBands"),targetHost=$("trainingTargetMix"),feelHost=$("trainingFeelMix"),summary=$("trainingInsightsSummary");
+  if(!kpis||!exposureHost||!bandsHost||!targetHost||!feelHost||!summary)return;
+  const days=Number($("trainingInsightsPeriod")?.value||28),current=trainingPeriodMetrics(days,0),previous=trainingPeriodMetrics(days,1);
+  kpis.innerHTML=
+    '<div class="dash-kpi"><span>완료 채보</span><b>'+ct(current.events.length)+'</b><small>'+cx(trainingMetricDelta(current.events.length,previous.events.length,0,""))+'</small></div>'+
+    '<div class="dash-kpi"><span>활동일</span><b>'+ct(current.activeDays)+'</b><small>'+cx(trainingMetricDelta(current.activeDays,previous.activeDays,0,"일"))+'</small></div>'+
+    '<div class="dash-kpi"><span>기록 세션</span><b>'+ct(current.sessions.length)+'</b><small>'+cx(trainingMetricDelta(current.sessions.length,previous.sessions.length,0,""))+'</small></div>'+
+    '<div class="dash-kpi"><span>평균 공식 SR</span><b>'+(current.avgSr==null?"—":"★"+current.avgSr.toFixed(2))+'</b><small>'+(current.avgSr==null?"완료 처리 채보 없음":cx(trainingMetricDelta(current.avgSr,previous.avgSr,2,"★")))+'</small></div>';
+
+  const skills=["aim","stream","speed","stamina","tech","reading","flow"];
+  const hasExposure=skills.some(k=>Number.isFinite(current.exposure[k]));
+  exposureHost.innerHTML=hasExposure?skills.map(skill=>{
+    const now=current.exposure[skill],prev=previous.exposure[skill],delta=Number.isFinite(now)&&Number.isFinite(prev)?now-prev:null;
+    return '<div class="exposure-compare-row"><span>'+skill.toUpperCase()+'</span><div class="exposure-compare-bars"><i class="now" style="width:'+(Number.isFinite(now)?Math.max(1,Math.min(100,now)):0)+'%"></i><i class="prev" style="width:'+(Number.isFinite(prev)?Math.max(1,Math.min(100,prev)):0)+'%"></i></div><b>'+(Number.isFinite(now)?now.toFixed(1):"—")+'</b><small>'+(delta==null?"이전 없음":(delta>=0?"+":"")+delta.toFixed(1))+'</small></div>';
+  }).join(""):'<div class="empty">현재 기간 완료 기록에 Chart DNA가 없습니다.</div>';
+
+  const maxBand=Math.max(1,...Object.values(current.srBands));
+  bandsHost.innerHTML=current.events.length?Object.entries(current.srBands).map(([label,count])=>
+    '<div class="training-dist-row"><span>'+cx(label)+'★</span><div><i style="width:'+(count/maxBand*100)+'%"></i></div><b>'+ct(count)+'</b></div>'
+  ).join(""):'<div class="empty">완료 기록이 없습니다.</div>';
+
+  const targetEntries=Object.entries(current.targets).sort((a,b)=>b[1]-a[1]),maxTarget=Math.max(1,...targetEntries.map(x=>x[1]));
+  targetHost.innerHTML=targetEntries.length?targetEntries.map(([label,count])=>
+    '<div class="training-dist-row"><span>'+cx(label)+'</span><div><i style="width:'+(count/maxTarget*100)+'%"></i></div><b>'+ct(count)+'</b></div>'
+  ).join(""):'<div class="empty">현재 기간에 종료된 세션이 없습니다.</div>';
+
+  const feelEntries=Object.entries(current.feels).sort((a,b)=>b[1]-a[1]),maxFeel=Math.max(1,...feelEntries.map(x=>x[1]));
+  feelHost.innerHTML=feelEntries.length?feelEntries.map(([label,count])=>
+    '<div class="training-dist-row"><span>'+cx(label)+'</span><div><i style="width:'+(count/maxFeel*100)+'%"></i></div><b>'+ct(count)+'</b></div>'
+  ).join(""):'<div class="empty">현재 기간 체감 기록이 없습니다.</div>';
+
+  if(!current.events.length&&!current.sessions.length){
+    summary.innerHTML='<div class="empty">'+days+'일 기간에 비교할 훈련 기록이 없습니다.</div>';return;
+  }
+  const exposurePairs=skills.map(k=>[k,current.exposure[k]]).filter(x=>Number.isFinite(x[1])).sort((a,b)=>b[1]-a[1]);
+  const topExposure=exposurePairs[0],lowExposure=exposurePairs.at(-1),dominant=targetEntries[0];
+  const completionDelta=current.events.length-previous.events.length,minuteDelta=current.minutes-previous.minutes;
+  summary.innerHTML='<div class="training-insight-callouts">'+
+    '<div><span>노출량 변화</span><b>'+(completionDelta>=0?"+":"")+completionDelta+'채보</b><small>이전 '+days+'일 대비 · 실력 변화 의미 아님</small></div>'+
+    '<div><span>채보 길이 합 변화</span><b>'+(minuteDelta>=0?"+":"")+minuteDelta+'m</b><small>완료 처리 채보 길이의 합</small></div>'+
+    (topExposure?'<div><span>높은 DNA 요구 노출</span><b>'+topExposure[0].toUpperCase()+' '+topExposure[1].toFixed(1)+'</b><small>'+(lowExposure?'낮은 쪽 '+lowExposure[0].toUpperCase()+' '+lowExposure[1].toFixed(1):'')+'</small></div>':'')+
+    (dominant?'<div><span>가장 자주 고른 목표</span><b>'+cx(dominant[0])+'</b><small>'+dominant[1]+'세션 · 선택 빈도</small></div>':'')+
+    '</div><p class="hint-text">모든 변화값은 사용자가 완료 처리한 Practice Route 기록의 구성 차이입니다. 플레이 성과·실력 향상·실제 연습 시간을 추정하지 않습니다.</p>';
+}
+function trainingInsightsReportText(){
+  const days=Number($("trainingInsightsPeriod")?.value||28),current=trainingPeriodMetrics(days,0),previous=trainingPeriodMetrics(days,1),skills=["aim","stream","speed","stamina","tech","reading","flow"];
+  const exp=skills.filter(k=>Number.isFinite(current.exposure[k])).map(k=>k.toUpperCase()+" "+current.exposure[k].toFixed(1)).join(", ")||"없음";
+  const target=Object.entries(current.targets).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+" "+v+"회").join(", ")||"없음";
+  return [
+    "osu! Skill Lab Training Insights · 최근 "+days+"일",
+    "완료 채보: "+current.events.length+" (이전 "+previous.events.length+")",
+    "활동일: "+current.activeDays+"일 (이전 "+previous.activeDays+"일)",
+    "기록 세션: "+current.sessions.length+" (이전 "+previous.sessions.length+")",
+    "완료 채보 길이 합: "+current.minutes+"분 (이전 "+previous.minutes+"분)",
+    "평균 공식 SR: "+(current.avgSr==null?"—":"★"+current.avgSr.toFixed(2))+(previous.avgSr==null?"":" (이전 ★"+previous.avgSr.toFixed(2)+")"),
+    "DNA 요구 노출 평균: "+exp,
+    "세션 목표 구성: "+target,
+    "",
+    "※ 완료 처리한 Practice Route 기록의 노출 구성 요약이며 실력/성과 추정이 아닙니다."
+  ].join("\n");
+}
+$("trainingInsightsPeriod")?.addEventListener("change",renderTrainingInsights);
+$("copyTrainingInsights")?.addEventListener("click",async()=>{
+  const report=trainingInsightsReportText();
+  try{await navigator.clipboard.writeText(report);alert("기간 훈련 리포트를 복사했습니다.");}
+  catch(_){prompt("훈련 리포트를 복사하세요.",report);}
+});
+
 function archiveTrainingRoute(reason="finished",clear=true){
   if(!trainingRouteState.maps?.length)return false;
   const feel=$("trainingSessionFeel")?.value||trainingRouteState.feel||"",note=($("trainingSessionNote")?.value||trainingRouteState.note||"").trim().slice(0,120);
@@ -1677,6 +1781,7 @@ document.addEventListener("click",event=>{
 });
 renderTrainingRoute();
 renderTrainingJournal();
+renderTrainingInsights();
 
 function readLocalDnaRows() {
   try {
