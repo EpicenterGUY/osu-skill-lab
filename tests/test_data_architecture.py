@@ -25,6 +25,12 @@ class DataArchitectureTests(unittest.TestCase):
         self.assertIn('"year":date_year(m)', BUILD)
         self.assertIn('"similarity_index": similarity_targets', BUILD)
 
+    def test_training_pools_are_precomputed_and_published(self):
+        self.assertIn('TRAINING_POOLS = DATA / "training-pools.json"', BUILD)
+        self.assertIn('"format": "osu-skill-lab-training-pools"', BUILD)
+        self.assertIn('"training_pool": {', BUILD)
+        self.assertIn("dna_focus", BUILD)
+
     def test_dna_request_rate_stays_capped(self):
         self.assertIn("--delay 1", DNA_WORKFLOW)
         self.assertIn("--max-minutes 32", DNA_WORKFLOW)
