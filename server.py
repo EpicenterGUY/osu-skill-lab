@@ -3,6 +3,7 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 import struct,lzma,json,math,statistics,webbrowser,threading,hashlib
+from datetime import datetime, timezone
 import osu_api
 BASE=Path(__file__).resolve().parent; MAX_UPLOAD=25*1024*1024
 
@@ -26,7 +27,9 @@ def parse_replay(blob):
     if mode!=0:raise ValueError('osu!standard ë¦¬í”Œë ˆì´ë§Œ ì§€ì›í•©ë‹ˆë‹¤.')
     beatmap,p=osu_string(blob,p);player,p=osu_string(blob,p);checksum,p=osu_string(blob,p)
     h=[take('h') for _ in range(6)];score=take('i');combo=take('h');perfect=take('?');mods=take('i');life,p=osu_string(blob,p);ticks=take('q');size=take('i')
-    raw=lzma.decompress(blob[p:p+size],format=lzma.FORMAT_AUTO).decode('utf-8','replace')
+    raw=''
+    if size>0:
+        raw=lzma.decompress(blob[p:p+size],format=lzma.FORMAT_AUTO).decode('utf-8','replace')
     t=0;presses=[];old=0
     for c in raw.split(','):
         a=c.split('|')
@@ -51,7 +54,32 @@ def parse_replay(blob):
     for r in sorted(bursts,key=len,reverse=True)[:20]:
         gs=[r[i]['t']-r[i-1]['t'] for i in range(1,len(r))]
         bs.append({'start':r[0]['t'],'notes':len(r),'bpm':round(15000/statistics.median(gs),1),'std':round(statistics.pstdev(gs),1) if len(gs)>1 else 0})
-    return {'player':player,'version':version,'map_hash':beatmap,'score':score,'combo':combo,'mods':mods,'hits':{'300':h[0],'100':h[1],'50':h[2],'miss':h[5]},'taps':len(presses),'duration_s':round(t/1000,1),'median_gap':round(statistics.median(plausible),1) if plausible else None,'bursts':bs,'presses':presses[:50000]}
+    judged=h[0]+h[1]+h[2]+h[5]
+    accuracy=((300*h[0]+100*h[1]+50*h[2])/(300*judged)*100) if judged else None
+    non300=h[1]+h[2]+h[5]
+    replay_timestamp=None
+    try:
+        unix_seconds=(ticks-621355968000000000)/10000000
+        if unix_seconds>0:
+            replay_timestamp=datetime.fromtimestamp(unix_seconds,tz=timezone.utc).isoformat().replace('+00:00','Z')
+    except (OverflowError,OSError,ValueError):
+        pass
+    burst_std_values=[float(x.get('std') or 0) for x in bs if x.get('std') is not None]
+    return {
+        'player':player,'version':version,'map_hash':beatmap.lower(),'score':score,'combo':combo,'perfect':bool(perfect),'mods':mods,
+        'hits':{'great':h[0],'good':h[1],'meh':h[2],'300':h[0],'100':h[1],'50':h[2],'miss':h[5]},
+        'accuracy':round(accuracy,2) if accuracy is not None else None,
+        'judged':judged,'non300':non300,
+        'miss_rate':round(h[5]/judged*100,2) if judged else None,
+        'non300_rate':round(non300/judged*100,2) if judged else None,
+        'replay_timestamp':replay_timestamp,
+        'header_only':False,'replay_data_analyzed':True,
+        'taps':len(presses),'duration_s':round(t/1000,1),
+        'median_gap':round(statistics.median(plausible),1) if plausible else None,
+        'burst_count':len(bs),
+        'burst_std_median':round(statistics.median(burst_std_values),1) if burst_std_values else None,
+        'bursts':bs,'presses':presses[:50000]
+    }
 
 def fnum(d,k,default=0):
     try:return float(d.get(k,default))
