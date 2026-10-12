@@ -1,7 +1,7 @@
 {
-  "version": "2.4.0",
+  "version": "2.5.0",
   "channel": "ranked",
-  "name": "Relation Graph",
+  "name": "Search Workspace",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -36,6 +36,11 @@
     "Chart Relation Graph for same-set, same-mapper, DNA, metadata and era relationships",
     "Clickable graph nodes with inspector, compare actions and focus expansion",
     "Whole-catalog search accepts blank text queries and returns every map matching active filters",
-    "DNA-only global filter searches hydrate year overlays before evaluating results"
+    "DNA-only global filter searches hydrate year overlays before evaluating results",
+    "Named browser-local search/filter presets with up to 20 saved configurations",
+    "Recent whole-catalog search history with one-tap restore",
+    "Shareable Ranked filter/search URLs that restore scope, query, sort and advanced filters",
+    "CSV and JSON export of the currently filtered Ranked result set",
+    "Active filter chips that summarize the current search state"
   ]
 }
