@@ -209,6 +209,16 @@ class UiContractTests(unittest.TestCase):
         self.assertIn('data-tab="client"', HTML)
         self.assertIn("M4 · BUILDING", HTML)
 
+    def test_osl_client_replay_inbox_is_wired(self):
+        for element_id in ("clientReplayPath", "clientReplayAutoDetect", "clientReplaySavePath",
+                           "clientReplayScan", "clientReplayStatus", "clientReplayWatch",
+                           "clientReplayWatchState", "clientReplayList"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', CLIENT)
+        for token in ("refreshReplays", "startReplayScan", "analyzeReplay",
+                      "data-client-replay", "OSLReplayBridge.record"):
+            self.assertIn(token, CLIENT)
+
     def test_ranked_compare_workspace_is_wired(self):
         for element_id in ("compareTray", "compareTrayItems", "compareCount", "openCompare",
                            "compareNow", "clearCompare"):
