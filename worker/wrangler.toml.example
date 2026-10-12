@@ -1,0 +1,11 @@
+name = "osu-skill-lab-profile"
+main = "osu-profile-worker.mjs"
+compatibility_date = "2026-10-12"
+
+[vars]
+SITE_ORIGIN = "https://epicenterguy.github.io"
+
+# Add credentials with:
+#   npx wrangler secret put OSU_CLIENT_ID
+#   npx wrangler secret put OSU_CLIENT_SECRET
+# Never place real secrets in this file.
