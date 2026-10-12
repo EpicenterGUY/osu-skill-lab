@@ -1,4 +1,4 @@
-# osu! Skill Lab — Rhythm Intelligence v2.15
+# osu! Skill Lab — Rhythm Intelligence v2.16
 
 Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analysis.
 **GitHub Pages:** https://epicenterguy.github.io/osu-skill-lab/
@@ -127,8 +127,15 @@ python build_ranked_views.py
 ```
 This updates only local files unless you explicitly commit/push them.
 
-## Local PC chart analysis
-Run `실행.bat` (Python 3.10+), or start `server.py`, then load `.osu` maps.
+## Local PC chart analysis / OSL Client Bridge
+Run `실행.bat` (Python 3.10+), or start `server.py`. The **OSL Client** tab is the first desktop-client phase.
+- It checks common osu! stable `Songs` locations and allows a manual Songs path when osu! is installed elsewhere.
+- **Library Scan** builds `~/.osu-skill-lab/client.db` with local-only SQLite metadata + MD5. Unchanged files are reused by mtime/size instead of being reparsed.
+- **Local Library Search** searches artist/title/mapper/difficulty/Beatmap ID, then **분석 열기** reads only that indexed .osu and sends the result into the existing Chart X-Ray/Skill DNA browser state.
+- The server binds only to `127.0.0.1`; configured file analysis verifies the indexed file still lives under the configured Songs root.
+- GitHub Pages/PWA displays the Client tab but does not attempt to access the local file system.
+
+Existing local analysis also supports:
 - Chart X-Ray, time-based strain, aim/stream/speed/stamina/flow/tech/reading heuristics
 - `.osr` replay analysis when using the local Python server, including experimental checksum-matched tap-head/key-down timeline alignment for NM/non-rate-changing Mods
 - JSON export/import of local browser analysis; PC and phone data don't otherwise sync automatically
