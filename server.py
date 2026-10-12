@@ -115,7 +115,7 @@ def parse_map(blob):
             a,b=objs[i-2],objs[i-1];v1=(b['x']-a['x'],b['y']-a['y']);v2=(o['x']-b['x'],o['y']-b['y']);n1=math.hypot(*v1);n2=math.hypot(*v2)
             if n1 and n2:
                 c=max(-1,min(1,(v1[0]*v2[0]+v1[1]*v2[1])/(n1*n2)));ang=math.degrees(math.acos(c));angles.append(ang)
-        features.append({'t':o['t'],'gap':gap,'dist':round(dist,1) if dist is not None else None,'angle':round(ang,1) if ang is not None else None,'type':o['type']})
+        features.append({'t':o['t'],'x':o['x'],'y':o['y'],'gap':gap,'dist':round(dist,1) if dist is not None else None,'angle':round(ang,1) if ang is not None else None,'type':o['type']})
     # 2-second windows, stepped each second.
     start=objs[0]['t'];end=objs[-1]['t'];timeline=[]
     for t in range((start//1000)*1000,end+1,1000):
