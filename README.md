@@ -36,7 +36,9 @@ Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analys
 - HOME loads only the tiny precomputed `data/ranked-summary.json`: collected song/difficulty counts, official SR/BPM averages, collection date range, and backfill state.
 - STATS shows year, month, SR, BPM, mapper, star-rating, and playcount leaderboards, calculated by GitHub Actions rather than every visitor's phone.
 - RANKED loads lightweight `data/ranked-search/YYYY-MM.json` when the tab opens. Recent 30 maps render by default, and a selected month/year/**All years** option lets the visitor search every indexed year (larger download).
-- Search by artist, title, mapper, difficulty, and beatmap ID. Sort by official SR, BPM, ranked date, and play count.
+- Search by artist, title, mapper, difficulty, and beatmap/beatmapset ID. Normal month/year scope stays lightweight; an explicit **전체 DB 검색** scans all monthly shards progressively without keeping all 144k+ rows in memory.
+- Ranked Explorer supports advanced SR/BPM/AR/OD/length/status filters, four-map comparison, browser-local favorites/recent history, random discovery, and shareable deep links that reopen a map by ID/year.
+- Sort by official SR, BPM, ranked date, play count, length, AR/OD, and available Chart DNA dimensions.
 - Full monthly metadata shards are not loaded by the page on entry; only the selected month/year search index is fetched on demand. Mobile, PWA, and desktop work with no browser OAuth credentials.
 - The optional **STATS → Ranked 색인 가져오기** button is only for importing additional local datasets.
 - Each map's official SR/BPM/AR/OD/CS/HP is obtained from osu! API v2. Custom skill heuristics are NOT official ratings.
