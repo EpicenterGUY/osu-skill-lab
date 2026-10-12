@@ -44,11 +44,11 @@ jobs:
           succeeded=int(s.get("succeeded_last_run") or 0)
           blocked=bool(s.get("blocked_on_last_run"))
           ratio=(succeeded/attempted) if attempted else 1.0
-          print(500 if blocked else 900 if ratio < .75 else 1600)
+          print(400 if blocked else 900 if ratio < .75 else 1500 if ratio < .95 else 2200)
           PY
           )
-          echo "Chart DNA hourly target: $limit charts (1 request/sec maximum)"
-          python build_chart_dna.py --limit "$limit" --delay 1 --checkpoint-every 100 --max-minutes 32
+          echo "Chart DNA hourly target: $limit charts (1 request/sec maximum; healthy runs may use ~37 minutes)"
+          python build_chart_dna.py --limit "$limit" --delay 1 --checkpoint-every 100 --max-minutes 40
       - name: Rebuild DNA research summary without touching metadata search shards
         run: python build_ranked_views.py --skip-search
       - name: Commit derived DNA only
