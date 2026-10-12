@@ -13,6 +13,9 @@ CLIENT_SCAN_LOCK=threading.Lock()
 CLIENT_SCAN={'running':False,'scanned':0,'updated':0,'reused':0,'errors':0,'started_at':None,'finished_at':None,'message':'대기 중'}
 CLIENT_REPLAY_LOCK=threading.Lock()
 CLIENT_REPLAY_SCAN={'running':False,'scanned':0,'updated':0,'reused':0,'errors':0,'started_at':None,'finished_at':None,'message':'대기 중'}
+CLIENT_DNA_LOCK=threading.Lock()
+CLIENT_DNA_STOP=threading.Event()
+CLIENT_DNA={'running':False,'processed':0,'analyzed':0,'errors':0,'limit':0,'remaining':0,'cached':0,'started_at':None,'finished_at':None,'message':'대기 중'}
 
 def client_now():
     return datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
@@ -78,6 +81,12 @@ def client_db():
     CREATE INDEX IF NOT EXISTS idx_replays_root ON replays(root);
     CREATE INDEX IF NOT EXISTS idx_replays_map_hash ON replays(map_hash);
     CREATE INDEX IF NOT EXISTS idx_replays_time ON replays(replay_time);
+    CREATE TABLE IF NOT EXISTS dna_cache(
+      path TEXT PRIMARY KEY, root TEXT NOT NULL, md5 TEXT NOT NULL, mtime_ns INTEGER NOT NULL,
+      analyzed_at TEXT NOT NULL, status TEXT NOT NULL, summary_json TEXT, error TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_dna_root ON dna_cache(root);
+    CREATE INDEX IF NOT EXISTS idx_dna_md5 ON dna_cache(md5);
     CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT);
     ''')
     return db
@@ -248,6 +257,7 @@ def client_scan_worker(root):
             except Exception:
                 with CLIENT_SCAN_LOCK:CLIENT_SCAN['errors']+=1
         db.execute('DELETE FROM maps WHERE root=? AND scan_token<>?',(root_s,token))
+        db.execute('DELETE FROM dna_cache WHERE root=? AND path NOT IN (SELECT path FROM maps WHERE root=?)',(root_s,root_s))
         client_meta_set(db,'songs_path',root_s);client_meta_set(db,'last_scan',client_now());db.commit()
         count=db.execute('SELECT COUNT(*) c FROM maps WHERE root=?',(root_s,)).fetchone()['c']
         with CLIENT_SCAN_LOCK:CLIENT_SCAN['message']=f'완료 · osu!standard {count:,}개 인덱스'
@@ -257,6 +267,94 @@ def client_scan_worker(root):
         if db:db.close()
         with CLIENT_SCAN_LOCK:
             CLIENT_SCAN['running']=False;CLIENT_SCAN['finished_at']=client_now()
+
+def client_dna_summary(result):
+    return {
+      'objects':result.get('objects'),'circles':result.get('circles'),'sliders':result.get('sliders'),
+      'duration_s':result.get('duration_s'),'bpm':result.get('bpm'),'skills':result.get('skills') or {},
+      'peak':result.get('peak'),'stats':result.get('stats') or {}
+    }
+
+def client_dna_counts(db,root_s):
+    cached=db.execute("""SELECT COUNT(*) c FROM maps m JOIN dna_cache d
+      ON d.path=m.path AND d.root=m.root AND d.md5=m.md5 AND d.mtime_ns=m.mtime_ns AND d.status='ok'
+      WHERE m.root=?""",(root_s,)).fetchone()['c']
+    remaining=db.execute("""SELECT COUNT(*) c FROM maps m LEFT JOIN dna_cache d
+      ON d.path=m.path AND d.root=m.root AND d.md5=m.md5 AND d.mtime_ns=m.mtime_ns AND d.status='ok'
+      WHERE m.root=? AND d.path IS NULL""",(root_s,)).fetchone()['c']
+    return int(cached),int(remaining)
+
+def client_dna_store(db,row,result=None,error=None):
+    now=client_now();status='ok' if result is not None else 'error'
+    summary=json.dumps(client_dna_summary(result),ensure_ascii=False,separators=(',',':')) if result is not None else None
+    db.execute("""INSERT INTO dna_cache(path,root,md5,mtime_ns,analyzed_at,status,summary_json,error)
+      VALUES(?,?,?,?,?,?,?,?)
+      ON CONFLICT(path) DO UPDATE SET root=excluded.root,md5=excluded.md5,mtime_ns=excluded.mtime_ns,
+      analyzed_at=excluded.analyzed_at,status=excluded.status,summary_json=excluded.summary_json,error=excluded.error""",
+      (row['path'],row['root'],row['md5'],int(row['mtime_ns']),now,status,summary,str(error or '')[:500] if error else None))
+
+def client_dna_worker(root,limit):
+    root=Path(root).resolve();root_s=str(root);db=None
+    CLIENT_DNA_STOP.clear()
+    with CLIENT_DNA_LOCK:
+        CLIENT_DNA.update({'running':True,'processed':0,'analyzed':0,'errors':0,'limit':limit,'remaining':0,'cached':0,
+          'started_at':client_now(),'finished_at':None,'message':'DNA 큐 준비 중'})
+    try:
+        db=client_db()
+        cached,remaining=client_dna_counts(db,root_s)
+        with CLIENT_DNA_LOCK:CLIENT_DNA.update({'cached':cached,'remaining':remaining,'message':f'대기 {remaining:,}개'})
+        rows=db.execute("""SELECT m.path,m.root,m.md5,m.mtime_ns FROM maps m LEFT JOIN dna_cache d
+          ON d.path=m.path AND d.root=m.root AND d.md5=m.md5 AND d.mtime_ns=m.mtime_ns AND d.status='ok'
+          WHERE m.root=? AND d.path IS NULL ORDER BY m.indexed_at DESC LIMIT ?""",(root_s,limit)).fetchall()
+        for row in rows:
+            if CLIENT_DNA_STOP.is_set():
+                with CLIENT_DNA_LOCK:CLIENT_DNA['message']='사용자 중지 요청으로 멈춤'
+                break
+            with CLIENT_DNA_LOCK:CLIENT_DNA['processed']+=1
+            try:
+                path=Path(row['path']).resolve()
+                if root not in path.parents:raise ValueError('Songs 폴더 밖 파일')
+                st=path.stat()
+                if int(st.st_mtime_ns)!=int(row['mtime_ns']):raise ValueError('파일 변경됨 · 라이브러리 재스캔 필요')
+                result=parse_map(path.read_bytes())
+                if str(result.get('md5') or '').lower()!=str(row['md5'] or '').lower():raise ValueError('MD5 변경됨 · 라이브러리 재스캔 필요')
+                client_dna_store(db,row,result=result)
+                with CLIENT_DNA_LOCK:CLIENT_DNA['analyzed']+=1
+            except Exception as exc:
+                client_dna_store(db,row,error=exc)
+                with CLIENT_DNA_LOCK:CLIENT_DNA['errors']+=1
+            if CLIENT_DNA['processed']%10==0:
+                db.commit();cached,remaining=client_dna_counts(db,root_s)
+                with CLIENT_DNA_LOCK:
+                    CLIENT_DNA.update({'cached':cached,'remaining':remaining,
+                      'message':f"분석 {CLIENT_DNA['analyzed']:,} · 오류 {CLIENT_DNA['errors']:,} · 남음 {remaining:,}"})
+        db.commit();cached,remaining=client_dna_counts(db,root_s)
+        client_meta_set(db,'last_dna_run',client_now());db.commit()
+        with CLIENT_DNA_LOCK:
+            CLIENT_DNA.update({'cached':cached,'remaining':remaining,
+              'message':('중지됨' if CLIENT_DNA_STOP.is_set() else f'완료 · DNA {cached:,}개 캐시 · 남음 {remaining:,}')})
+    except Exception as exc:
+        with CLIENT_DNA_LOCK:CLIENT_DNA['message']='DNA 큐 실패: '+str(exc)
+    finally:
+        if db:db.close()
+        with CLIENT_DNA_LOCK:
+            CLIENT_DNA['running']=False;CLIENT_DNA['finished_at']=client_now()
+
+def client_start_dna(limit=200):
+    root,_=client_resolve_songs()
+    if not root:return {'ok':False,'error':'Songs 폴더가 설정되지 않았습니다.'}
+    try:limit=max(1,min(5000,int(limit or 200)))
+    except:limit=200
+    with CLIENT_DNA_LOCK:
+        if CLIENT_DNA['running']:return {'ok':True,'started':False,'dna':dict(CLIENT_DNA)}
+    threading.Thread(target=client_dna_worker,args=(root,limit),daemon=True).start()
+    return {'ok':True,'started':True,'limit':limit}
+
+def client_stop_dna():
+    with CLIENT_DNA_LOCK:
+        if not CLIENT_DNA['running']:return {'ok':True,'stopping':False,'dna':dict(CLIENT_DNA)}
+        CLIENT_DNA_STOP.set();CLIENT_DNA['message']='현재 채보 처리 후 중지 중…'
+        return {'ok':True,'stopping':True,'dna':dict(CLIENT_DNA)}
 
 def client_start_scan():
     root,source=client_resolve_songs()
@@ -281,9 +379,17 @@ def client_status():
         if replay_root:replay_count=rdb.execute('SELECT COUNT(*) c FROM replays WHERE root=?',(str(replay_root),)).fetchone()['c']
         last_replay_scan=client_meta_get(rdb,'last_replay_scan');rdb.close()
     except:pass
+    dna_cached=dna_remaining=0;last_dna_run=None
+    try:
+        ddb=client_db()
+        if root:dna_cached,dna_remaining=client_dna_counts(ddb,str(root))
+        last_dna_run=client_meta_get(ddb,'last_dna_run');ddb.close()
+    except:pass
     with CLIENT_SCAN_LOCK:scan=dict(CLIENT_SCAN)
     with CLIENT_REPLAY_LOCK:replay_scan=dict(CLIENT_REPLAY_SCAN)
-    return {'local_server':True,'client_version':'0.2.0','songs_path':str(root) if root else None,'path_source':source,'path_exists':bool(root),'maps':count,'beatmapsets':sets,'last_scan':last_scan,'scan':scan,
+    with CLIENT_DNA_LOCK:dna=dict(CLIENT_DNA)
+    dna.update({'cached':dna_cached,'remaining':dna_remaining,'last_run':last_dna_run})
+    return {'local_server':True,'client_version':'0.3.0','songs_path':str(root) if root else None,'path_source':source,'path_exists':bool(root),'maps':count,'beatmapsets':sets,'last_scan':last_scan,'scan':scan,'dna':dna,
       'replay_path':str(replay_root) if replay_root else None,'replay_path_source':replay_source,'replay_path_exists':bool(replay_root),'replays':replay_count,'last_replay_scan':last_replay_scan,'replay_scan':replay_scan}
 
 def client_search(q='',limit=40):
@@ -291,13 +397,17 @@ def client_search(q='',limit=40):
     if not root:return []
     limit=max(1,min(100,int(limit or 40)));terms=[x for x in str(q or '').strip().split() if x]
     db=client_db();root_s=str(root)
-    sql='SELECT md5,beatmap_id,beatmapset_id,artist,title,creator,version,ar,od,cs,hp,bpm,path FROM maps WHERE root=?'
+    sql='''SELECT m.md5,m.beatmap_id,m.beatmapset_id,m.artist,m.title,m.creator,m.version,m.ar,m.od,m.cs,m.hp,m.bpm,m.path,d.summary_json AS dna_summary\n      FROM maps m LEFT JOIN dna_cache d ON d.path=m.path AND d.root=m.root AND d.md5=m.md5 AND d.mtime_ns=m.mtime_ns AND d.status=\'ok\' WHERE m.root=?'''
     args=[root_s]
     for term in terms:
-        like='%'+term+'%';sql+=' AND (artist LIKE ? OR title LIKE ? OR creator LIKE ? OR version LIKE ? OR CAST(beatmap_id AS TEXT)=?)';args.extend([like,like,like,like,term])
-    sql+=' ORDER BY indexed_at DESC,title COLLATE NOCASE LIMIT ?';args.append(limit)
+        like='%'+term+'%';sql+=' AND (m.artist LIKE ? OR m.title LIKE ? OR m.creator LIKE ? OR m.version LIKE ? OR CAST(m.beatmap_id AS TEXT)=?)';args.extend([like,like,like,like,term])
+    sql+=' ORDER BY m.indexed_at DESC,m.title COLLATE NOCASE LIMIT ?';args.append(limit)
     rows=[dict(r) for r in db.execute(sql,args).fetchall()];db.close()
-    for r in rows:r.pop('path',None)
+    for r in rows:
+        r.pop('path',None);raw=r.pop('dna_summary',None)
+        if raw:
+            try:r['dna']=json.loads(raw)
+            except:pass
     return rows
 
 def client_analyze(md5=None,beatmap_id=None):
@@ -310,7 +420,11 @@ def client_analyze(md5=None,beatmap_id=None):
     if not row:raise ValueError('로컬 인덱스에서 채보를 찾지 못했습니다. 먼저 스캔해 주세요.')
     path=Path(row['path']).resolve()
     if root not in path.parents:raise ValueError('Songs 폴더 밖의 파일은 분석하지 않습니다.')
-    result=parse_map(path.read_bytes());result['filename']=path.name;result['client_source']='songs-index'
+    blob=path.read_bytes();result=parse_map(blob);result['filename']=path.name;result['client_source']='songs-index'
+    try:
+        st=path.stat();ddb=client_db();cache_row={'path':str(path),'root':str(root),'md5':result['md5'],'mtime_ns':st.st_mtime_ns}
+        client_dna_store(ddb,cache_row,result=result);ddb.commit();ddb.close()
+    except:pass
     return result
 
 def osu_string(b,p):
@@ -482,6 +596,7 @@ class H(BaseHTTPRequestHandler):
                 if p=='/api/client/status': return self.sendj(client_status())
                 if p=='/api/client/library': return self.sendj({'maps':client_search(q.get('q',[''])[0],q.get('limit',['40'])[0])})
                 if p=='/api/client/replays': return self.sendj({'replays':client_replay_list(q.get('limit',['30'])[0])})
+                if p=='/api/client/dna/status': return self.sendj(client_status().get('dna',{}))
                 return self.sendj({'error':'Not found'},404)
             except Exception as exc: return self.sendj({'error':str(exc)},400)
         if p in ('/','/index.html'):
@@ -528,6 +643,11 @@ class H(BaseHTTPRequestHandler):
             if p=='/api/client/analyze':
                 data=json.loads(b.decode('utf-8') or '{}')
                 return self.sendj(client_analyze(data.get('md5'),data.get('beatmap_id')))
+            if p=='/api/client/dna/start':
+                data=json.loads(b.decode('utf-8') or '{}') if b else {}
+                return self.sendj(client_start_dna(data.get('limit',200)),202)
+            if p=='/api/client/dna/stop':
+                return self.sendj(client_stop_dna(),202)
             if p=='/api/client/replays/scan':
                 return self.sendj(client_start_replay_scan(),202)
             if p=='/api/client/replays/config':
