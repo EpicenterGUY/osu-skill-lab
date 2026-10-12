@@ -3,6 +3,21 @@
 Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analysis.
 **GitHub Pages:** https://epicenterguy.github.io/osu-skill-lab/
 
+## Project milestones / 이정표
+
+- **M1 · Public Ranked Catalogue — DONE**  
+  Public osu!standard Ranked/Approved metadata catalogue, fast summary-first loading, monthly lazy search shards, mobile/PWA UI, profile-local storage, and automated GitHub Pages deployment.
+- **M2 · Chart DNA Coverage — IN PROGRESS**  
+  Real `.osu`-based Aim / Stream / Speed / Stamina / Tech / Reading / Flow heuristics are being backfilled separately from metadata. DNA is published as a lazy overlay so search stays fast while coverage grows.
+- **M3 · Mirror-class Explorer & Observatory — IN PROGRESS**  
+  Advanced filters, multi-map comparison, random discovery, era comparison, mapper fingerprints, oddities, similarity neighborhoods, Difficulty Twins, and richer statistics.
+- **M4 · OSL Client — PLANNED**  
+  Carry the recent **osu! Skill Lab client** direction into a dedicated desktop-client track instead of treating the project as web-only. The client milestone is to unify the existing public Ranked/Chart-DNA database with local `.osu` / `.osr` analysis in one desktop experience, while keeping the current web/PWA as a first-class lightweight front end. The current `server.py` / `실행.bat` local analyzer is the technical starting point; client-specific integrations should be added incrementally rather than blocking the website.
+- **M5 · Personal Rhythm Intelligence — FUTURE**  
+  Replay-driven weakness detection, better confidence estimates, skill ladders, personalized recommendations, failure-pattern analysis, and long-term growth tracking.
+
+> The client milestone is a roadmap item, not a claim that a packaged desktop client or direct osu! game integration already exists.
+
 ## v1.1 fast load and browser-local profiles
 - The repository contains a pre-seeded `data/ranked-summary.json` (about 25 KB at initial 5,058 difficulties), so first paint never depends on downloading every Ranked map.
 - The summary lists compact month-index files under `data/ranked-search/YYYY-MM.json`. RANKED initially shows 30 recent maps, and fetching a month/year/all-years requires explicitly selecting that scope. Unchanged monthly files have stable content hashes so returning visitors can use HTTP cache.
