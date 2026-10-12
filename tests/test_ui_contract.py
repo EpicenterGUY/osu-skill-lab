@@ -85,6 +85,17 @@ class UiContractTests(unittest.TestCase):
                       "exportRankedRows", "recordSearchHistory"):
             self.assertIn(token, RANKED)
 
+    def test_practice_route_builder_is_wired(self):
+        for element_id in ("trainingRouteSkill", "trainingRouteStars", "trainingRouteMode",
+                           "trainingRouteScope", "trainingRouteCount", "buildTrainingRoute",
+                           "clearTrainingRoute", "trainingRouteProgressText",
+                           "trainingRouteProgressBar", "trainingRouteStatus", "trainingRouteList"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', RANKED)
+        for token in ("osl-training-route", "loadTrainingPools", "buildTrainingRoute",
+                      "trainingRouteScore", "data-training-toggle", "trainingRouteMaps"):
+            self.assertIn(token, RANKED)
+
     def test_ranked_compare_workspace_is_wired(self):
         for element_id in ("compareTray", "compareTrayItems", "compareCount", "openCompare",
                            "compareNow", "clearCompare"):
