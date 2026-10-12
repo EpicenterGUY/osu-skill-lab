@@ -140,6 +140,16 @@ class UiContractTests(unittest.TestCase):
                       "replayModsLabel", "played_at_source"):
             self.assertIn(token, RANKED)
 
+    def test_replay_profile_is_wired(self):
+        for element_id in ("copyReplayProfile", "replayProfileKpis", "replayProfileVariability",
+                           "replayProfileModCompare", "replayProfileEvidence", "replayProfileSignals"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', RANKED)
+        for token in ("renderReplayProfile", "replayProfileEvidenceInfo", "replayProfileReportText",
+                      "replayVariabilityBand", "replayStd", "replayNumeric"):
+            self.assertIn(token, RANKED)
+        self.assertIn('if(value==null||value==="")return NaN;', RANKED)
+
     def test_ranked_compare_workspace_is_wired(self):
         for element_id in ("compareTray", "compareTrayItems", "compareCount", "openCompare",
                            "compareNow", "clearCompare"):
