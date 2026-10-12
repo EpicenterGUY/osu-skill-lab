@@ -1567,6 +1567,74 @@ function replayPercentile(values,p){
   const pos=Math.max(0,Math.min(xs.length-1,(xs.length-1)*p)),lo=Math.floor(pos),hi=Math.ceil(pos);
   return lo===hi?xs[lo]:xs[lo]+(xs[hi]-xs[lo])*(pos-lo);
 }
+function replayMean(values){
+  const xs=values.map(replayNumeric).filter(Number.isFinite);
+  return xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:null;
+}
+function replaySd(values){
+  const xs=values.map(replayNumeric).filter(Number.isFinite);
+  if(xs.length<2)return null;
+  const mean=xs.reduce((a,b)=>a+b,0)/xs.length;
+  return Math.sqrt(xs.reduce((n,v)=>n+Math.pow(v-mean,2),0)/(xs.length-1));
+}
+function replayRegionFingerprint(selectedLocal,start,end,pattern,strain){
+  const rows=(selectedLocal?.features||[]).filter(o=>Number(o?.t)>=start&&Number(o?.t)<end);
+  const gaps=rows.map(o=>replayNumeric(o?.gap)).filter(v=>Number.isFinite(v)&&v>0);
+  const dists=rows.map(o=>replayNumeric(o?.dist)).filter(Number.isFinite);
+  const angles=rows.map(o=>replayNumeric(o?.angle)).filter(Number.isFinite);
+  const n=rows.length,duration=Math.max(1,(end-start)/1000),density=n/duration;
+  const meanGap=replayMean(gaps),gapSd=replaySd(gaps),meanSpacing=replayMean(dists),spacingSd=replaySd(dists),angleSd=replaySd(angles);
+  const pct=(arr,test)=>arr.length?arr.filter(test).length/arr.length*100:null;
+  const fastGapPct=pct(gaps,v=>v<120),veryFastPct=pct(gaps,v=>v<95),largeJumpPct=pct(dists,v=>v>=180),closeSpacingPct=pct(dists,v=>v<=100);
+  const sliderPct=n?rows.filter(o=>o?.type==="slider").length/n*100:null;
+  const rhythmCv=Number.isFinite(meanGap)&&meanGap>0&&Number.isFinite(gapSd)?gapSd/meanGap:null;
+  const tags=[];
+  const overlap=String(pattern?.kind||pattern||"");
+  if(/stream|burst/i.test(overlap)||(Number.isFinite(fastGapPct)&&fastGapPct>=38))tags.push("stream");
+  if(Number.isFinite(largeJumpPct)&&largeJumpPct>=28&&Number.isFinite(meanSpacing)&&meanSpacing>=145)tags.push("jump");
+  if((Number.isFinite(gapSd)&&gapSd>=48&&Number.isFinite(angleSd)&&angleSd>=32)||(Number.isFinite(rhythmCv)&&rhythmCv>=.42))tags.push("tech");
+  if(Number.isFinite(sliderPct)&&sliderPct>=42)tags.push("slider");
+  if(density>=5.5)tags.push("dense");
+  if(Number.isFinite(closeSpacingPct)&&closeSpacingPct>=55&&Number.isFinite(angleSd)&&angleSd<=34&&Number.isFinite(fastGapPct)&&fastGapPct>=22)tags.push("flow");
+  const unique=[...new Set(tags)];
+  let primary="mixed";
+  if(/long stream|stream|burst/i.test(overlap))primary="stream";
+  else if(unique.includes("jump")&&Number(largeJumpPct)>=38)primary="jump";
+  else if(unique.includes("tech"))primary="tech";
+  else if(unique.includes("slider")&&Number(sliderPct)>=55)primary="slider";
+  else if(unique.includes("dense"))primary="dense";
+  else if(unique.includes("flow"))primary="flow";
+  else if(unique.includes("stream"))primary="stream";
+  const label=({stream:"Stream / Burst",jump:"Jump",tech:"Tech / Rhythm",slider:"Slider-heavy",dense:"Dense / Reading",flow:"Flow",mixed:"Mixed"})[primary]||"Mixed";
+  const round=(v,d=1)=>Number.isFinite(v)?Number(v.toFixed(d)):null;
+  return {
+    version:1,primary,label,tags:unique,objects:n,density:round(density,2),
+    mean_gap_ms:round(meanGap),gap_sd_ms:round(gapSd),rhythm_cv:round(rhythmCv,2),
+    mean_spacing_px:round(meanSpacing),spacing_sd_px:round(spacingSd),angle_sd_deg:round(angleSd),
+    fast_gap_pct:round(fastGapPct),very_fast_pct:round(veryFastPct),large_jump_pct:round(largeJumpPct),
+    close_spacing_pct:round(closeSpacingPct),slider_pct:round(sliderPct),strain:round(replayNumeric(strain)),
+    pattern:overlap.slice(0,80)
+  };
+}
+function replayStoredFingerprint(region){
+  const raw=region?.fingerprint;
+  if(raw&&typeof raw==="object"){
+    const n=v=>{const x=replayNumeric(v);return Number.isFinite(x)?x:null};
+    const primary=["stream","jump","tech","slider","dense","flow","mixed"].includes(raw.primary)?raw.primary:"mixed";
+    return {
+      version:Number(raw.version||1),primary,label:String(raw.label||({stream:"Stream / Burst",jump:"Jump",tech:"Tech / Rhythm",slider:"Slider-heavy",dense:"Dense / Reading",flow:"Flow",mixed:"Mixed"})[primary]),
+      tags:Array.isArray(raw.tags)?raw.tags.filter(x=>["stream","jump","tech","slider","dense","flow"].includes(x)).slice(0,8):[],
+      objects:Number(raw.objects||region?.objects||0),density:n(raw.density),mean_gap_ms:n(raw.mean_gap_ms),gap_sd_ms:n(raw.gap_sd_ms),rhythm_cv:n(raw.rhythm_cv),
+      mean_spacing_px:n(raw.mean_spacing_px),spacing_sd_px:n(raw.spacing_sd_px),angle_sd_deg:n(raw.angle_sd_deg),fast_gap_pct:n(raw.fast_gap_pct),very_fast_pct:n(raw.very_fast_pct),
+      large_jump_pct:n(raw.large_jump_pct),close_spacing_pct:n(raw.close_spacing_pct),slider_pct:n(raw.slider_pct),strain:n(raw.strain??region?.strain),pattern:String(raw.pattern||region?.pattern||"").slice(0,80)
+    };
+  }
+  const pattern=String(region?.pattern||"");
+  const strain=replayNumeric(region?.strain);
+  const primary=/stream|burst/i.test(pattern)?"stream":Number.isFinite(strain)&&strain>=75?"dense":"mixed";
+  return {version:0,primary,label:primary==="stream"?"Stream / Burst":primary==="dense"?"Dense / Reading":"Mixed",tags:primary==="mixed"?[]:[primary],objects:Number(region?.objects||0),density:null,mean_gap_ms:null,gap_sd_ms:null,rhythm_cv:null,mean_spacing_px:null,spacing_sd_px:null,angle_sd_deg:null,fast_gap_pct:null,very_fast_pct:null,large_jump_pct:null,close_spacing_pct:null,slider_pct:null,strain:Number.isFinite(strain)?strain:null,pattern};
+}
+
 function buildReplayAlignment(raw,selectedLocal){
   const hash=String(raw?.map_hash||"").toLowerCase(),localHash=String(selectedLocal?.md5||"").toLowerCase();
   const base={version:1,method:"tap-head-nearest-keydown-v1",supported:false,reason:""};
@@ -1625,7 +1693,8 @@ function buildReplayAlignment(raw,selectedLocal){
     const cursorAvg=r.cursor.length?r.cursor.reduce((a,b)=>a+b,0)/r.cursor.length:null;
     const missShare=r.objects?r.unmatched/r.objects:0,timingShare=r.matched?(r.early+r.late)/r.matched:0;
     const score=missShare*65+timingShare*20+Math.min(15,residualAvg/Math.max(1,windowMs)*15)+(Number.isFinite(cursorAvg)?Math.min(10,cursorAvg/160*10):0);
-    return {start:r.start,end:r.end,objects:r.objects,matched:r.matched,unmatched:r.unmatched,early:r.early,late:r.late,mean_abs_ms:Math.round(residualAvg),mean_cursor_px:Number.isFinite(cursorAvg)?Math.round(cursorAvg):null,strain:Number.isFinite(strain)?Math.round(strain*10)/10:null,pattern:overlapping?String(overlapping.kind||""):"",score:Math.round(score*10)/10};
+    const fingerprint=replayRegionFingerprint(selectedLocal,r.start,r.end,overlapping,strain);
+    return {start:r.start,end:r.end,objects:r.objects,matched:r.matched,unmatched:r.unmatched,early:r.early,late:r.late,mean_abs_ms:Math.round(residualAvg),mean_cursor_px:Number.isFinite(cursorAvg)?Math.round(cursorAvg):null,strain:Number.isFinite(strain)?Math.round(strain*10)/10:null,pattern:overlapping?String(overlapping.kind||""):"",fingerprint,score:Math.round(score*10)/10};
   }).filter(r=>r.objects>=3).sort((a,b)=>b.score-a.score).slice(0,12);
   return {
     ...base,supported:true,reason:"",checksum:hash,object_heads:objects.length,presses:presses.length,matched,unmatched,
