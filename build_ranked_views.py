@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 RANKED = DATA / "ranked"
 SEARCH = DATA / "ranked-search"
+CHECKSUM_INDEX = DATA / "checksum-index"
 SUMMARY = DATA / "ranked-summary.json"
 TRAINING_POOLS = DATA / "training-pools.json"
 MANIFEST = DATA / "ranked-manifest.json"
@@ -189,8 +190,11 @@ def main():
             except (ValueError, TypeError):
                 previous = {}
         search_shards = previous.get("search_shards") or []
+        checksum_lookup = previous.get("replay_lookup") or {}
         if not search_shards:
             raise RuntimeError("--skip-search requested but no committed search shard manifest exists")
+        if not checksum_lookup.get("versions"):
+            raise RuntimeError("--skip-search requested but no committed replay checksum index exists")
     else:
         SEARCH.mkdir(parents=True, exist_ok=True)
         search_shards = []
@@ -213,6 +217,35 @@ def main():
         for stale in SEARCH.glob("*.json"):
             if stale.name not in active:
                 stale.unlink()
+
+        # Replay checksum lookup: 256 tiny prefix shards let a browser resolve one
+        # .osr beatmap MD5 without loading the whole Ranked catalogue or exposing API secrets.
+        CHECKSUM_INDEX.mkdir(parents=True, exist_ok=True)
+        checksum_groups = defaultdict(list)
+        for m in values:
+            checksum = str(m.get("checksum") or "").lower()
+            if not re.fullmatch(r"[0-9a-f]{32}", checksum):
+                continue
+            checksum_groups[checksum[:2]].append({
+                "h": checksum,
+                "id": int(m["beatmap_id"]),
+                "y": date_year(m),
+            })
+        checksum_versions = {}
+        checksum_count = 0
+        for prefix in [f"{i:02x}" for i in range(256)]:
+            rows = sorted(checksum_groups.get(prefix, []), key=lambda x: x["h"])
+            path = CHECKSUM_INDEX / f"{prefix}.json"
+            publish(path, rows)
+            checksum_versions[prefix] = hashlib.sha256(path.read_bytes()).hexdigest()[:12]
+            checksum_count += len(rows)
+        checksum_lookup = {
+            "format": "md5-prefix-v1",
+            "path_template": "data/checksum-index/{prefix}.json",
+            "prefix_length": 2,
+            "entries": checksum_count,
+            "versions": checksum_versions,
+        }
 
     ranked_sets = {m.get("beatmapset_id") for m in values if m.get("beatmapset_id")}
     mappers = sorted(
@@ -513,6 +546,7 @@ def main():
         ],
         "search_payload": "metadata-only-v2",
         "search_shards": search_shards,
+        "replay_lookup": checksum_lookup,
     }
     publish(SUMMARY, summary)
     print(
