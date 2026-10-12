@@ -35,6 +35,20 @@ class UiContractTests(unittest.TestCase):
             self.assertIn('$("' + element_id + '")', RANKED)
         self.assertIn("renderEraComparison", RANKED)
 
+    def test_ranked_advanced_filters_are_wired(self):
+        for element_id in ("indexedMaxSr", "indexedMaxBpm", "indexedMinAr", "indexedMinOd",
+                           "indexedLength", "indexedStatus", "resetRankedFilters", "randomRanked"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', RANKED)
+
+    def test_ranked_compare_workspace_is_wired(self):
+        for element_id in ("compareTray", "compareTrayItems", "compareCount", "openCompare",
+                           "compareNow", "clearCompare"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', RANKED)
+        for token in ("compareMaps", "data-compare-map", "showCompareMaps", "osl-ranked-compare"):
+            self.assertIn(token, RANKED)
+
     def test_dna_overlay_is_lazy(self):
         self.assertIn("dnaOverlayCache", RANKED)
         self.assertIn("loadDnaOverlayYears", RANKED)
