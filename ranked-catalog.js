@@ -23,6 +23,8 @@ let lastFilteredRows = [];
 let globalSearchGeneration = 0;
 let globalSearchActive = false;
 let sharedMapHandled = false;
+let similaritySeedMap = null;
+let similarityGeneration = 0;
 const compareMaps = new Map();
 const favoriteMaps = new Map();
 let recentViewedMaps = [];
@@ -409,6 +411,7 @@ async function loadRankedSummary() {
     $("hostedSyncState").innerHTML = '<div class="ranked-loader ranked-loader-done"><div class="ranked-loader-head"><b>✓ 최신 DB 준비 완료</b><span>' + ct(s.counts?.difficulties) + '채보 · ' + ((performance.now()-started)/1000).toFixed(1) + '초</span></div><div class="ranked-loader-track"><i style="width:100%"></i></div><small>월·연도 데이터는 선택할 때만 받습니다.</small></div>';
     renderRecentPreview();
     renderSavedShelves();
+renderSimilaritySeed();
     if (document.getElementById("ranked").classList.contains("active"))
       loadRankedSearch();
     queueMicrotask(()=>openSharedMapFromUrl().catch(err=>console.warn("Shared map open failed",err)));
@@ -576,6 +579,7 @@ function renderIndexed() {
       ' · '+cx((m.ranked_date||"").slice(0,10))+'</div><div class="ranked-result-actions">'+
       '<button type="button" class="ghost-btn" data-ranked-detail="'+encodeURIComponent(id)+'">상세 분석 ↗</button>'+
       (m.dna?.skills?'<button type="button" class="ghost-btn" data-dna-id="'+encodeURIComponent(id)+'">Chart DNA ↗</button>':'<span class="chip">공식 메타데이터</span>')+
+      '<button type="button" class="ghost-btn" data-similarity-seed="'+encodeURIComponent(id)+'">유사 채보</button>'+
       '<button type="button" class="ghost-btn favorite-toggle '+(favoriteMaps.has(id)?"active":"")+'" data-favorite-map="'+encodeURIComponent(id)+'">'+(favoriteMaps.has(id)?"★ 저장됨":"☆ 즐겨찾기")+'</button>'+
       '<button type="button" class="ghost-btn compare-toggle '+(selected?"active":"")+'" data-compare-map="'+encodeURIComponent(id)+'">'+(selected?"비교함 ✓":"비교 +")+'</button></div></div>';
   }).join("")||'<div class="empty">검색 결과 없음 · 필터를 완화해 보세요.</div>';
@@ -687,6 +691,182 @@ function resetRankedFilters() {
   document.querySelectorAll("[data-ranked-preset]").forEach(x=>x.classList.toggle("active",x.dataset.rankedPreset==="all"));
   indexedLimit=20;renderIndexed();
 }
+function similarityDnaDistance(a,b){
+  if(!a?.dna?.skills||!b?.dna?.skills)return null;
+  const keys=["aim","stream","speed","stamina","tech","reading","flow"];
+  let sum=0;
+  for(const k of keys)sum+=Math.pow((Number(a.dna.skills[k]||0)-Number(b.dna.skills[k]||0))/25,2);
+  return Math.sqrt(sum/keys.length);
+}
+function similarityMetaDistance(a,b){
+  const defs=[["official_sr",1.2,1.25],["bpm",75,1],["ar",1.7,.8],["od",1.7,.8],["cs",1.2,.5],["total_length",150,.65]];
+  let sum=0,weights=0;
+  for(const [key,scale,weight] of defs){
+    if(a?.[key]==null||b?.[key]==null)continue;
+    sum+=Math.pow((Number(a[key])-Number(b[key]))/scale,2)*weight;weights+=weight;
+  }
+  return weights?Math.sqrt(sum/weights):999;
+}
+function similarityScore(seed,map,mode){
+  if(!seed||!map||String(seed.beatmap_id)===String(map.beatmap_id))return Infinity;
+  const meta=similarityMetaDistance(seed,map);
+  if(mode==="mapper")return String(seed.creator||"")===String(map.creator||"")?meta:Infinity;
+  if(mode==="era"){
+    const ya=Number(String(seed.ranked_date||"").slice(0,4)), yb=Number(String(map.ranked_date||"").slice(0,4));
+    if(!Number.isFinite(ya)||!Number.isFinite(yb))return meta+2;
+    return meta*.55+Math.abs(ya-yb)/2*.45;
+  }
+  const dna=similarityDnaDistance(seed,map);
+  if(mode==="dna")return dna==null?Infinity:dna;
+  if(mode==="metadata")return meta;
+  return dna==null?meta+.06:meta*.58+dna*.42;
+}
+function keepSimilarityBest(best,map,score,cap){
+  if(!Number.isFinite(score)||score===Infinity)return;
+  best.push({map,score});
+  if(best.length>cap*2){best.sort((a,b)=>a.score-b.score);best.length=cap;}
+}
+function renderSimilaritySeed(){
+  const host=$("similaritySeed");if(!host)return;
+  const m=similaritySeedMap;
+  host.innerHTML=m?'<div class="similarity-seed-card"><div><span>기준 채보</span><b>'+cx(m.artist||"?")+' — '+cx(m.title||"?")+' ['+cx(m.version||"?")+']</b><small>'+cx(m.creator||"?")+' · ★'+Number(m.official_sr||0).toFixed(2)+' · '+Number(m.bpm||0).toFixed(0)+' BPM · '+cx(String(m.ranked_date||"").slice(0,10))+'</small></div><div class="similarity-seed-badges"><span>'+ (m.dna?.skills?"DNA 분석 완료":"메타데이터") +'</span><button type="button" class="ghost-btn" data-ranked-detail="'+encodeURIComponent(String(m.beatmap_id))+'">상세</button></div></div>':
+    '<div class="empty">검색 결과나 상세창에서 ‘유사 채보’ 버튼을 눌러 기준 채보를 선택하세요.</div>';
+}
+function setSimilaritySeed(map,autoRun=false){
+  if(!map?.beatmap_id)return;
+  similaritySeedMap=map;
+  renderSimilaritySeed();
+  const panel=$("similaritySeed")?.closest(".similarity-explorer");
+  panel?.scrollIntoView({behavior:"smooth",block:"start"});
+  const status=$("similarityStatus");if(status)status.textContent="기준 채보 선택됨 · 유사 기준과 범위를 선택하세요.";
+  if(autoRun)runSimilarityExplorer();
+}
+function similarityResultHtml(rows,mode){
+  const host=$("similarityResults");if(!host)return;
+  host.innerHTML=rows.length?rows.map((x,i)=>{
+    const m=x.map,id=String(m.beatmap_id),dna=similarityDnaDistance(similaritySeedMap,m);
+    const year=String(m.ranked_date||"").slice(0,4);
+    return '<div class="similarity-row"><b class="similarity-rank">#'+(i+1)+'</b><div class="similarity-copy"><button type="button" data-ranked-detail="'+encodeURIComponent(id)+'"><strong>'+cx(m.artist||"?")+' — '+cx(m.title||"?")+' ['+cx(m.version||"?")+']</strong></button><small>'+cx(m.creator||"?")+' · ★'+Number(m.official_sr||0).toFixed(2)+' · '+Number(m.bpm||0).toFixed(0)+' BPM · '+cx(year)+'</small><div class="similarity-delta"><span>거리 '+Number(x.score).toFixed(3)+'</span><span>ΔSR '+Math.abs(Number(m.official_sr||0)-Number(similaritySeedMap?.official_sr||0)).toFixed(2)+'</span><span>ΔBPM '+Math.abs(Number(m.bpm||0)-Number(similaritySeedMap?.bpm||0)).toFixed(0)+'</span>'+(dna==null?'':'<span>DNA '+dna.toFixed(3)+'</span>')+'</div></div><div class="similarity-actions"><button type="button" class="ghost-btn" data-similarity-seed="'+encodeURIComponent(id)+'">이걸 기준</button><button type="button" class="ghost-btn" data-compare-map="'+encodeURIComponent(id)+'">비교 +</button></div></div>';
+  }).join(""):'<div class="empty">조건에 맞는 유사 채보를 찾지 못했습니다.</div>';
+}
+async function resolveSimilarityIds(idRows,token){
+  const wanted=new Set(idRows.map(x=>String(x.id))), found=new Map();
+  if(!wanted.size)return [];
+  for(const m of rankedIndex)if(wanted.has(String(m.beatmap_id)))found.set(String(m.beatmap_id),m);
+  for(const m of [...favoriteMaps.values(),...recentViewedMaps])if(wanted.has(String(m.beatmap_id)))found.set(String(m.beatmap_id),m);
+  const years=new Set(idRows.map(x=>String(x.year||"")).filter(y=>/^\d{4}$/.test(y)));
+  const shards=(catalogSummary?.search_shards||[]).filter(sh=>!years.size||years.has(String(sh.year)));
+  for(let i=0;i<shards.length&&found.size<wanted.size;i+=6){
+    if(token!==similarityGeneration)return [];
+    const batch=await Promise.allSettled(shards.slice(i,i+6).map(async sh=>{
+      const key=sh.path+"@"+(sh.version||catalogSummary.updated_at||"1");
+      if(indexedYearCache.has(key))return indexedYearCache.get(key);
+      const rows=await fetchCatalogJson(sh.path,sh.version||catalogSummary.updated_at);
+      indexedYearCache.set(key,rows);return rows;
+    }));
+    for(const r of batch)if(r.status==="fulfilled")for(const m of r.value)if(wanted.has(String(m.beatmap_id)))found.set(String(m.beatmap_id),m);
+  }
+  return idRows.map(x=>({map:found.get(String(x.id)),score:x.score})).filter(x=>x.map);
+}
+async function runGlobalDnaSimilarity(seed,limit,token){
+  if(!seed?.dna?.skills)throw Error("기준 채보의 Chart DNA 분석이 아직 없습니다.");
+  const shards=catalogSummary?.chart_dna?.shards||[], best=[];
+  for(let i=0;i<shards.length;i++){
+    if(token!==similarityGeneration)return [];
+    const sh=shards[i],year=String(sh.year),key=year;
+    let overlay=dnaOverlayCache.get(key);
+    if(!overlay){
+      const rows=await fetchCatalogJson(sh.path,sh.version||catalogSummary.updated_at);
+      overlay=new Map();
+      for(const row of rows){
+        const dna=compactOverlayDna(row);
+        if(row?.beatmap_id&&dna)overlay.set(String(row.beatmap_id),dna);
+      }
+      dnaOverlayCache.set(key,overlay);
+    }
+    for(const [id,dna] of overlay){
+      if(id===String(seed.beatmap_id))continue;
+      const candidate={beatmap_id:id,dna,ranked_date:year+"-01-01"};
+      const score=similarityDnaDistance(seed,candidate);
+      if(score!=null)keepSimilarityBest(best,{beatmap_id:id,dna,ranked_date:year+"-01-01"},score,Math.max(limit*5,80));
+    }
+    best.sort((a,b)=>a.score-b.score);if(best.length>Math.max(limit*5,80))best.length=Math.max(limit*5,80);
+    const status=$("similarityStatus");if(status)status.textContent="DNA overlay 탐색 · "+(i+1)+"/"+shards.length+" 연도 · 후보 "+ct(best.length);
+    await new Promise(r=>setTimeout(r,0));
+  }
+  const ids=best.slice(0,Math.max(limit*3,40)).map(x=>({id:x.map.beatmap_id,year:String(x.map.ranked_date||"").slice(0,4),score:x.score}));
+  const resolved=await resolveSimilarityIds(ids,token);
+  for(const row of resolved){
+    const year=String(row.map.ranked_date||"").slice(0,4);
+    const dna=dnaOverlayCache.get(year)?.get(String(row.map.beatmap_id));if(dna)row.map.dna=dna;
+    row.score=similarityDnaDistance(seed,row.map)??row.score;
+  }
+  return resolved.sort((a,b)=>a.score-b.score).slice(0,limit);
+}
+async function runGlobalMetaSimilarity(seed,mode,limit,token){
+  let shards=(catalogSummary?.search_shards||[]).slice();
+  if(mode==="era"){
+    const y=Number(String(seed.ranked_date||"").slice(0,4));
+    if(Number.isFinite(y))shards=shards.filter(sh=>Math.abs(Number(sh.year)-y)<=2);
+  }
+  const best=[],cap=Math.max(limit*6,100);
+  let scanned=0;
+  for(let i=0;i<shards.length;i+=8){
+    if(token!==similarityGeneration)return [];
+    const batch=await Promise.allSettled(shards.slice(i,i+8).map(async sh=>{
+      const key=sh.path+"@"+(sh.version||catalogSummary.updated_at||"1");
+      if(indexedYearCache.has(key))return indexedYearCache.get(key);
+      const rows=await fetchCatalogJson(sh.path,sh.version||catalogSummary.updated_at);
+      indexedYearCache.set(key,rows);return rows;
+    }));
+    for(const r of batch){
+      scanned++;
+      if(r.status!=="fulfilled")continue;
+      for(const m of r.value)keepSimilarityBest(best,m,similarityScore(seed,m,mode==="balanced"?"metadata":mode),cap);
+    }
+    best.sort((a,b)=>a.score-b.score);if(best.length>cap)best.length=cap;
+    const status=$("similarityStatus");if(status)status.textContent="전체 DB 유사도 계산 · "+scanned+"/"+shards.length+" 파일 · 상위 후보 "+ct(best.length);
+    await new Promise(r=>setTimeout(r,0));
+  }
+  if(mode==="balanced"&&seed.dna?.skills){
+    const years=[...new Set(best.slice(0,cap).map(x=>String(x.map.ranked_date||"").slice(0,4)).filter(y=>/^\d{4}$/.test(y)))];
+    await loadDnaOverlayYears(years, indexedGeneration, false);
+    for(const row of best){
+      mergeCachedDna([row.map]);row.score=similarityScore(seed,row.map,"balanced");
+    }
+  }
+  return best.sort((a,b)=>a.score-b.score).slice(0,limit);
+}
+async function runSimilarityExplorer(){
+  const seed=similaritySeedMap,host=$("similarityResults"),status=$("similarityStatus");
+  if(!seed){alert("먼저 기준 채보를 선택해 주세요.");return;}
+  const mode=$("similarityMode")?.value||"balanced",scope=$("similarityScope")?.value||"loaded",limit=Number($("similarityLimit")?.value||20);
+  const token=++similarityGeneration,run=$("runSimilarity"),cancel=$("cancelSimilarity");
+  if(run)run.disabled=true;if(cancel)cancel.hidden=false;
+  if(host)host.innerHTML='<div class="empty">유사 채보 계산 중…</div>';
+  try{
+    let rows=[];
+    if(scope==="loaded"){
+      rows=rankedIndex.map(m=>({map:m,score:similarityScore(seed,m,mode)})).filter(x=>Number.isFinite(x.score)).sort((a,b)=>a.score-b.score).slice(0,limit);
+    }else if(mode==="dna"){
+      rows=await runGlobalDnaSimilarity(seed,limit,token);
+    }else{
+      rows=await runGlobalMetaSimilarity(seed,mode,limit,token);
+    }
+    if(token!==similarityGeneration)return;
+    similarityResultHtml(rows,mode);
+    if(status)status.textContent=(scope==="global"?"전체 Ranked DB":"현재 로드 범위")+" · "+({balanced:"종합",metadata:"메타데이터",dna:"Chart DNA",mapper:"같은 맵퍼",era:"같은 시대"}[mode]||mode)+" 기준 · "+ct(rows.length)+"개 결과";
+  }catch(err){
+    if(token!==similarityGeneration)return;
+    if(host)host.innerHTML='<div class="empty">유사 채보 탐색 실패 · '+cx(err.message)+'</div>';
+    if(status)status.textContent=err.message;
+  }finally{
+    if(token===similarityGeneration){if(run)run.disabled=false;if(cancel)cancel.hidden=true;}
+  }
+}
+$("runSimilarity")?.addEventListener("click",runSimilarityExplorer);
+$("cancelSimilarity")?.addEventListener("click",()=>{similarityGeneration++;if($("cancelSimilarity"))$("cancelSimilarity").hidden=true;if($("runSimilarity"))$("runSimilarity").disabled=false;if($("similarityStatus"))$("similarityStatus").textContent="유사 채보 탐색 취소됨";});
+
 function saveCompareMaps(){
   try{localStorage.setItem("osl-ranked-compare",JSON.stringify([...compareMaps.values()].slice(0,4)));}catch(_){}
 }
@@ -951,7 +1131,7 @@ function showRankedDetails(map) {
       '<div class="collection-state"><b>Chart DNA 분석 대기 중</b><span>이 채보의 실제 노트 데이터가 아직 분석되지 않았습니다. 공식 메타데이터만 표시합니다.</span></div>')+
     '<div class="detail-discovery"><section><h3>비슷한 채보 · 현재 불러온 범위</h3><p class="muted">SR·BPM·AR·OD·CS·길이'+(dna?' + Chart DNA':'')+' 거리 기준</p><div class="detail-neighbors">'+(neighbors.length?neighbors.map(x=>mini(x.map)).join(""):'<div class="empty">비교 후보 없음</div>')+'</div></section>'+
     '<section><h3>같은 맵퍼 더 보기</h3><div class="detail-neighbors">'+(sameMapper.length?sameMapper.map(mini).join(""):'<div class="empty">현재 불러온 범위에 다른 채보 없음</div>')+'</div></section></div>'+
-    '<div class="ranked-detail-actions"><button type="button" class="ghost-btn favorite-toggle '+(favoriteMaps.has(String(map.beatmap_id))?"active":"")+'" data-favorite-map="'+encodeURIComponent(String(map.beatmap_id))+'">'+(favoriteMaps.has(String(map.beatmap_id))?"★ 즐겨찾기됨":"☆ 즐겨찾기")+'</button>'+
+    '<div class="ranked-detail-actions"><button type="button" class="ghost-btn" data-similarity-seed="'+encodeURIComponent(String(map.beatmap_id))+'">Similarity Explorer</button><button type="button" class="ghost-btn favorite-toggle '+(favoriteMaps.has(String(map.beatmap_id))?"active":"")+'" data-favorite-map="'+encodeURIComponent(String(map.beatmap_id))+'">'+(favoriteMaps.has(String(map.beatmap_id))?"★ 즐겨찾기됨":"☆ 즐겨찾기")+'</button>'+
     '<button type="button" class="ghost-btn" data-share-map="'+encodeURIComponent(String(map.beatmap_id))+'">링크 복사</button>'+
     '<a class="ghost-btn" href="https://osu.ppy.sh/beatmaps/'+encodeURIComponent(map.beatmap_id)+'" target="_blank" rel="noopener noreferrer">osu! 채보 페이지 ↗</a>'+
     '<a class="ghost-btn" href="https://osu.ppy.sh/beatmapsets/'+encodeURIComponent(map.beatmapset_id)+'" target="_blank" rel="noopener noreferrer">비트맵셋 보기 ↗</a></div>';
@@ -1044,6 +1224,17 @@ function bindInteractiveCatalogueControls() {
       const dialog=$("chartModal"); if(dialog?.open&&typeof dialog.close==="function") dialog.close();
       openTab("ranked");
       const q=$("indexedQuery"); if(q){q.value=name;q.dispatchEvent(new Event("input",{bubbles:true}));q.focus();}
+      return;
+    }
+    const similar=event.target.closest("[data-similarity-seed]");
+    if(similar){
+      event.preventDefault();
+      const id=decodeURIComponent(similar.dataset.similaritySeed||"");
+      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+      if(map){
+        const dialog=$("chartModal");if(dialog?.open&&typeof dialog.close==="function")dialog.close();
+        setSimilaritySeed(map,false);
+      }
       return;
     }
     const favorite=event.target.closest("[data-favorite-map]");
