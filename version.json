@@ -1,7 +1,7 @@
 {
-  "version": "2.3.0",
+  "version": "2.4.0",
   "channel": "ranked",
-  "name": "Similarity Explorer",
+  "name": "Relation Graph",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -32,6 +32,10 @@
     "Global DNA similarity scans stream year overlays without retaining the full DNA corpus",
     "Precomputed similarity neighborhoods now include year hints for faster map resolution",
     "Browser-local Ranked favorites, recent history, shareable map links and four-map compare",
-    "Explicit whole-catalog text search across 144k+ collected Ranked difficulties"
+    "Explicit whole-catalog text search across 144k+ collected Ranked difficulties",
+    "Chart Relation Graph for same-set, same-mapper, DNA, metadata and era relationships",
+    "Clickable graph nodes with inspector, compare actions and focus expansion",
+    "Whole-catalog search accepts blank text queries and returns every map matching active filters",
+    "DNA-only global filter searches hydrate year overlays before evaluating results"
   ]
 }
