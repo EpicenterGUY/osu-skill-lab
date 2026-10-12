@@ -779,15 +779,16 @@ function similarityResultHtml(rows,mode){
     return '<div class="similarity-row"><b class="similarity-rank">#'+(i+1)+'</b><div class="similarity-copy"><button type="button" data-ranked-detail="'+encodeURIComponent(id)+'"><strong>'+cx(m.artist||"?")+' — '+cx(m.title||"?")+' ['+cx(m.version||"?")+']</strong></button><small>'+cx(m.creator||"?")+' · ★'+Number(m.official_sr||0).toFixed(2)+' · '+Number(m.bpm||0).toFixed(0)+' BPM · '+cx(year)+'</small><div class="similarity-delta"><span>거리 '+Number(x.score).toFixed(3)+'</span><span>ΔSR '+Math.abs(Number(m.official_sr||0)-Number(similaritySeedMap?.official_sr||0)).toFixed(2)+'</span><span>ΔBPM '+Math.abs(Number(m.bpm||0)-Number(similaritySeedMap?.bpm||0)).toFixed(0)+'</span>'+(dna==null?'':'<span>DNA '+dna.toFixed(3)+'</span>')+'</div></div><div class="similarity-actions"><button type="button" class="ghost-btn" data-similarity-seed="'+encodeURIComponent(id)+'">이걸 기준</button><button type="button" class="ghost-btn" data-compare-map="'+encodeURIComponent(id)+'">비교 +</button></div></div>';
   }).join(""):'<div class="empty">조건에 맞는 유사 채보를 찾지 못했습니다.</div>';
 }
-async function resolveSimilarityIds(idRows,token){
+async function resolveSimilarityIds(idRows,token,generationKind="similarity"){
   const wanted=new Set(idRows.map(x=>String(x.id))), found=new Map();
   if(!wanted.size)return [];
+  const generationNow=()=>generationKind==="relation"?relationGeneration:similarityGeneration;
   for(const m of rankedIndex)if(wanted.has(String(m.beatmap_id)))found.set(String(m.beatmap_id),m);
   for(const m of [...favoriteMaps.values(),...recentViewedMaps])if(wanted.has(String(m.beatmap_id)))found.set(String(m.beatmap_id),m);
   const years=new Set(idRows.map(x=>String(x.year||"")).filter(y=>/^\d{4}$/.test(y)));
   const shards=(catalogSummary?.search_shards||[]).filter(sh=>!years.size||years.has(String(sh.year)));
   for(let i=0;i<shards.length&&found.size<wanted.size;i+=6){
-    if(token!==similarityGeneration)return [];
+    if(token!==generationNow())return [];
     const batch=await Promise.allSettled(shards.slice(i,i+6).map(async sh=>{
       const key=sh.path+"@"+(sh.version||catalogSummary.updated_at||"1");
       if(indexedYearCache.has(key))return indexedYearCache.get(key);
@@ -974,7 +975,7 @@ async function relationCandidates(focus,limit,token){
   const pool=relationNodePool().filter(m=>String(m.beatmap_id)!==String(focus.beatmap_id));
   const pre=catalogSummary?.research?.similarity_index?.[String(focus.beatmap_id)]||[];
   if(pre.length){
-    const resolved=await resolveSimilarityIds(pre.slice(0,Math.max(limit*2,24)).map(x=>({id:x.beatmap_id,year:x.year,score:x.distance})),token);
+    const resolved=await resolveSimilarityIds(pre.slice(0,Math.max(limit*2,24)).map(x=>({id:x.beatmap_id,year:x.year,score:x.distance})),token,"relation");
     for(const row of resolved)if(row.map?.beatmap_id&&!pool.some(m=>String(m.beatmap_id)===String(row.map.beatmap_id)))pool.push(row.map);
   }
   return pool.map(m=>({map:m,strength:relationStrength(focus,m),kinds:relationKinds(focus,m)}))
