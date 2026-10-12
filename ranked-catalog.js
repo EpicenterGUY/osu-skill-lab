@@ -2100,8 +2100,10 @@ function renderReplayAlignmentLab(){
     '<span>offset '+cx(String(a.offset_ms??"—"))+'ms · OD '+cx(String(a.od??"—"))+' · 매칭 창 ±'+cx(String(a.window_ms??"—"))+'ms · replay 실제 Miss '+ct(a.replay_miss_total||0)+' · 미매칭 tap-head 후보 '+ct(a.unmatched||0)+'</span>'+
     '<p class="hint-text">실제 Miss 수와 미매칭 후보 수가 같을 필요는 없습니다. slider lenience·doubletap·extra keydown·판정 규칙을 재현하지 않는 근접 정렬입니다.</p>';
   regionsHost.innerHTML=a.regions?.length?a.regions.map((r,i)=>{
-    const severity=Number(r.score||0)>=55?"high":Number(r.score||0)>=30?"mid":"low";
-    return '<div class="replay-alignment-row '+severity+'"><b>#'+(i+1)+'</b><div><span>'+replayClock(r.start)+'–'+replayClock(r.end)+(r.pattern?' · '+cx(r.pattern):'')+'</span><strong>객체 '+ct(r.objects)+' · 미매칭 '+ct(r.unmatched)+' · early '+ct(r.early)+' · late '+ct(r.late)+'</strong><small>평균 |시간 오차| '+(r.mean_abs_ms==null?"—":Number(r.mean_abs_ms).toFixed(0))+'ms'+(r.mean_cursor_px==null?"":" · 평균 cursor "+Number(r.mean_cursor_px).toFixed(0)+"px")+(r.strain==null?"":" · local strain "+Number(r.strain).toFixed(1))+'</small></div><em>'+Number(r.score||0).toFixed(1)+'</em></div>';
+    const severity=Number(r.score||0)>=55?"high":Number(r.score||0)>=30?"mid":"low",fp=replayStoredFingerprint(r);
+    const tags=(fp.tags||[]).map(tag=>'<i class="fingerprint-tag tag-'+cx(tag)+'">'+cx(replayFingerprintLabel(tag))+'</i>').join("");
+    const structure=Number(fp.version||0)>=1?('밀도 '+(fp.density==null?"—":fp.density.toFixed(2))+'/s · spacing '+(fp.mean_spacing_px==null?"—":fp.mean_spacing_px.toFixed(0))+'px · fast '+(fp.fast_gap_pct==null?"—":fp.fast_gap_pct.toFixed(0))+'% · slider '+(fp.slider_pct==null?"—":fp.slider_pct.toFixed(0))+'%'):'구형 alignment · 상세 구조 지문 없음';
+    return '<div class="replay-alignment-row '+severity+'"><b>#'+(i+1)+'</b><div><span>'+replayClock(r.start)+'–'+replayClock(r.end)+' · <mark class="fingerprint-primary">'+cx(fp.label||replayFingerprintLabel(fp.primary))+'</mark>'+(r.pattern?' · '+cx(r.pattern):'')+'</span><strong>객체 '+ct(r.objects)+' · 미매칭 '+ct(r.unmatched)+' · early '+ct(r.early)+' · late '+ct(r.late)+'</strong><small>평균 |시간 오차| '+(r.mean_abs_ms==null?"—":Number(r.mean_abs_ms).toFixed(0))+'ms'+(r.mean_cursor_px==null?"":" · 평균 cursor "+Number(r.mean_cursor_px).toFixed(0)+"px")+(r.strain==null?"":" · local strain "+Number(r.strain).toFixed(1))+'</small><small>'+cx(structure)+'</small><div class="fingerprint-tags">'+tags+'</div></div><em>'+Number(r.score||0).toFixed(1)+'</em></div>';
   }).join(""):'<div class="empty">3개 이상 tap-head가 있는 이상 후보 구간이 없습니다.</div>';
   renderReplayRepeatRegions();
 }
@@ -2266,7 +2268,7 @@ function replayAlignmentReportText(){
     "",
     "상위 이상 구간 후보"
   ];
-  for(const [i,r] of (a.regions||[]).entries())lines.push((i+1)+". "+replayClock(r.start)+"–"+replayClock(r.end)+" · score "+Number(r.score||0).toFixed(1)+" · 객체 "+r.objects+" · 미매칭 "+r.unmatched+" · early "+r.early+" · late "+r.late+" · |오차| "+(r.mean_abs_ms??"—")+"ms"+(r.pattern?" · "+r.pattern:""));
+  for(const [i,r] of (a.regions||[]).entries()){const fp=replayStoredFingerprint(r);lines.push((i+1)+". "+replayClock(r.start)+"–"+replayClock(r.end)+" · "+(fp.label||replayFingerprintLabel(fp.primary))+" · score "+Number(r.score||0).toFixed(1)+" · 객체 "+r.objects+" · 미매칭 "+r.unmatched+" · early "+r.early+" · late "+r.late+" · |오차| "+(r.mean_abs_ms??"—")+"ms"+(Number(fp.version||0)>=1?" · density "+(fp.density??"—")+"/s · spacing "+(fp.mean_spacing_px??"—")+"px":"")+(r.pattern?" · "+r.pattern:""));}
   lines.push("","※ 판정 엔진 재현이 아닌 키다운-객체 근접 정렬이며 실제 Miss 위치를 확정하지 않습니다.");
   return lines.join("\n");
 }
