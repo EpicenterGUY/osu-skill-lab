@@ -183,6 +183,18 @@ class UiContractTests(unittest.TestCase):
                       "Slider-heavy", "Dense / Reading", "Flow", "Mixed"):
             self.assertIn(label, RANKED)
 
+    def test_failure_structure_profile_is_wired(self):
+        for element_id in ("failureStructureScope", "failureStructureMinAlignments",
+                           "copyFailureStructureProfile", "failureStructureKpis",
+                           "failureStructureSummary", "failureStructureBars",
+                           "failureStructureTable", "failureStructureExamples"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', RANKED)
+        for token in ("failureStructureData", "renderFailureStructureProfile",
+                      "failureStructureReportText", "data-failure-structure",
+                      "2회 이상 다시 등장한"):
+            self.assertIn(token, RANKED)
+
     def test_ranked_compare_workspace_is_wired(self):
         for element_id in ("compareTray", "compareTrayItems", "compareCount", "openCompare",
                            "compareNow", "clearCompare"):
