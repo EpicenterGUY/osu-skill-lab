@@ -44,6 +44,7 @@ let replaySignalHistory = [];
 let replayAutoRelinkVersion = "";
 const replayChecksumShardCache = new Map();
 const replaySignalMaps = new Map();
+let replayProfileContext = null;
 const trainingRouteMaps = new Map();
 try {
   const savedCompare = JSON.parse(localStorage.getItem("osl-ranked-compare") || "[]");
@@ -1737,6 +1738,120 @@ function renderReplayRepeatedSignals(){
     return '<div class="replay-repeat-row"><div><span>'+x.skill.toUpperCase()+'</span><b>'+x.rs.length+'회 · '+sample+'</b><small>Mods 조합 '+x.modCount+'종</small></div><div><small>ACC</small><b>'+(x.acc==null?"—":x.acc.toFixed(2)+"%")+'</b><span>전체 DNA표본 대비 '+diff(x.acc,baseAcc,2)+'pp</span></div><div><small>Miss rate</small><b>'+(x.miss==null?"—":x.miss.toFixed(2)+"%")+'</b><span>전체 대비 '+diff(x.miss,baseMiss,2)+'pp</span></div><div><small>Non-300</small><b>'+(x.non==null?"—":x.non.toFixed(2)+"%")+'</b><span>전체 대비 '+diff(x.non,baseNon,2)+'pp</span></div><div><small>최근 절반 ACC</small><b>'+(x.trend==null?"—":(x.trend>=0?"+":"")+x.trend.toFixed(2)+"pp")+'</b><span>동일 축 내 시간순 비교</span></div></div>';
   }).join("")+'<p class="hint-text">DNA 주축은 기본 채보에서 가장 큰 자체 휴리스틱 축입니다. Mod 적용 난이도는 별도 보정하지 않으며, 결과 차이는 요구축과 성과의 인과관계나 개인 약점을 의미하지 않습니다.</p>';
 }
+function replayStd(records,getter){
+  const values=records.map(getter).map(replayNumeric).filter(Number.isFinite);
+  if(values.length<2)return null;
+  const mean=values.reduce((a,b)=>a+b,0)/values.length;
+  return Math.sqrt(values.reduce((n,v)=>n+Math.pow(v-mean,2),0)/(values.length-1));
+}
+function replayRange(records,getter){
+  const values=records.map(getter).map(replayNumeric).filter(Number.isFinite);
+  return values.length?[Math.min(...values),Math.max(...values)]:null;
+}
+function replayVariabilityBand(metric,sd,mean){
+  if(!Number.isFinite(sd))return "표본 부족";
+  if(metric==="accuracy")return sd<=.35?"좁음":sd<=.8?"보통":"큼";
+  if(metric==="miss")return sd<=.75?"좁음":sd<=2?"보통":"큼";
+  if(metric==="non300_rate")return sd<=.6?"좁음":sd<=1.5?"보통":"큼";
+  if(metric==="combo"){
+    const cv=Number.isFinite(mean)&&mean>0?sd/mean:null;
+    if(cv==null)return "표본 부족";
+    return cv<=.05?"좁음":cv<=.15?"보통":"큼";
+  }
+  return "—";
+}
+function replayProfileEvidenceInfo(group,records,selectedMods){
+  const n=records.length,trueCount=records.filter(replayTrueTimestamp).length,trueRatio=n?trueCount/n:0;
+  const linked=Boolean(group?.map?.beatmap_id);
+  const modCount=new Set(records.map(r=>Number(r.mods||0))).size;
+  const modControlled=selectedMods!=="all"||modCount<=1;
+  let score=0;
+  if(n>=10)score+=3;else if(n>=6)score+=2;else if(n>=3)score+=1;
+  if(trueRatio>=.8)score+=2;else if(trueRatio>=.5)score+=1;
+  if(linked)score+=1;
+  if(modControlled)score+=1;
+  const grade=n<3?"D":score>=6?"A":score>=4?"B":score>=2?"C":"D";
+  const label=({A:"충분",B:"보통",C:"제한",D:"부족"})[grade];
+  return {n,trueCount,trueRatio,linked,modCount,modControlled,score,grade,label};
+}
+function replayProfileMetricRow(label,metric,records,getter,unit="",digits=2){
+  const mean=replayAverage(records,getter),sd=replayStd(records,getter),range=replayRange(records,getter);
+  const band=replayVariabilityBand(metric,sd,mean);
+  const fmt=v=>Number.isFinite(v)?Number(v).toFixed(digits)+unit:"—";
+  return '<div class="replay-profile-metric"><span>'+cx(label)+'</span><b>'+fmt(mean)+'</b><small>표본 SD '+fmt(sd)+' · 범위 '+(range?fmt(range[0])+"–"+fmt(range[1]):"—")+' · 변동 '+cx(band)+'</small></div>';
+}
+function renderReplayProfile(group,records,selectedMods){
+  const kpis=$("replayProfileKpis"),variance=$("replayProfileVariability"),modsHost=$("replayProfileModCompare"),evidenceHost=$("replayProfileEvidence"),signalsHost=$("replayProfileSignals");
+  if(!kpis||!variance||!modsHost||!evidenceHost||!signalsHost)return;
+  if(!group||!records.length){
+    replayProfileContext=null;
+    kpis.innerHTML='<div class="dash-kpi"><span>표본</span><b>0</b><small>현재 범위</small></div><div class="dash-kpi"><span>데이터 충분도</span><b>—</b><small>인과 신뢰도 아님</small></div><div class="dash-kpi"><span>실제 replay 시각</span><b>0%</b><small>timestamp provenance</small></div><div class="dash-kpi"><span>관찰 기간</span><b>—</b><small>첫~최근 표본</small></div>';
+    variance.innerHTML='<div class="empty">반복 표본이 필요합니다.</div>';modsHost.innerHTML='<div class="empty">Mods 비교 표본이 없습니다.</div>';evidenceHost.innerHTML='<div class="empty">선택 표본 대기 중</div>';signalsHost.innerHTML='<div class="empty">표본이 충분할 때만 표시합니다.</div>';return;
+  }
+  const info=replayProfileEvidenceInfo(group,records,selectedMods),times=records.map(r=>Date.parse(r.played_at||r.imported_at||"")).filter(Number.isFinite).sort((a,b)=>a-b);
+  const spanDays=times.length>1?(times.at(-1)-times[0])/86400000:null,spanText=spanDays==null?"—":spanDays<1?"<1일":spanDays<10?spanDays.toFixed(1)+"일":Math.round(spanDays)+"일";
+  kpis.innerHTML='<div class="dash-kpi"><span>표본</span><b>'+ct(info.n)+'</b><small>'+cx(selectedMods==="all"?"모든 Mods":replayModsLabel(Number(selectedMods)))+'</small></div>'+
+    '<div class="dash-kpi"><span>데이터 충분도</span><b>'+info.grade+'</b><small>'+cx(info.label)+' · 인과 신뢰도 아님</small></div>'+
+    '<div class="dash-kpi"><span>실제 replay 시각</span><b>'+Math.round(info.trueRatio*100)+'%</b><small>'+info.trueCount+'/'+info.n+' 표본</small></div>'+
+    '<div class="dash-kpi"><span>관찰 기간</span><b>'+spanText+'</b><small>첫~최근 표시 표본</small></div>';
+  variance.innerHTML=
+    replayProfileMetricRow("ACC","accuracy",records,r=>r.accuracy,"%",2)+
+    replayProfileMetricRow("Miss","miss",records,r=>r.hits?.miss,"",2)+
+    replayProfileMetricRow("Non-300","non300_rate",records,r=>r.non300_rate,"%",2)+
+    replayProfileMetricRow("Combo","combo",records,r=>r.combo,"",0);
+
+  const byMods=new Map();
+  for(const r of group.records){const key=Number(r.mods||0);if(!byMods.has(key))byMods.set(key,[]);byMods.get(key).push(r);}
+  const modRows=[...byMods.entries()].sort((a,b)=>b[1].length-a[1].length);
+  const baseline=modRows.find(([mods,rs])=>mods===0&&rs.length>=2)||modRows.find(([,rs])=>rs.length>=2)||modRows[0];
+  const baseAcc=baseline?replayAverage(baseline[1],r=>r.accuracy):null;
+  modsHost.innerHTML=modRows.length?modRows.map(([mods,rs])=>{
+    const acc=replayAverage(rs,r=>r.accuracy),sd=replayStd(rs,r=>r.accuracy),miss=replayAverage(rs,r=>r.hits?.miss),non=replayAverage(rs,r=>r.non300_rate),delta=Number.isFinite(acc)&&Number.isFinite(baseAcc)?acc-baseAcc:null,isBase=baseline&&mods===baseline[0];
+    return '<div class="replay-profile-mod-row"><div><span>'+cx(replayModsLabel(mods))+(isBase?' · 기준':'')+'</span><b>'+rs.length+'회</b></div><div><small>ACC</small><b>'+(acc==null?"—":acc.toFixed(2)+"%")+'</b><span>SD '+(sd==null?"—":sd.toFixed(2))+(delta==null?"":" · Δ "+(delta>=0?"+":"")+delta.toFixed(2)+"pp")+'</span></div><div><small>Miss</small><b>'+(miss==null?"—":miss.toFixed(2))+'</b><span>Non-300 '+(non==null?"—":non.toFixed(2)+"%")+'</span></div></div>';
+  }).join(""):'<div class="empty">Mods 비교 표본이 없습니다.</div>';
+
+  evidenceHost.innerHTML='<div class="replay-evidence-grade"><b>'+info.grade+'</b><div><span>데이터 충분도 · '+cx(info.label)+'</span><small>내부 규칙 점수 '+info.score+'/7</small></div></div>'+
+    '<div class="replay-evidence-list"><span class="'+(info.n>=6?"ok":"")+"">같은 범위 표본 '+info.n+'개</span><span class="'+(info.trueRatio>=.8?"ok":"")+'">실제 replay timestamp '+Math.round(info.trueRatio*100)+'%</span><span class="'+(info.linked?"ok":"")+'">Ranked/로컬 맵 연결 '+(info.linked?"있음":"없음")+'</span><span class="'+(info.modControlled?"ok":"")+'">Mods '+(info.modControlled?"분리됨":"혼합됨")+'</span></div>';
+
+  const signals=[];
+  const accSd=replayStd(records,r=>r.accuracy),missSd=replayStd(records,r=>r.hits?.miss),nonSd=replayStd(records,r=>r.non300_rate);
+  if(info.n>=3&&Number.isFinite(accSd))signals.push("ACC 표본 변동 "+replayVariabilityBand("accuracy",accSd,replayAverage(records,r=>r.accuracy))+" · SD "+accSd.toFixed(2)+"pp");
+  if(info.n>=3&&Number.isFinite(missSd))signals.push("Miss 수 변동 "+replayVariabilityBand("miss",missSd,replayAverage(records,r=>r.hits?.miss))+" · SD "+missSd.toFixed(2));
+  if(info.n>=3&&Number.isFinite(nonSd))signals.push("Non-300 비율 변동 "+replayVariabilityBand("non300_rate",nonSd,replayAverage(records,r=>r.non300_rate))+" · SD "+nonSd.toFixed(2)+"pp");
+  if(info.n>=4&&info.trueRatio>=.75){
+    const ordered=records.filter(replayTrueTimestamp).sort((a,b)=>Date.parse(a.played_at)-Date.parse(b.played_at)),half=Math.max(1,Math.floor(ordered.length/2)),older=ordered.slice(0,half),recent=ordered.slice(half);
+    const oa=replayAverage(older,r=>r.accuracy),ra=replayAverage(recent,r=>r.accuracy),om=replayAverage(older,r=>r.hits?.miss),rm=replayAverage(recent,r=>r.hits?.miss);
+    if(Number.isFinite(oa)&&Number.isFinite(ra))signals.push("실제 시각 기준 최근 절반 ACC 차이 "+((ra-oa)>=0?"+":"")+(ra-oa).toFixed(2)+"pp");
+    if(Number.isFinite(om)&&Number.isFinite(rm))signals.push("실제 시각 기준 최근 절반 Miss 평균 차이 "+((rm-om)>=0?"+":"")+(rm-om).toFixed(2));
+  }
+  if(!info.modControlled)signals.push("여러 Mods가 섞여 있어 변동 원인 해석은 제한됨");
+  const sv=group.map?.dna?.skills,skill=sv?["aim","stream","speed","stamina","tech","reading","flow"].map(k=>[k,replayNumeric(sv[k])]).filter(x=>Number.isFinite(x[1])).sort((a,b)=>b[1]-a[1])[0]:null;
+  if(skill)signals.push("기본 채보 DNA 주축 "+skill[0].toUpperCase()+" "+skill[1].toFixed(1)+" · Mod 보정 전 요구량");
+  signalsHost.innerHTML=signals.length?'<ul>'+signals.map(x=>'<li>'+cx(x)+'</li>').join("")+'</ul>':'<div class="empty">표본이 충분할 때만 표시합니다.</div>';
+  replayProfileContext={group,records:[...records],selectedMods,info};
+}
+function replayProfileReportText(){
+  const ctx=replayProfileContext;if(!ctx)return "";
+  const {group,records,selectedMods,info}=ctx;
+  const meanAcc=replayAverage(records,r=>r.accuracy),sdAcc=replayStd(records,r=>r.accuracy),meanMiss=replayAverage(records,r=>r.hits?.miss),sdMiss=replayStd(records,r=>r.hits?.miss),meanNon=replayAverage(records,r=>r.non300_rate);
+  return [
+    "osu! Skill Lab Replay Profile",
+    replayGroupLabel(group)+" · "+(selectedMods==="all"?"모든 Mods":replayModsLabel(Number(selectedMods))),
+    "표본: "+records.length+" · 데이터 충분도 "+info.grade+" ("+info.label+")",
+    "실제 replay timestamp: "+info.trueCount+"/"+info.n+" ("+Math.round(info.trueRatio*100)+"%)",
+    "ACC 평균 / 표본 SD: "+(meanAcc==null?"—":meanAcc.toFixed(2)+"%")+" / "+(sdAcc==null?"—":sdAcc.toFixed(2)+"pp"),
+    "Miss 평균 / 표본 SD: "+(meanMiss==null?"—":meanMiss.toFixed(2))+" / "+(sdMiss==null?"—":sdMiss.toFixed(2)),
+    "Non-300 평균: "+(meanNon==null?"—":meanNon.toFixed(2)+"%"),
+    "",
+    "※ 데이터 충분도는 표본 수·timestamp provenance·맵 연결·Mods 분리 여부만 평가하며 실력/인과 신뢰도가 아닙니다."
+  ].join("\n");
+}
+$("copyReplayProfile")?.addEventListener("click",async()=>{
+  const report=replayProfileReportText();if(!report){alert("복사할 Replay Profile 표본이 없습니다.");return;}
+  try{await navigator.clipboard.writeText(report);alert("Replay Profile을 복사했습니다.");}
+  catch(_){prompt("Replay Profile을 복사하세요.",report);}
+});
+
 function renderReplayTrendLab(){
   const select=$("replayTrendMap"),summary=$("replayTrendSummary"),chart=$("replayTrendChart");
   if(!select||!summary||!chart)return;
@@ -1748,7 +1863,7 @@ function renderReplayTrendLab(){
   if(!group){
     summary.innerHTML='<div class="empty">같은 채보 리플레이가 2개 이상 쌓이면 추이를 볼 수 있습니다.</div>';
     chart.innerHTML='<div class="empty">추이 그래프 대기 중</div>';
-    renderReplayPracticeCompare();renderReplayRepeatedSignals();return;
+    renderReplayProfile(null,[],"all");renderReplayPracticeCompare();renderReplayRepeatedSignals();return;
   }
   const modsSelect=$("replayTrendMods"),previousMods=modsSelect?.value||"all",modValues=[...new Set(group.records.map(r=>Number(r.mods||0)))].sort((a,b)=>a-b);
   if(modsSelect){
@@ -1766,6 +1881,7 @@ function renderReplayTrendLab(){
     '<div><span>Non-300 첫 → 최근</span><b>'+(Number.isFinite(fn)?fn.toFixed(2):"—")+' → '+(Number.isFinite(ln)?ln.toFixed(2):"—")+'%</b><small>Δ '+delta(fn,ln,2)+'pp</small></div>'+
     '<div><span>실제 replay 시각</span><b>'+trueTimes+'/'+records.length+'</b><small>나머지는 가져온 시각</small></div></div>';
   renderReplayTrendChart(records,metric,group.map);
+  renderReplayProfile(group,records,selectedMods);
   renderReplayPracticeCompare();renderReplayRepeatedSignals();
 }
 $("replayTrendMap")?.addEventListener("change",renderReplayTrendLab);
