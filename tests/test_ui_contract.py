@@ -129,6 +129,17 @@ class UiContractTests(unittest.TestCase):
             self.assertIn(token, RANKED)
         self.assertIn("OSLReplayBridge?.record", HTML)
 
+    def test_replay_trend_lab_is_wired(self):
+        for element_id in ("importReplaySignals", "replayTrendMap", "replayTrendMods",
+                           "replayTrendMetric", "replayTrendWindow", "replayTrendSummary",
+                           "replayTrendChart", "replayPracticeCompare", "replayRepeatedSignals"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', RANKED)
+        for token in ("renderReplayTrendLab", "renderReplayPracticeCompare",
+                      "renderReplayRepeatedSignals", "firstTrainingCompletionByMap",
+                      "replayModsLabel", "played_at_source"):
+            self.assertIn(token, RANKED)
+
     def test_ranked_compare_workspace_is_wired(self):
         for element_id in ("compareTray", "compareTrayItems", "compareCount", "openCompare",
                            "compareNow", "clearCompare"):
