@@ -14,7 +14,7 @@ Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analys
 - **M4 · OSL Client — PLANNED**  
   Carry the recent **osu! Skill Lab client** direction into a dedicated desktop-client track instead of treating the project as web-only. The client milestone is to unify the existing public Ranked/Chart-DNA database with local `.osu` / `.osr` analysis in one desktop experience, while keeping the current web/PWA as a first-class lightweight front end. The current `server.py` / `실행.bat` local analyzer is the technical starting point; client-specific integrations should be added incrementally rather than blocking the website.
 - **M5 · Personal Rhythm Intelligence — EARLY PREVIEW**  
-  Practice Route Builder now creates user-controlled Chart-DNA training exposure sessions while explicitly avoiding pass/skill claims. Replay-driven weakness detection, better confidence estimates, failure-pattern analysis, and long-term growth tracking remain future work.
+  Practice Route Builder and the browser-local Training Journal now track user-controlled Chart-DNA practice exposure, session completion, feedback, and recent activity while explicitly avoiding pass/skill claims. Replay-driven weakness detection, better confidence estimates, failure-pattern analysis, and long-term performance modeling remain future work.
 
 > The client milestone is a roadmap item, not a claim that a packaged desktop client or direct osu! game integration already exists.
 
@@ -43,6 +43,7 @@ Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analys
 - Whole-catalog search also works with a blank text query: choose only SR/BPM/AR/OD/length/status/DNA filters and the scanner keeps every matching map rather than requiring a keyword.
 - **Search Workspace** saves up to 20 named filter/search presets locally, keeps recent whole-catalog searches, restores shared filter URLs, and exports the currently filtered result set as CSV or JSON.
 - **Practice Route Builder** uses precomputed, diverse Chart DNA candidate pools by target skill and official SR band. It can auto-select the least-exposed local DNA dimension, creates 5/8/12-map sessions, persists completion locally, and is explicitly an exposure planner rather than a player-skill/pass-probability model.
+- **Training Journal** stores finished sessions only in the current browser, records per-map completion timestamps plus optional session feel/notes, shows 7/14/28-day activity and DNA-exposure summaries, and supports JSON export/import. Its adaptive SR-band option moves at most one band from the most relevant prior session using explicit user feedback; it is not a skill estimate.
 - Sort by official SR, BPM, ranked date, play count, length, AR/OD, and available Chart DNA dimensions.
 - Full monthly metadata shards are not loaded by the page on entry; only the selected month/year search index is fetched on demand. Mobile, PWA, and desktop work with no browser OAuth credentials.
 - The optional **STATS → Ranked 색인 가져오기** button is only for importing additional local datasets.
