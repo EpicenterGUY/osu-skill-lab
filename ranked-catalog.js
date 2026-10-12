@@ -1984,6 +1984,80 @@ $("replayTrendMods")?.addEventListener("change",renderReplayTrendLab);
 $("replayTrendMetric")?.addEventListener("change",renderReplayTrendLab);
 $("replayTrendWindow")?.addEventListener("change",renderReplayTrendLab);
 
+function replayAlignmentSafe(raw){
+  const a=raw?.alignment??raw;
+  if(!a||typeof a!=="object")return null;
+  if(!a.supported)return {version:Number(a.version||1),method:String(a.method||""),supported:false,reason:String(a.reason||"").slice(0,180)};
+  const n=v=>{const x=replayNumeric(v);return Number.isFinite(x)?x:null};
+  return {
+    version:Number(a.version||1),method:String(a.method||"tap-head-nearest-keydown-v1"),supported:true,reason:"",
+    checksum:String(a.checksum||"").toLowerCase().slice(0,32),object_heads:Number(a.object_heads||0),presses:Number(a.presses||0),
+    matched:Number(a.matched||0),unmatched:Number(a.unmatched||0),coverage_pct:n(a.coverage_pct),offset_ms:n(a.offset_ms),od:n(a.od),window_ms:n(a.window_ms),
+    median_abs_ms:n(a.median_abs_ms),p90_abs_ms:n(a.p90_abs_ms),median_cursor_px:n(a.median_cursor_px),
+    early:Number(a.early||0),late:Number(a.late||0),replay_miss_total:Number(a.replay_miss_total||0),
+    regions:Array.isArray(a.regions)?a.regions.slice(0,20).map(r=>({
+      start:Number(r.start||0),end:Number(r.end||0),objects:Number(r.objects||0),matched:Number(r.matched||0),unmatched:Number(r.unmatched||0),
+      early:Number(r.early||0),late:Number(r.late||0),mean_abs_ms:n(r.mean_abs_ms),mean_cursor_px:n(r.mean_cursor_px),
+      strain:n(r.strain),pattern:String(r.pattern||"").slice(0,80),score:n(r.score)
+    })):[],
+  };
+}
+function replayClock(ms){
+  const total=Math.max(0,Math.floor(Number(ms||0)/1000)),m=Math.floor(total/60),s=total%60;
+  return m+":"+String(s).padStart(2,"0");
+}
+function renderReplayAlignmentLab(){
+  const select=$("replayAlignmentSelect"),kpis=$("replayAlignmentKpis"),summary=$("replayAlignmentSummary"),regionsHost=$("replayAlignmentRegions");
+  if(!select||!kpis||!summary||!regionsHost)return;
+  const rows=replaySignalHistory.filter(r=>r.alignment?.supported),current=select.value;
+  select.innerHTML=rows.length?rows.map(r=>{
+    const map=replayDisplayMap(r),label=map?.title?((map.artist||"?")+" — "+map.title):("MD5 "+String(r.map_hash||"").slice(0,10)+"…");
+    return '<option value="'+cx(String(r.id))+'">'+cx(label)+' · '+cx(new Date(r.played_at||r.imported_at||Date.now()).toLocaleString())+'</option>';
+  }).join(""):'<option value="">정렬 표본 없음</option>';
+  if(rows.some(r=>String(r.id)===current))select.value=current;
+  const record=rows.find(r=>String(r.id)===select.value)||rows[0];
+  if(record&&select.value!==String(record.id))select.value=String(record.id);
+  if(!record){
+    kpis.innerHTML='<div class="dash-kpi"><span>Tap-head 객체</span><b>0</b><small>circle + slider head</small></div><div class="dash-kpi"><span>매칭</span><b>0%</b><small>1:1 nearest keydown</small></div><div class="dash-kpi"><span>중앙 |오차|</span><b>—</b><small>ms</small></div><div class="dash-kpi"><span>후보 구간</span><b>0</b><small>10초 창</small></div>';
+    summary.innerHTML='<b>PC 상세 정렬 표본 없음</b><span>같은 MD5의 로컬 .osu를 선택한 상태에서 PC 서버로 .osr을 가져오세요.</span>';
+    regionsHost.innerHTML='<div class="empty">정렬된 리플레이가 생기면 상위 이상 구간 후보를 표시합니다.</div>';return;
+  }
+  const a=record.alignment,map=replayDisplayMap(record);
+  kpis.innerHTML='<div class="dash-kpi"><span>Tap-head 객체</span><b>'+ct(a.object_heads||0)+'</b><small>circle + slider head</small></div>'+
+    '<div class="dash-kpi"><span>매칭</span><b>'+(Number.isFinite(replayNumeric(a.coverage_pct))?Number(a.coverage_pct).toFixed(1):"—")+'%</b><small>'+ct(a.matched||0)+' / '+ct(a.object_heads||0)+'</small></div>'+
+    '<div class="dash-kpi"><span>중앙 |오차|</span><b>'+(a.median_abs_ms==null?"—":Number(a.median_abs_ms).toFixed(1))+'</b><small>ms · P90 '+(a.p90_abs_ms==null?"—":Number(a.p90_abs_ms).toFixed(1))+'</small></div>'+
+    '<div class="dash-kpi"><span>후보 구간</span><b>'+ct(a.regions?.length||0)+'</b><small>10초 창 · score순</small></div>';
+  summary.innerHTML='<b>'+cx(map?.title?((map.artist||"?")+" — "+map.title+" ["+(map.version||"?")+"]"):(record.filename||"PC replay"))+'</b>'+
+    '<span>offset '+cx(String(a.offset_ms??"—"))+'ms · OD '+cx(String(a.od??"—"))+' · 매칭 창 ±'+cx(String(a.window_ms??"—"))+'ms · replay 실제 Miss '+ct(a.replay_miss_total||0)+' · 미매칭 tap-head 후보 '+ct(a.unmatched||0)+'</span>'+
+    '<p class="hint-text">실제 Miss 수와 미매칭 후보 수가 같을 필요는 없습니다. slider lenience·doubletap·extra keydown·판정 규칙을 재현하지 않는 근접 정렬입니다.</p>';
+  regionsHost.innerHTML=a.regions?.length?a.regions.map((r,i)=>{
+    const severity=Number(r.score||0)>=55?"high":Number(r.score||0)>=30?"mid":"low";
+    return '<div class="replay-alignment-row '+severity+'"><b>#'+(i+1)+'</b><div><span>'+replayClock(r.start)+'–'+replayClock(r.end)+(r.pattern?' · '+cx(r.pattern):'')+'</span><strong>객체 '+ct(r.objects)+' · 미매칭 '+ct(r.unmatched)+' · early '+ct(r.early)+' · late '+ct(r.late)+'</strong><small>평균 |시간 오차| '+(r.mean_abs_ms==null?"—":Number(r.mean_abs_ms).toFixed(0))+'ms'+(r.mean_cursor_px==null?"":" · 평균 cursor "+Number(r.mean_cursor_px).toFixed(0)+"px")+(r.strain==null?"":" · local strain "+Number(r.strain).toFixed(1))+'</small></div><em>'+Number(r.score||0).toFixed(1)+'</em></div>';
+  }).join(""):'<div class="empty">3개 이상 tap-head가 있는 이상 후보 구간이 없습니다.</div>';
+}
+function replayAlignmentReportText(){
+  const id=$("replayAlignmentSelect")?.value,record=replaySignalHistory.find(r=>String(r.id)===String(id)&&r.alignment?.supported);
+  if(!record)return "";
+  const a=record.alignment,map=replayDisplayMap(record);
+  const lines=[
+    "osu! Skill Lab PC Timeline Alignment",
+    map?.title?((map.artist||"?")+" — "+map.title+" ["+(map.version||"?")+"]"):(record.filename||record.map_hash||"replay"),
+    "매칭: "+a.matched+"/"+a.object_heads+" ("+Number(a.coverage_pct||0).toFixed(1)+"%) · offset "+a.offset_ms+"ms · 창 ±"+a.window_ms+"ms",
+    "중앙 |오차| "+(a.median_abs_ms??"—")+"ms · P90 "+(a.p90_abs_ms??"—")+"ms · replay Miss "+(a.replay_miss_total||0)+" · 미매칭 후보 "+(a.unmatched||0),
+    "",
+    "상위 이상 구간 후보"
+  ];
+  for(const [i,r] of (a.regions||[]).entries())lines.push((i+1)+". "+replayClock(r.start)+"–"+replayClock(r.end)+" · score "+Number(r.score||0).toFixed(1)+" · 객체 "+r.objects+" · 미매칭 "+r.unmatched+" · early "+r.early+" · late "+r.late+" · |오차| "+(r.mean_abs_ms??"—")+"ms"+(r.pattern?" · "+r.pattern:""));
+  lines.push("","※ 판정 엔진 재현이 아닌 키다운-객체 근접 정렬이며 실제 Miss 위치를 확정하지 않습니다.");
+  return lines.join("\n");
+}
+$("replayAlignmentSelect")?.addEventListener("change",renderReplayAlignmentLab);
+$("copyReplayAlignment")?.addEventListener("click",async()=>{
+  const report=replayAlignmentReportText();if(!report){alert("복사할 PC 정렬 표본이 없습니다.");return;}
+  try{await navigator.clipboard.writeText(report);alert("PC Timeline Alignment 리포트를 복사했습니다.");}
+  catch(_){prompt("정렬 리포트를 복사하세요.",report);}
+});
+
 function renderReplaySignals(){
   const kpis=$("replaySignalKpis"),judgements=$("replayJudgementMix"),bands=$("replayAccuracyBands"),timing=$("replayTimingSignals"),dnaHost=$("replayDnaSignals"),list=$("replaySignalList"),summary=$("replaySignalSummary");
   if(!kpis||!judgements||!bands||!timing||!dnaHost||!list)return;
@@ -2029,9 +2103,11 @@ function renderReplaySignals(){
     return '<div class="replay-signal-row"><div><span>'+cx(when.toLocaleString())+' · '+(r.header_only?"헤더":"PC 상세")+' · '+cx(r.link_type||"unresolved")+'</span><b>'+title+'</b><small>ACC '+(r.accuracy==null?"—":Number(r.accuracy).toFixed(2)+"%")+' · Miss '+ct(r.hits?.miss||0)+' · Combo '+ct(r.combo||0)+(r.player?' · '+cx(r.player):'')+'</small></div><div class="replay-signal-actions">'+
       (id?'<button type="button" class="ghost-btn" data-ranked-detail="'+encodeURIComponent(id)+'">채보 상세</button>':'')+
       (routeMatch?'<button type="button" class="ghost-btn" data-replay-route-complete="'+encodeURIComponent(id)+'">현재 세션 완료 반영</button>':'')+
+      (r.alignment?.supported?'<button type="button" class="ghost-btn" data-replay-alignment="'+encodeURIComponent(String(r.id))+'">이상 구간</button>':'')+
       '<button type="button" class="ghost-btn" data-replay-signal-remove="'+encodeURIComponent(String(r.id))+'">삭제</button></div></div>';
   }).join(""):'<div class="empty">Replay Lab에서 .osr을 가져오면 자동 기록됩니다.</div>';
   renderReplayTrendLab();
+  renderReplayAlignmentLab();
 }
 async function relinkReplaySignals(silent=false){
   if(!replaySignalHistory.length)return 0;
@@ -2072,7 +2148,7 @@ $("importReplaySignals")?.addEventListener("change",async event=>{
         header_only:r.header_only!==false,replay_data_analyzed:Boolean(r.replay_data_analyzed),
         taps:r.taps==null?null:Number(r.taps),median_gap:r.median_gap==null?null:Number(r.median_gap),
         burst_count:Number(r.burst_count||0),burst_std_median:r.burst_std_median==null?null:Number(r.burst_std_median),
-        link_type:String(r.link_type||"imported"),map
+        link_type:String(r.link_type||"imported"),map,alignment:replayAlignmentSafe(r.alignment)
       };
     }).filter(r=>r.id);
     const merged=new Map(replaySignalHistory.map(r=>[String(r.id),r]));for(const r of clean)merged.set(String(r.id),r);
@@ -2092,6 +2168,12 @@ $("clearReplaySignals")?.addEventListener("click",()=>{
   replaySignalHistory=[];persistReplaySignals();renderReplaySignals();
 });
 document.addEventListener("click",event=>{
+  const align=event.target.closest("[data-replay-alignment]");
+  if(align){
+    const id=decodeURIComponent(align.dataset.replayAlignment||""),select=$("replayAlignmentSelect");
+    if(select&&[...select.options].some(o=>o.value===id)){select.value=id;renderReplayAlignmentLab();$("replayAlignmentSummary")?.scrollIntoView({behavior:"smooth",block:"center"});}
+    return;
+  }
   const remove=event.target.closest("[data-replay-signal-remove]");
   if(remove){
     const id=decodeURIComponent(remove.dataset.replaySignalRemove||"");
