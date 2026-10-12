@@ -1452,7 +1452,7 @@ function persistTrainingHistory(){
   try{localStorage.setItem("osl-training-history",JSON.stringify(trainingHistory.slice(0,80)));}catch(_){}
 }
 function trainingRouteEmptyState(){
-  return {skill:null,band:null,mode:null,scope:null,maps:[],done:[],done_at:{},feel:"",note:"",created_at:null};
+  return {skill:null,requested_band:null,band:null,mode:null,scope:null,maps:[],done:[],done_at:{},feel:"",note:"",created_at:null};
 }
 function trainingSessionFeelLabel(value){
   return ({easy:"여유",good:"적당",hard:"도전적",too_hard:"너무 어려움"})[value]||"미기록";
@@ -1523,6 +1523,17 @@ function archiveTrainingRoute(reason="finished",clear=true){
   if(clear){trainingRouteGeneration++;trainingRouteState=trainingRouteEmptyState();persistTrainingRoute();renderTrainingRoute();}
   renderTrainingJournal();return true;
 }
+function suggestTrainingBand(skill){
+  const bands=["3-4","4-5","5-6","6-7","7-8","8-99"];
+  const session=trainingHistory.find(x=>bands.includes(String(x.band))&&String(x.skill||"overall")===String(skill))||
+    trainingHistory.find(x=>bands.includes(String(x.band)));
+  if(!session)return "5-6";
+  let index=Math.max(0,bands.indexOf(String(session.band)));
+  const ratio=(session.maps?.length?Number(session.done?.length||0)/session.maps.length:0);
+  if(session.feel==="easy"&&ratio>=.75)index=Math.min(bands.length-1,index+1);
+  if(session.feel==="too_hard"||(session.feel==="hard"&&ratio<.5))index=Math.max(0,index-1);
+  return bands[index];
+}
 function trainingBandBounds(band){
   if(!band||band==="all")return [0,99];
   const [lo,hi]=band.split("-").map(Number);return [Number.isFinite(lo)?lo:0,Number.isFinite(hi)?hi:99];
@@ -1579,7 +1590,7 @@ function renderTrainingRoute(){
     const id=String(m.beatmap_id),isDone=done.has(id),focus=Number(m.dna?.skills?.[trainingRouteState.skill]||m.dna?.skills?.overall||0);
     return '<div class="training-route-row '+(isDone?"done":"")+'"><b class="training-route-order">'+(i+1)+'</b><div class="training-route-copy"><button type="button" data-ranked-detail="'+encodeURIComponent(id)+'"><strong>'+cx(m.artist||"?")+' — '+cx(m.title||"?")+' ['+cx(m.version||"?")+']</strong></button><small>'+cx(m.creator||"?")+' · ★'+Number(m.official_sr||0).toFixed(2)+' · '+Number(m.bpm||0).toFixed(0)+' BPM · '+skill+' '+focus.toFixed(1)+'</small></div><div class="training-route-actions"><button type="button" class="ghost-btn" data-training-toggle="'+encodeURIComponent(id)+'">'+(isDone?"완료 취소":"연습 완료")+'</button><button type="button" class="ghost-btn" data-similarity-seed="'+encodeURIComponent(id)+'">유사 채보</button><button type="button" class="ghost-btn" data-compare-map="'+encodeURIComponent(id)+'">비교 +</button><button type="button" class="ghost-btn favorite-toggle '+(favoriteMaps.has(id)?"active":"")+'" data-favorite-map="'+encodeURIComponent(id)+'">'+(favoriteMaps.has(id)?"★":"☆")+'</button></div></div>';
   }).join("");
-  if(status)status.textContent=(trainingRouteState.auto_skill?"자동 낮은 노출 영역 → ":"")+"목표 "+skill+" · "+trainingRouteState.band+" · "+trainingRouteState.mode+" · "+trainingRouteState.scope+" · Chart DNA 분석 완료 채보만 사용";
+  if(status){const bandText=trainingRouteState.requested_band==="adaptive"?"기록 기반 → "+trainingRouteState.band:trainingRouteState.band;status.textContent=(trainingRouteState.auto_skill?"자동 낮은 노출 영역 → ":"")+"목표 "+skill+" · "+bandText+" · "+trainingRouteState.mode+" · "+trainingRouteState.scope+" · Chart DNA 분석 완료 채보만 사용";}
 }
 async function buildTrainingRoute(){
   if(!catalogSummary){alert("Ranked DB 준비 후 다시 시도해 주세요.");return;}
@@ -1587,7 +1598,7 @@ async function buildTrainingRoute(){
     if(!confirm("진행 중인 세션에 완료 기록이 있습니다. 현재 세션을 기록하고 새 세션을 만들까요?"))return;
     archiveTrainingRoute("replaced",true);
   }
-  const token=++trainingRouteGeneration,skillInfo=trainingRouteSkill(),skill=skillInfo.skill,band=$("trainingRouteStars")?.value||"5-6",mode=$("trainingRouteMode")?.value||"ramp",scope=$("trainingRouteScope")?.value||"loaded",count=Number($("trainingRouteCount")?.value||8),status=$("trainingRouteStatus"),button=$("buildTrainingRoute");
+  const token=++trainingRouteGeneration,skillInfo=trainingRouteSkill(),skill=skillInfo.skill,requestedBand=$("trainingRouteStars")?.value||"5-6",band=requestedBand==="adaptive"?suggestTrainingBand(skill):requestedBand,mode=$("trainingRouteMode")?.value||"ramp",scope=$("trainingRouteScope")?.value||"loaded",count=Number($("trainingRouteCount")?.value||8),status=$("trainingRouteStatus"),button=$("buildTrainingRoute");
   if(button)button.disabled=true;if(status)status.textContent="훈련 후보 계산 중…";
   try{
     let source=[];
@@ -1602,7 +1613,7 @@ async function buildTrainingRoute(){
     const ranked=source.map(map=>({map,score:trainingRouteScore(map,skill,band,mode)})).sort((a,b)=>b.score-a.score);
     const picked=diversifyTrainingRows(ranked,count,mode).map(x=>x.map);
     if(!picked.length)throw Error("조건에 맞는 Chart DNA 분석 채보가 없습니다.");
-    trainingRouteState={skill,auto_skill:skillInfo.auto,band,mode,scope,maps:picked,done:[],done_at:{},feel:"",note:"",created_at:new Date().toISOString()};
+    trainingRouteState={skill,auto_skill:skillInfo.auto,requested_band:requestedBand,band,mode,scope,maps:picked,done:[],done_at:{},feel:"",note:"",created_at:new Date().toISOString()};
     persistTrainingRoute();renderTrainingRoute();
   }catch(err){if(status)status.textContent="세션 생성 실패 · "+err.message;}
   finally{if(token===trainingRouteGeneration&&button)button.disabled=false;}
@@ -1615,6 +1626,27 @@ $("clearTrainingRoute")?.addEventListener("click",()=>{
 $("finishTrainingRoute")?.addEventListener("click",()=>{if(!trainingRouteState.maps?.length){alert("기록할 현재 세션이 없습니다.");return;}archiveTrainingRoute("finished",true);});
 $("trainingSessionFeel")?.addEventListener("change",e=>{trainingRouteState.feel=e.target.value||"";persistTrainingRoute();});
 $("trainingSessionNote")?.addEventListener("input",e=>{trainingRouteState.note=String(e.target.value||"").slice(0,120);persistTrainingRoute();});
+$("importTrainingJournal")?.addEventListener("change",async event=>{
+  const file=event.target.files?.[0];if(!file)return;
+  try{
+    const data=JSON.parse(await file.text());
+    if(data?.format!=="osu-skill-lab-training-journal"||!Array.isArray(data.sessions))throw Error("지원하지 않는 훈련 기록 파일");
+    const clean=data.sessions.slice(0,120).map((session,i)=>({
+      id:String(session.id||("import-"+Date.now()+"-"+i)),
+      skill:String(session.skill||"overall"),auto_skill:Boolean(session.auto_skill),requested_band:session.requested_band?String(session.requested_band):undefined,
+      band:String(session.band||"all"),mode:String(session.mode||"ramp"),scope:String(session.scope||"global"),
+      maps:Array.isArray(session.maps)?session.maps.slice(0,20).map(compactStoredMap).filter(Boolean):[],
+      done:Array.isArray(session.done)?session.done.slice(0,20).map(String):[],
+      done_at:session.done_at&&typeof session.done_at==="object"?session.done_at:{},
+      feel:["easy","good","hard","too_hard"].includes(session.feel)?session.feel:"",
+      note:String(session.note||"").slice(0,120),created_at:session.created_at||null,ended_at:session.ended_at||null,reason:String(session.reason||"imported")
+    })).filter(x=>x.maps.length);
+    const merged=new Map(trainingHistory.map(x=>[String(x.id),x]));for(const session of clean)merged.set(String(session.id),session);
+    trainingHistory=[...merged.values()].sort((a,b)=>Date.parse(b.ended_at||b.created_at||0)-Date.parse(a.ended_at||a.created_at||0)).slice(0,80);
+    persistTrainingHistory();renderTrainingJournal();alert("훈련 기록 "+clean.length+"세션을 가져왔습니다.");
+  }catch(err){alert("훈련 기록 가져오기 실패: "+err.message);}
+  event.target.value="";
+});
 $("exportTrainingJournal")?.addEventListener("click",()=>{
   const payload={format:"osu-skill-lab-training-journal",version:1,exported_at:new Date().toISOString(),note:"Local completion/exposure records only; not a skill model.",sessions:trainingHistory};
   const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");
@@ -1632,7 +1664,7 @@ document.addEventListener("click",event=>{
   if(replay){
     const id=decodeURIComponent(replay.dataset.trainingHistoryReplay||""),session=trainingHistory.find(x=>String(x.id)===id);if(!session)return;
     const skill=$("trainingRouteSkill");if(skill)skill.value=session.auto_skill?"auto":(session.skill||"overall");
-    if($("trainingRouteStars"))$("trainingRouteStars").value=session.band||"all";
+    if($("trainingRouteStars"))$("trainingRouteStars").value=session.requested_band==="adaptive"?"adaptive":(session.band||"all");
     if($("trainingRouteMode"))$("trainingRouteMode").value=session.mode||"ramp";
     if($("trainingRouteScope"))$("trainingRouteScope").value=session.scope||"global";
     if($("trainingRouteCount")){const n=session.maps?.length||8;$("trainingRouteCount").value=n<=5?"5":n<=8?"8":"12";}
