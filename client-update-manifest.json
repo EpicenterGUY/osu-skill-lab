@@ -1,0 +1,74 @@
+{
+  "format": "osu-skill-lab-client-update",
+  "version": "2.21.0",
+  "channel": "stable",
+  "source": "https://raw.githubusercontent.com/EpicenterGUY/osu-skill-lab/main/",
+  "generated_at": "2026-10-12T14:22:00Z",
+  "files": [
+    {
+      "path": "server.py",
+      "git_blob_sha": "0938b46725e976b8906bbfd2f2dac6ccdcd68bf8",
+      "size": 56349
+    },
+    {
+      "path": "osu_api.py",
+      "git_blob_sha": "e13cadba9936b182292a1c25a8fcfa013fb9b88a",
+      "size": 5573
+    },
+    {
+      "path": "index.html",
+      "git_blob_sha": "5fba0d5ffdfec8cae6ce99fb795f8fc2a8275b70",
+      "size": 92002
+    },
+    {
+      "path": "app-shell.css",
+      "git_blob_sha": "23a5af965eaecd7644bb09376ea3e7012d41c224",
+      "size": 78505
+    },
+    {
+      "path": "ranked-catalog.js",
+      "git_blob_sha": "f731557404a9d3d1688b9831b97765f5c5c62c21",
+      "size": 230420
+    },
+    {
+      "path": "profile.js",
+      "git_blob_sha": "8af44397c1f1a6c7db9f6bc685b3391b6b4cfe3f",
+      "size": 11363
+    },
+    {
+      "path": "client-bridge.js",
+      "git_blob_sha": "2fed4e34d28a6c60b6739dcd2dc4c8c2ec7b7749",
+      "size": 22531
+    },
+    {
+      "path": "mobile-analyzer.js",
+      "git_blob_sha": "a4e114349c0fe8ab5322b736193223c36bab1490",
+      "size": 5081
+    },
+    {
+      "path": "mobile-replay.js",
+      "git_blob_sha": "dc1c5c1f5558ac964499c7e8907330be4897503b",
+      "size": 3256
+    },
+    {
+      "path": "manifest.webmanifest",
+      "git_blob_sha": "1ed2c15482f41974dfd9970dd886b7b6d8ad73a7",
+      "size": 295
+    },
+    {
+      "path": "sw.js",
+      "git_blob_sha": "d2267f0dc0aa3bfec83287a9893491c1b6fe6bb2",
+      "size": 1812
+    },
+    {
+      "path": "version.json",
+      "git_blob_sha": "02318455d51f71484d79ece18adf1985609b5520",
+      "size": 13466
+    },
+    {
+      "path": "실행.bat",
+      "git_blob_sha": "a1af659e004ff321807e27f892d923f068404eed",
+      "size": 126
+    }
+  ]
+}
