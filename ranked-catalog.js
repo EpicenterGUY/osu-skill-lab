@@ -1244,7 +1244,7 @@ function bindInteractiveCatalogueControls() {
     if(favorite){
       event.preventDefault();
       const id=decodeURIComponent(favorite.dataset.favoriteMap||"");
-      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||similarityResultMaps.get(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
       if(map){
         toggleFavoriteMap(map);
         const dialog=$("chartModal");
