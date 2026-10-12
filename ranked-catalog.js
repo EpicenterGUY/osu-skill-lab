@@ -40,6 +40,9 @@ let trainingPoolCache = null;
 let trainingRouteGeneration = 0;
 let trainingRouteState = {skill:null,requested_band:null,band:null,mode:null,scope:null,maps:[],done:[],done_at:{},feel:"",note:"",created_at:null};
 let trainingHistory = [];
+let replaySignalHistory = [];
+const replayChecksumShardCache = new Map();
+const replaySignalMaps = new Map();
 const trainingRouteMaps = new Map();
 try {
   const savedCompare = JSON.parse(localStorage.getItem("osl-ranked-compare") || "[]");
@@ -70,6 +73,10 @@ try {
 try {
   const saved = JSON.parse(localStorage.getItem("osl-training-history") || "[]");
   if(Array.isArray(saved)) trainingHistory = saved.filter(x=>x&&Array.isArray(x.maps)).slice(0,80);
+} catch (_) {}
+try {
+  const saved = JSON.parse(localStorage.getItem("osl-replay-signals") || "[]");
+  if(Array.isArray(saved)) replaySignalHistory = saved.filter(x=>x&&x.id).slice(0,200);
 } catch (_) {}
 
 try {
@@ -508,7 +515,7 @@ function renderRecentPreview() {
 }
 function compactStoredMap(m) {
   if(!m)return null;
-  const keys=["beatmap_id","beatmapset_id","artist","title","creator","version","ranked_date","official_sr","bpm","ar","od","cs","hp","playcount","total_length","status"];
+  const keys=["beatmap_id","beatmapset_id","artist","title","creator","version","ranked_date","official_sr","bpm","ar","od","cs","hp","playcount","total_length","status","checksum"];
   const out={}; for(const k of keys) if(m[k]!=null) out[k]=m[k];
   if(m.dna?.skills) out.dna=m.dna;
   return out;
