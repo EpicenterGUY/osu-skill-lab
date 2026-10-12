@@ -1,7 +1,7 @@
 {
-  "version": "2.20.1",
+  "version": "2.21.0",
   "channel": "client",
-  "name": "Chart DNA Collector Guard",
+  "name": "Verified Client Updater",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -127,6 +127,12 @@
     "Chart DNA backfill now has a push fallback trigger when the analyzer or its workflow changes",
     "Ranked summary exposes the Chart DNA collector's own updated_at timestamp separately from metadata freshness",
     "Chart DNA UI marks collection as delayed after three hours without a collector checkpoint",
-    "Collector health distinguishes schedule delay from source blocking and shows the latest batch success rate"
+    "Collector health distinguishes schedule delay from source blocking and shows the latest batch success rate",
+    "M4 Phase 5 adds a local OSL Client updater with explicit check and apply controls",
+    "Updater source is pinned to the official EpicenterGUY/osu-skill-lab main branch on raw.githubusercontent.com",
+    "Only a fixed whitelist of Client shell files can be replaced and local DB/config files are excluded",
+    "Every downloaded update file is verified by expected byte size and Git blob SHA-1 before installation",
+    "Client files are backed up before replacement and partially applied updates are automatically rolled back on failure",
+    "Successful server updates require an explicit OSL Client restart; updates are never silently auto-installed"
   ]
 }
