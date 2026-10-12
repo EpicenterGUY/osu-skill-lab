@@ -2,10 +2,202 @@
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
-import struct,lzma,json,math,statistics,webbrowser,threading,hashlib
+import struct,lzma,json,math,statistics,webbrowser,threading,hashlib,os,sqlite3,time,uuid
 from datetime import datetime, timezone
 import osu_api
 BASE=Path(__file__).resolve().parent; MAX_UPLOAD=25*1024*1024
+CLIENT_HOME=Path.home()/'.osu-skill-lab'
+CLIENT_CONFIG=CLIENT_HOME/'client.json'
+CLIENT_DB=CLIENT_HOME/'client.db'
+CLIENT_SCAN_LOCK=threading.Lock()
+CLIENT_SCAN={'running':False,'scanned':0,'updated':0,'reused':0,'errors':0,'started_at':None,'finished_at':None,'message':'대기 중'}
+
+def client_now():
+    return datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
+
+def client_json_read(path,default):
+    try:return json.loads(path.read_text(encoding='utf-8'))
+    except:return default
+
+def client_json_write(path,data):
+    path.parent.mkdir(parents=True,exist_ok=True)
+    tmp=path.with_suffix(path.suffix+'.tmp')
+    tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8')
+    tmp.replace(path)
+
+def client_candidates():
+    out=[]
+    env=os.environ.get('OSU_SONGS')
+    if env:out.append(Path(env))
+    local=os.environ.get('LOCALAPPDATA')
+    if local:out.append(Path(local)/'osu!'/'Songs')
+    out.extend([Path.home()/'AppData'/'Local'/'osu!'/'Songs',Path('C:/osu!/Songs'),Path('D:/osu!/Songs')])
+    seen=set();result=[]
+    for p in out:
+        try:key=str(p.expanduser().resolve()).lower()
+        except:key=str(p).lower()
+        if key not in seen:
+            seen.add(key);result.append(p.expanduser())
+    return result
+
+def client_resolve_songs():
+    cfg=client_json_read(CLIENT_CONFIG,{})
+    configured=str(cfg.get('songs_path') or '').strip()
+    if configured:
+        p=Path(configured).expanduser()
+        if p.exists() and p.is_dir():return p.resolve(),'configured'
+    for p in client_candidates():
+        if p.exists() and p.is_dir():return p.resolve(),'auto'
+    return None,'missing'
+
+def client_db():
+    CLIENT_HOME.mkdir(parents=True,exist_ok=True)
+    db=sqlite3.connect(CLIENT_DB,timeout=30)
+    db.row_factory=sqlite3.Row
+    db.executescript('''
+    PRAGMA journal_mode=WAL;
+    CREATE TABLE IF NOT EXISTS maps(
+      path TEXT PRIMARY KEY, root TEXT NOT NULL, mtime_ns INTEGER NOT NULL, size INTEGER NOT NULL,
+      md5 TEXT, beatmap_id INTEGER, beatmapset_id INTEGER, artist TEXT, title TEXT,
+      creator TEXT, version TEXT, mode INTEGER, ar REAL, od REAL, cs REAL, hp REAL,
+      bpm REAL, scan_token TEXT, indexed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_maps_root ON maps(root);
+    CREATE INDEX IF NOT EXISTS idx_maps_md5 ON maps(md5);
+    CREATE INDEX IF NOT EXISTS idx_maps_beatmap_id ON maps(beatmap_id);
+    CREATE INDEX IF NOT EXISTS idx_maps_title ON maps(title);
+    CREATE INDEX IF NOT EXISTS idx_maps_creator ON maps(creator);
+    CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT);
+    ''')
+    return db
+
+def client_meta_set(db,key,value):
+    db.execute('INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,str(value)))
+
+def client_meta_get(db,key,default=None):
+    row=db.execute('SELECT value FROM meta WHERE key=?',(key,)).fetchone()
+    return row['value'] if row else default
+
+def parse_map_index(blob):
+    raw=blob.decode('utf-8-sig','replace');sec='';meta={};diff={};general={};timing=[];mode=0
+    for line0 in raw.splitlines():
+        line=line0.strip()
+        if not line or line.startswith('//'):continue
+        if line.startswith('[') and line.endswith(']'):sec=line[1:-1];continue
+        if sec in ('Metadata','Difficulty','General') and ':' in line:
+            k,v=line.split(':',1);k=k.strip();v=v.strip();{'Metadata':meta,'Difficulty':diff,'General':general}[sec][k]=v
+            if sec=='General' and k=='Mode':
+                try:mode=int(v)
+                except:mode=0
+            continue
+        if sec=='TimingPoints' and len(timing)<16:
+            a=line.split(',')
+            try:
+                if len(a)>=7 and int(a[6])==1 and float(a[1])>0:timing.append(60000/float(a[1]))
+            except:pass
+        if sec=='HitObjects':break
+    def intval(v):
+        try:return int(v)
+        except:return None
+    def num(v):
+        try:return float(v)
+        except:return None
+    return {
+      'md5':hashlib.md5(blob).hexdigest(),'beatmap_id':intval(meta.get('BeatmapID')),
+      'beatmapset_id':intval(meta.get('BeatmapSetID')),'artist':meta.get('ArtistUnicode') or meta.get('Artist') or '',
+      'title':meta.get('TitleUnicode') or meta.get('Title') or '','creator':meta.get('Creator') or '',
+      'version':meta.get('Version') or '','mode':mode,'ar':num(diff.get('ApproachRate')),
+      'od':num(diff.get('OverallDifficulty')),'cs':num(diff.get('CircleSize')),'hp':num(diff.get('HPDrainRate')),
+      'bpm':round(max(timing),2) if timing else None
+    }
+
+def client_scan_worker(root):
+    root=Path(root).resolve();token=uuid.uuid4().hex;now=client_now();db=None
+    with CLIENT_SCAN_LOCK:
+        CLIENT_SCAN.update({'running':True,'scanned':0,'updated':0,'reused':0,'errors':0,'started_at':now,'finished_at':None,'message':'Songs 폴더 검색 중'})
+    try:
+        db=client_db();root_s=str(root)
+        for path in root.rglob('*.osu'):
+            with CLIENT_SCAN_LOCK:CLIENT_SCAN['scanned']+=1
+            try:
+                st=path.stat();path_s=str(path.resolve())
+                old=db.execute('SELECT mtime_ns,size,mode FROM maps WHERE path=?',(path_s,)).fetchone()
+                if old and int(old['mtime_ns'])==int(st.st_mtime_ns) and int(old['size'])==int(st.st_size):
+                    db.execute('UPDATE maps SET scan_token=? WHERE path=?',(token,path_s))
+                    with CLIENT_SCAN_LOCK:CLIENT_SCAN['reused']+=1
+                else:
+                    blob=path.read_bytes();m=parse_map_index(blob)
+                    if m['mode']!=0:continue
+                    db.execute('''INSERT INTO maps(path,root,mtime_ns,size,md5,beatmap_id,beatmapset_id,artist,title,creator,version,mode,ar,od,cs,hp,bpm,scan_token,indexed_at)
+                      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                      ON CONFLICT(path) DO UPDATE SET root=excluded.root,mtime_ns=excluded.mtime_ns,size=excluded.size,md5=excluded.md5,
+                      beatmap_id=excluded.beatmap_id,beatmapset_id=excluded.beatmapset_id,artist=excluded.artist,title=excluded.title,
+                      creator=excluded.creator,version=excluded.version,mode=excluded.mode,ar=excluded.ar,od=excluded.od,cs=excluded.cs,hp=excluded.hp,
+                      bpm=excluded.bpm,scan_token=excluded.scan_token,indexed_at=excluded.indexed_at''',
+                      (path_s,root_s,st.st_mtime_ns,st.st_size,m['md5'],m['beatmap_id'],m['beatmapset_id'],m['artist'],m['title'],m['creator'],m['version'],m['mode'],m['ar'],m['od'],m['cs'],m['hp'],m['bpm'],token,now))
+                    with CLIENT_SCAN_LOCK:CLIENT_SCAN['updated']+=1
+                if CLIENT_SCAN['scanned']%250==0:
+                    db.commit()
+                    with CLIENT_SCAN_LOCK:CLIENT_SCAN['message']=f"{CLIENT_SCAN['scanned']:,}개 파일 확인 중"
+            except Exception:
+                with CLIENT_SCAN_LOCK:CLIENT_SCAN['errors']+=1
+        db.execute('DELETE FROM maps WHERE root=? AND scan_token<>?',(root_s,token))
+        client_meta_set(db,'songs_path',root_s);client_meta_set(db,'last_scan',client_now());db.commit()
+        count=db.execute('SELECT COUNT(*) c FROM maps WHERE root=?',(root_s,)).fetchone()['c']
+        with CLIENT_SCAN_LOCK:CLIENT_SCAN['message']=f'완료 · osu!standard {count:,}개 인덱스'
+    except Exception as exc:
+        with CLIENT_SCAN_LOCK:CLIENT_SCAN['message']='스캔 실패: '+str(exc)
+    finally:
+        if db:db.close()
+        with CLIENT_SCAN_LOCK:
+            CLIENT_SCAN['running']=False;CLIENT_SCAN['finished_at']=client_now()
+
+def client_start_scan():
+    root,source=client_resolve_songs()
+    if not root:return {'ok':False,'error':'osu! stable Songs 폴더를 찾지 못했습니다. 경로를 직접 지정해 주세요.'}
+    with CLIENT_SCAN_LOCK:
+        if CLIENT_SCAN['running']:return {'ok':True,'started':False,'source':source,'songs_path':str(root),'scan':dict(CLIENT_SCAN)}
+    threading.Thread(target=client_scan_worker,args=(root,),daemon=True).start()
+    return {'ok':True,'started':True,'source':source,'songs_path':str(root)}
+
+def client_status():
+    root,source=client_resolve_songs();count=sets=0;last_scan=None
+    try:
+        db=client_db()
+        if root:
+            root_s=str(root);count=db.execute('SELECT COUNT(*) c FROM maps WHERE root=?',(root_s,)).fetchone()['c']
+            sets=db.execute('SELECT COUNT(DISTINCT COALESCE(beatmapset_id,path)) c FROM maps WHERE root=?',(root_s,)).fetchone()['c']
+        last_scan=client_meta_get(db,'last_scan');db.close()
+    except:pass
+    with CLIENT_SCAN_LOCK:scan=dict(CLIENT_SCAN)
+    return {'local_server':True,'client_version':'0.1.0','songs_path':str(root) if root else None,'path_source':source,'path_exists':bool(root),'maps':count,'beatmapsets':sets,'last_scan':last_scan,'scan':scan}
+
+def client_search(q='',limit=40):
+    root,_=client_resolve_songs()
+    if not root:return []
+    limit=max(1,min(100,int(limit or 40)));terms=[x for x in str(q or '').strip().split() if x]
+    db=client_db();root_s=str(root)
+    sql='SELECT md5,beatmap_id,beatmapset_id,artist,title,creator,version,ar,od,cs,hp,bpm,path FROM maps WHERE root=?'
+    args=[root_s]
+    for term in terms:
+        like='%'+term+'%';sql+=' AND (artist LIKE ? OR title LIKE ? OR creator LIKE ? OR version LIKE ? OR CAST(beatmap_id AS TEXT)=?)';args.extend([like,like,like,like,term])
+    sql+=' ORDER BY indexed_at DESC,title COLLATE NOCASE LIMIT ?';args.append(limit)
+    rows=[dict(r) for r in db.execute(sql,args).fetchall()];db.close()
+    for r in rows:r.pop('path',None)
+    return rows
+
+def client_analyze(md5=None,beatmap_id=None):
+    root,_=client_resolve_songs()
+    if not root:raise ValueError('Songs 폴더가 설정되지 않았습니다.')
+    db=client_db();row=None
+    if md5:row=db.execute('SELECT path FROM maps WHERE root=? AND md5=?',(str(root),str(md5).lower())).fetchone()
+    elif beatmap_id:row=db.execute('SELECT path FROM maps WHERE root=? AND beatmap_id=?',(str(root),int(beatmap_id))).fetchone()
+    db.close()
+    if not row:raise ValueError('로컬 인덱스에서 채보를 찾지 못했습니다. 먼저 스캔해 주세요.')
+    path=Path(row['path']).resolve()
+    if root not in path.parents:raise ValueError('Songs 폴더 밖의 파일은 분석하지 않습니다.')
+    result=parse_map(path.read_bytes());result['filename']=path.name;result['client_source']='songs-index'
+    return result
 
 def osu_string(b,p):
     marker=b[p];p+=1
