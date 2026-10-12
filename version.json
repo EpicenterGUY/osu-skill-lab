@@ -1,7 +1,7 @@
 {
-  "version": "2.10.0",
+  "version": "2.11.0",
   "channel": "ranked",
-  "name": "Replay Trends",
+  "name": "Replay Profile",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -65,6 +65,11 @@
     "Mod-aware same-map filtering and same-Mod Practice Route before-after comparisons",
     "Replay timestamp provenance separates actual replay time from import-time fallback",
     "Repeated outcome summaries by dominant base Chart DNA axis with sample-size and mod-mix caveats",
-    "Replay Signals JSON import merges portable local histories and retries checksum resolution"
+    "Replay Signals JSON import merges portable local histories and retries checksum resolution",
+    "Replay Profile summarizes same-map replay variability with sample SD and observed ranges",
+    "A-D data sufficiency grade uses only sample count, replay timestamp provenance, map linkage and Mods separation",
+    "Per-Mod technical statistics compare repeated outcome samples without difficulty adjustment or causal claims",
+    "Automatic replay observations appear only from repeated samples and stay descriptive rather than skill labels",
+    "Replay metric aggregation is null-safe so missing accuracy or timing values are never treated as zero"
   ]
 }
