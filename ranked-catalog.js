@@ -20,11 +20,25 @@ let indexedLoadedKey = "";
 let indexedLoadPromise = null;
 let indexedSearchTimer = null;
 let lastFilteredRows = [];
+let globalSearchGeneration = 0;
+let globalSearchActive = false;
+let sharedMapHandled = false;
 const compareMaps = new Map();
+const favoriteMaps = new Map();
+let recentViewedMaps = [];
 try {
   const savedCompare = JSON.parse(localStorage.getItem("osl-ranked-compare") || "[]");
   if (Array.isArray(savedCompare)) for (const m of savedCompare.slice(0,4))
     if (m?.beatmap_id) compareMaps.set(String(m.beatmap_id), m);
+} catch (_) {}
+try {
+  const savedFavorites = JSON.parse(localStorage.getItem("osl-ranked-favorites") || "[]");
+  if (Array.isArray(savedFavorites)) for (const m of savedFavorites)
+    if (m?.beatmap_id) favoriteMaps.set(String(m.beatmap_id), m);
+} catch (_) {}
+try {
+  const savedRecent = JSON.parse(localStorage.getItem("osl-ranked-recent") || "[]");
+  if (Array.isArray(savedRecent)) recentViewedMaps = savedRecent.filter(m=>m?.beatmap_id).slice(0,20);
 } catch (_) {}
 
 try {
@@ -125,6 +139,7 @@ function mergeCachedDna(rows) {
 }
 function dnaYearsForSelection(selection) {
   const shards=catalogSummary?.chart_dna?.shards||[];
+  if (globalSearchActive) return [...new Set(rankedIndex.map(m=>String(m.ranked_date||"").slice(0,4)).filter(y=>/^\d{4}$/.test(y)))];
   if (selection==="recent") return [];
   if (selection==="all") return shards.map(x=>String(x.year)).filter(x=>/^\d{4}$/.test(x));
   const value=selection.replace("year:","").replace("month:","");
@@ -393,8 +408,10 @@ async function loadRankedSummary() {
     select.value = validValues.includes(prev) ? prev : "recent";
     $("hostedSyncState").innerHTML = '<div class="ranked-loader ranked-loader-done"><div class="ranked-loader-head"><b>✓ 최신 DB 준비 완료</b><span>' + ct(s.counts?.difficulties) + '채보 · ' + ((performance.now()-started)/1000).toFixed(1) + '초</span></div><div class="ranked-loader-track"><i style="width:100%"></i></div><small>월·연도 데이터는 선택할 때만 받습니다.</small></div>';
     renderRecentPreview();
+    renderSavedShelves();
     if (document.getElementById("ranked").classList.contains("active"))
       loadRankedSearch();
+    queueMicrotask(()=>openSharedMapFromUrl().catch(err=>console.warn("Shared map open failed",err)));
   } catch (err) {
     // A transient failed request must not leave the Ranked dashboard blank indefinitely.
     if (!catalogSummary) {
@@ -456,6 +473,51 @@ function renderRecentPreview() {
     '<span class="recent-sr">★' + Number(m.official_sr || 0).toFixed(2) +
     '</span></div>').join("") : '<div class="empty">최근 Ranked 데이터가 아직 없습니다.</div>';
 }
+function compactStoredMap(m) {
+  if(!m)return null;
+  const keys=["beatmap_id","beatmapset_id","artist","title","creator","version","ranked_date","official_sr","bpm","ar","od","cs","hp","playcount","total_length","status"];
+  const out={}; for(const k of keys) if(m[k]!=null) out[k]=m[k];
+  if(m.dna?.skills) out.dna=m.dna;
+  return out;
+}
+function saveDiscoveryState() {
+  try{localStorage.setItem("osl-ranked-favorites",JSON.stringify([...favoriteMaps.values()]));}catch(_){}
+  try{localStorage.setItem("osl-ranked-recent",JSON.stringify(recentViewedMaps.slice(0,20)));}catch(_){}
+}
+function renderSavedShelves() {
+  const renderList=(host,rows,type)=>{
+    if(!host)return;
+    host.innerHTML=rows.length?rows.map(m=>'<div class="saved-map-row"><button type="button" class="saved-map-main" data-ranked-detail="'+encodeURIComponent(String(m.beatmap_id))+'"><b>'+cx(m.artist||"?")+' — '+cx(m.title||"?")+'</b><small>'+cx(m.creator||"?")+' · ★'+Number(m.official_sr||0).toFixed(2)+' · '+Number(m.bpm||0).toFixed(0)+' BPM</small></button>'+
+      (type==="favorite"?'<button type="button" class="saved-map-remove" aria-label="즐겨찾기 제거" data-favorite-map="'+encodeURIComponent(String(m.beatmap_id))+'">★</button>':'')+'</div>').join(""):
+      '<div class="empty">'+(type==="favorite"?"즐겨찾기한 채보가 없습니다.":"아직 열어본 채보가 없습니다.")+'</div>';
+  };
+  renderList($("rankedFavorites"),[...favoriteMaps.values()],"favorite");
+  renderList($("rankedRecentViews"),recentViewedMaps,"recent");
+}
+function rememberViewedMap(map) {
+  const clean=compactStoredMap(map); if(!clean?.beatmap_id)return;
+  recentViewedMaps=[clean,...recentViewedMaps.filter(m=>String(m.beatmap_id)!==String(clean.beatmap_id))].slice(0,20);
+  saveDiscoveryState(); renderSavedShelves();
+}
+function toggleFavoriteMap(map) {
+  const clean=compactStoredMap(map); if(!clean?.beatmap_id)return;
+  const id=String(clean.beatmap_id);
+  if(favoriteMaps.has(id)) favoriteMaps.delete(id); else favoriteMaps.set(id,clean);
+  saveDiscoveryState(); renderSavedShelves(); renderIndexed();
+}
+function shareMapUrl(map) {
+  const url=new URL(location.href);
+  url.searchParams.set("map",String(map.beatmap_id));
+  const year=String(map.ranked_date||"").slice(0,4);
+  if(/^\d{4}$/.test(year))url.searchParams.set("year",year);
+  url.hash="ranked";
+  return url.toString();
+}
+async function copyMapShareLink(map) {
+  const url=shareMapUrl(map);
+  try{await navigator.clipboard.writeText(url);alert("채보 링크를 복사했습니다.");}
+  catch(_){prompt("채보 링크를 복사하세요.",url);}
+}
 function rankedLengthMatch(seconds, mode) {
   const n=Number(seconds||0);
   if(mode==="lt60") return n<60;
@@ -514,6 +576,7 @@ function renderIndexed() {
       ' · '+cx((m.ranked_date||"").slice(0,10))+'</div><div class="ranked-result-actions">'+
       '<button type="button" class="ghost-btn" data-ranked-detail="'+encodeURIComponent(id)+'">상세 분석 ↗</button>'+
       (m.dna?.skills?'<button type="button" class="ghost-btn" data-dna-id="'+encodeURIComponent(id)+'">Chart DNA ↗</button>':'<span class="chip">공식 메타데이터</span>')+
+      '<button type="button" class="ghost-btn favorite-toggle '+(favoriteMaps.has(id)?"active":"")+'" data-favorite-map="'+encodeURIComponent(id)+'">'+(favoriteMaps.has(id)?"★ 저장됨":"☆ 즐겨찾기")+'</button>'+
       '<button type="button" class="ghost-btn compare-toggle '+(selected?"active":"")+'" data-compare-map="'+encodeURIComponent(id)+'">'+(selected?"비교함 ✓":"비교 +")+'</button></div></div>';
   }).join("")||'<div class="empty">검색 결과 없음 · 필터를 완화해 보세요.</div>';
   const more=$("indexedMore"); if(more) more.style.display=rows.length>indexedLimit?"block":"none";
@@ -555,7 +618,66 @@ $("dnaOnly")?.addEventListener("change", async () => {
   renderIndexed();
 });
 $("indexedMore")?.addEventListener("click", () => {indexedLimit += 20; renderIndexed();});
-$("indexedYear")?.addEventListener("change", () => {indexedLoadedKey = ""; loadRankedSearch();});
+$("indexedYear")?.addEventListener("change", () => {globalSearchGeneration++;globalSearchActive=false;indexedLoadedKey = ""; loadRankedSearch();});
+
+function matchesGlobalQuery(m,q){
+  return [m.artist,m.title,m.creator,m.version,m.beatmap_id,m.beatmapset_id].some(v=>String(v??"").toLocaleLowerCase().includes(q));
+}
+async function globalRankedSearch(){
+  if(!catalogSummary)return;
+  const input=$("indexedQuery"), q=(input?.value||"").trim().toLocaleLowerCase();
+  if(!q || (q.length<2&&!/^\d+$/.test(q))){alert("전체 DB 검색은 2글자 이상 입력해 주세요. 숫자 ID는 그대로 검색할 수 있습니다.");input?.focus();return;}
+  const token=++globalSearchGeneration;
+  const cancel=$("cancelGlobalSearch"); if(cancel)cancel.hidden=false;
+  const button=$("globalRankedSearch"); if(button)button.disabled=true;
+  globalSearchActive=true;
+  const matches=new Map(), shards=(catalogSummary.search_shards||[]).slice().sort((a,b)=>String(b.month||"").localeCompare(String(a.month||"")));
+  let scanned=0, failed=0, totalHits=0, capped=false;
+  try{
+    for(let i=0;i<shards.length;i+=8){
+      if(token!==globalSearchGeneration)return;
+      const group=shards.slice(i,i+8);
+      const batch=await Promise.allSettled(group.map(async sh=>{
+        const cacheKey=sh.path+"@"+(sh.version||catalogSummary.updated_at||"1");
+        if(indexedYearCache.has(cacheKey))return indexedYearCache.get(cacheKey);
+        return fetchCatalogJson(sh.path,sh.version||catalogSummary.updated_at);
+      }));
+      for(const result of batch){
+        scanned++;
+        if(result.status!=="fulfilled"){failed++;continue;}
+        for(const m of result.value){
+          if(!m?.beatmap_id||!matchesGlobalQuery(m,q))continue;
+          totalHits++;
+          if(matches.size<4000)matches.set(String(m.beatmap_id),m); else capped=true;
+        }
+      }
+      rankedIndex=mergeCachedDna([...matches.values()]);
+      indexedLimit=20;renderIndexed();
+      const pct=shards.length?scanned/shards.length*100:100;
+      setRankedLoadState("전체 DB 검색",ct(totalHits)+"건 발견 · "+scanned+"/"+shards.length+" 월 파일"+(capped?" · 화면 보관 4,000건 제한":""),pct);
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+    if(token!==globalSearchGeneration)return;
+    indexedLoadedKey="global:"+q+"@"+(catalogSummary.updated_at||"1");
+    const state=$("hostedSyncState");
+    if(state)state.textContent="전체 DB 검색 완료 · "+ct(totalHits)+"건"+(capped?" · 상위 4,000건만 화면 보관":"")+" · "+scanned+"파일"+(failed?" · 실패 "+failed:"");
+    const years=dnaYearsForSelection("global");
+    if(years.length&&years.length<=4)loadDnaOverlayYears(years,indexedGeneration,false).catch(()=>{});
+  } finally {
+    if(token===globalSearchGeneration){
+      if(cancel)cancel.hidden=true;
+      if(button)button.disabled=false;
+    }
+  }
+}
+function cancelGlobalRankedSearch(){
+  globalSearchGeneration++;
+  const cancel=$("cancelGlobalSearch");if(cancel)cancel.hidden=true;
+  const button=$("globalRankedSearch");if(button)button.disabled=false;
+  const state=$("hostedSyncState");if(state)state.textContent="전체 DB 검색 취소됨 · 현재까지 찾은 결과는 유지됩니다.";
+}
+$("globalRankedSearch")?.addEventListener("click",globalRankedSearch);
+$("cancelGlobalSearch")?.addEventListener("click",cancelGlobalRankedSearch);
 
 function resetRankedFilters() {
   const defaults={indexedMinSr:"0",indexedMaxSr:"0",indexedMinBpm:"0",indexedMaxBpm:"0",indexedMinAr:"0",indexedMinOd:"0",indexedLength:"all",indexedStatus:"all",indexedSort:"sr_desc"};
@@ -642,6 +764,7 @@ async function loadLegacyRanked() {
 }
 async function loadRankedSearch() {
   if (!catalogSummary) return loadLegacyRanked();
+  globalSearchActive=false;
   const selection = $("indexedYear").value || "recent";
   if (selection === "recent") {
     indexedGeneration++;
@@ -722,6 +845,25 @@ async function loadRankedSearch() {
   }
 }
 
+async function openSharedMapFromUrl(){
+  if(sharedMapHandled||!catalogSummary)return;
+  const params=new URLSearchParams(location.search), id=params.get("map"), year=params.get("year");
+  if(!id)return;
+  sharedMapHandled=true;
+  openTab("ranked");
+  const select=$("indexedYear");
+  if(select&&year&&/^\d{4}$/.test(year)){
+    const value="year:"+year;
+    if([...select.options].some(o=>o.value===value)){select.value=value;indexedLoadedKey="";await loadRankedSearch();}
+  }
+  let map=rankedIndex.find(m=>String(m.beatmap_id)===String(id))||findSummaryMap(id);
+  if(!map){
+    const q=$("indexedQuery");if(q)q.value=String(id);
+    await globalRankedSearch();
+    map=rankedIndex.find(m=>String(m.beatmap_id)===String(id));
+  }
+  if(map)showRankedDetails(map);
+}
 window.loadRankedSearch = loadRankedSearch;
 
 $("importRanked")?.addEventListener("change", async e => {
@@ -792,6 +934,7 @@ function detailNeighbors(map){
 }
 function showRankedDetails(map) {
   if(!map) return;
+  rememberViewedMap(map);
   const dna=map.dna?.skills, neighbors=detailNeighbors(map), sameMapper=rankedIndex.filter(x=>x.creator===map.creator&&String(x.beatmap_id)!==String(map.beatmap_id)).slice(0,5), fields=[
     ["공식 SR","★"+Number(map.official_sr||0).toFixed(2)],["BPM",Number(map.bpm||0).toFixed(1)],
     ["AR",map.ar??"—"],["OD",map.od??"—"],["CS",map.cs??"—"],
@@ -808,7 +951,9 @@ function showRankedDetails(map) {
       '<div class="collection-state"><b>Chart DNA 분석 대기 중</b><span>이 채보의 실제 노트 데이터가 아직 분석되지 않았습니다. 공식 메타데이터만 표시합니다.</span></div>')+
     '<div class="detail-discovery"><section><h3>비슷한 채보 · 현재 불러온 범위</h3><p class="muted">SR·BPM·AR·OD·CS·길이'+(dna?' + Chart DNA':'')+' 거리 기준</p><div class="detail-neighbors">'+(neighbors.length?neighbors.map(x=>mini(x.map)).join(""):'<div class="empty">비교 후보 없음</div>')+'</div></section>'+
     '<section><h3>같은 맵퍼 더 보기</h3><div class="detail-neighbors">'+(sameMapper.length?sameMapper.map(mini).join(""):'<div class="empty">현재 불러온 범위에 다른 채보 없음</div>')+'</div></section></div>'+
-    '<div class="ranked-detail-actions"><a class="ghost-btn" href="https://osu.ppy.sh/beatmaps/'+encodeURIComponent(map.beatmap_id)+'" target="_blank" rel="noopener noreferrer">osu! 채보 페이지 ↗</a>'+
+    '<div class="ranked-detail-actions"><button type="button" class="ghost-btn favorite-toggle '+(favoriteMaps.has(String(map.beatmap_id))?"active":"")+'" data-favorite-map="'+encodeURIComponent(String(map.beatmap_id))+'">'+(favoriteMaps.has(String(map.beatmap_id))?"★ 즐겨찾기됨":"☆ 즐겨찾기")+'</button>'+
+    '<button type="button" class="ghost-btn" data-share-map="'+encodeURIComponent(String(map.beatmap_id))+'">링크 복사</button>'+
+    '<a class="ghost-btn" href="https://osu.ppy.sh/beatmaps/'+encodeURIComponent(map.beatmap_id)+'" target="_blank" rel="noopener noreferrer">osu! 채보 페이지 ↗</a>'+
     '<a class="ghost-btn" href="https://osu.ppy.sh/beatmapsets/'+encodeURIComponent(map.beatmapset_id)+'" target="_blank" rel="noopener noreferrer">비트맵셋 보기 ↗</a></div>';
   const dialog=$("chartModal");if(!dialog)return;if(typeof dialog.showModal==="function"&&!dialog.open)dialog.showModal();else dialog.setAttribute("open","");
 }
@@ -901,6 +1046,22 @@ function bindInteractiveCatalogueControls() {
       const q=$("indexedQuery"); if(q){q.value=name;q.dispatchEvent(new Event("input",{bubbles:true}));q.focus();}
       return;
     }
+    const favorite=event.target.closest("[data-favorite-map]");
+    if(favorite){
+      event.preventDefault();
+      const id=decodeURIComponent(favorite.dataset.favoriteMap||"");
+      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+      if(map)toggleFavoriteMap(map);
+      return;
+    }
+    const share=event.target.closest("[data-share-map]");
+    if(share){
+      event.preventDefault();
+      const id=decodeURIComponent(share.dataset.shareMap||"");
+      const map=rankedIndex.find(m=>String(m.beatmap_id)===id)||findSummaryMap(id)||favoriteMaps.get(id)||recentViewedMaps.find(m=>String(m.beatmap_id)===id);
+      if(map)copyMapShareLink(map);
+      return;
+    }
     const local=event.target.closest("[data-local-chart]");
     if(local){
       event.preventDefault();
@@ -942,3 +1103,5 @@ bindInteractiveCatalogueControls();
 try { renderIndexed(); } catch (err) {
   console.warn("Initial Ranked list render deferred", err);
 }
+
+renderSavedShelves();
