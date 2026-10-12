@@ -26,7 +26,7 @@ def parse_replay(blob):
     mode=take('B');version=take('i')
     if mode!=0:raise ValueError('osu!standard ë¦¬í”Œë ˆì´ë§Œ ì§€ì›í•©ë‹ˆë‹¤.')
     beatmap,p=osu_string(blob,p);player,p=osu_string(blob,p);checksum,p=osu_string(blob,p)
-    h=[take('h') for _ in range(6)];score=take('i');combo=take('h');perfect=take('?');mods=take('i');life,p=osu_string(blob,p);ticks=take('q');size=take('i')
+    h=[take('H') for _ in range(6)];score=take('i');combo=take('H');perfect=take('?');mods=take('i');life,p=osu_string(blob,p);ticks=take('q');size=take('i')
     raw=''
     if size>0:
         raw=lzma.decompress(blob[p:p+size],format=lzma.FORMAT_AUTO).decode('utf-8','replace')
