@@ -1,7 +1,7 @@
 {
-  "version": "2.13.0",
+  "version": "2.14.0",
   "channel": "ranked",
-  "name": "Repeat Regions",
+  "name": "Region Fingerprint",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -81,6 +81,12 @@
     "Repeated 10-second anomaly candidates report recurrence, longest consecutive appearance and averaged alignment signals",
     "Per-replay presence strips show when a region reappeared across recent alignment samples",
     "Repeat-region thresholds support two, three or majority recurrence across the latest 5, 10 or all matching alignments",
-    "Repeat-region wording explicitly treats missing windows as absent from the saved top-candidate set rather than confirmed clean play"
+    "Repeat-region wording explicitly treats missing windows as absent from the saved top-candidate set rather than confirmed clean play",
+    "New PC alignments store 10-second Region Fingerprints from local .osu rhythm and geometry features",
+    "Region Fingerprints summarize density, gap variation, spacing, angle variation, slider share, fast-gap share, jump share and local strain",
+    "Structural labels include Stream/Burst, Jump, Tech/Rhythm, Slider-heavy, Dense/Reading, Flow and Mixed",
+    "Repeat Region Consensus can filter recurring anomaly candidates by structural fingerprint",
+    "Individual PC alignment candidates and exported reports include structural fingerprints with legacy fallback for older records",
+    "Fingerprint wording remains descriptive and does not treat structural classes as official difficulty types or player weaknesses"
   ]
 }
