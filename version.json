@@ -1,7 +1,7 @@
 {
-  "version": "2.20.0",
+  "version": "2.20.1",
   "channel": "client",
-  "name": "Always-on Local Watcher",
+  "name": "Chart DNA Collector Guard",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -123,6 +123,10 @@
     "Dependency-free polling signatures trigger incremental scans only after actual .osu or .osr tree changes",
     "Watcher state exposes last check, last detected change and automatic scan count in the Client UI",
     "The older tab-open Replay watch yields when the server-side watcher is enabled to avoid duplicate polling",
-    "Songs path changes now preserve Replay, watcher and other local Client settings instead of overwriting client.json"
+    "Songs path changes now preserve Replay, watcher and other local Client settings instead of overwriting client.json",
+    "Chart DNA backfill now has a push fallback trigger when the analyzer or its workflow changes",
+    "Ranked summary exposes the Chart DNA collector's own updated_at timestamp separately from metadata freshness",
+    "Chart DNA UI marks collection as delayed after three hours without a collector checkpoint",
+    "Collector health distinguishes schedule delay from source blocking and shows the latest batch success rate"
   ]
 }
