@@ -365,6 +365,8 @@ class H(BaseHTTPRequestHandler):
                 if p=='/api/osu/status': return self.sendj({'configured':osu_api.configured(),'version':'0.4.0'})
                 if p=='/api/osu/lookup': return self.sendj(osu_api.lookup_md5(q.get('checksum',[''])[0]))
                 if p=='/api/osu/search': return self.sendj(osu_api.search_ranked(q.get('q',[''])[0],q.get('page',['1'])[0]))
+                if p=='/api/client/status': return self.sendj(client_status())
+                if p=='/api/client/library': return self.sendj({'maps':client_search(q.get('q',[''])[0],q.get('limit',['40'])[0])})
                 return self.sendj({'error':'Not found'},404)
             except Exception as exc: return self.sendj({'error':str(exc)},400)
         if p in ('/','/index.html'):
@@ -381,6 +383,7 @@ class H(BaseHTTPRequestHandler):
                 '/mobile-analyzer.js':'text/javascript; charset=utf-8',
                 '/mobile-replay.js':'text/javascript; charset=utf-8',
                 '/ranked-catalog.js':'text/javascript; charset=utf-8',
+                '/client-bridge.js':'text/javascript; charset=utf-8',
                 '/profile.js':'text/javascript; charset=utf-8',
                 '/app-shell.css':'text/css; charset=utf-8',
                 '/version.json':'application/json; charset=utf-8',
@@ -392,10 +395,28 @@ class H(BaseHTTPRequestHandler):
         b=fp.read_bytes();self.send_response(200);self.send_header('Content-Type',ct);self.send_header('Cache-Control','no-cache');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b)
     def do_POST(self):
         try:
+            p=urlparse(self.path).path
             n=int(self.headers.get('Content-Length','0'))
-            if n<1 or n>MAX_UPLOAD:raise ValueError('mŒŒì¼ì€ 25MB ì´í•˜ì—¬ì•¼ í•©ë‹ˆë‹¤.')
-            b=self.rfile.read(n);p=urlparse(self.path).path
-            self.sendj(parse_map(b) if p=='/api/map' else parse_replay(b) if p=='/api/replay' else {'error':'not found'},200 if p in ('/api/map','/api/replay') else 404)
+            if n>MAX_UPLOAD:raise ValueError('요청은 25MB 이하여야 합니다.')
+            b=self.rfile.read(n) if n else b''
+            if p=='/api/client/scan':
+                return self.sendj(client_start_scan(),202)
+            if p=='/api/client/config':
+                data=json.loads(b.decode('utf-8') or '{}');raw=str(data.get('songs_path') or '').strip()
+                if not raw:
+                    client_json_write(CLIENT_CONFIG,{})
+                    return self.sendj(client_status())
+                songs=Path(raw).expanduser()
+                if not songs.exists() or not songs.is_dir():raise ValueError('존재하는 Songs 폴더 경로를 입력해 주세요.')
+                client_json_write(CLIENT_CONFIG,{'songs_path':str(songs.resolve()),'updated_at':client_now()})
+                return self.sendj(client_status())
+            if p=='/api/client/analyze':
+                data=json.loads(b.decode('utf-8') or '{}')
+                return self.sendj(client_analyze(data.get('md5'),data.get('beatmap_id')))
+            if n<1:raise ValueError('파일은 비어 있을 수 없습니다.')
+            if p=='/api/map':return self.sendj(parse_map(b))
+            if p=='/api/replay':return self.sendj(parse_replay(b))
+            return self.sendj({'error':'not found'},404)
         except Exception as e:self.sendj({'error':str(e)},400)
     def log_message(self,*a):pass
 
