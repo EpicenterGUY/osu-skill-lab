@@ -807,6 +807,17 @@ async function runGlobalDnaSimilarity(seed,limit,token){
   return resolved.sort((a,b)=>a.score-b.score).slice(0,limit);
 }
 async function runGlobalMetaSimilarity(seed,mode,limit,token){
+  if(mode==="balanced"){
+    const pre=catalogSummary?.research?.similarity_index?.[String(seed.beatmap_id)];
+    if(Array.isArray(pre)&&pre.length){
+      const rows=await resolveSimilarityIds(pre.map(x=>({id:x.beatmap_id,year:x.year,score:Number(x.distance)})),token);
+      if(token!==similarityGeneration)return [];
+      const hydrated=rows.map(row=>{mergeCachedDna([row.map]);row.score=similarityScore(seed,row.map,"balanced");return row;})
+        .sort((a,b)=>a.score-b.score).slice(0,limit);
+      const status=$("similarityStatus");if(status)status.textContent="사전 계산 유사도 인덱스 사용 · 전역 스캔 없이 즉시 후보 확인";
+      return hydrated;
+    }
+  }
   let shards=(catalogSummary?.search_shards||[]).slice();
   if(mode==="era"){
     const y=Number(String(seed.ranked_date||"").slice(0,4));
