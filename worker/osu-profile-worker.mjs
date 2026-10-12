@@ -19,10 +19,16 @@ const respond = (data, status, origin) =>
   new Response(JSON.stringify(data), {status, headers: {...cors(origin), "Content-Type":"application/json; charset=utf-8"}});
 async function token(env) {
   if (bearer && Date.now() < expiry - 60000) return bearer;
+  const body = new URLSearchParams({
+    client_id:String(env.OSU_CLIENT_ID).trim(),
+    client_secret:String(env.OSU_CLIENT_SECRET),
+    grant_type:"client_credentials",
+    scope:"public"
+  });
   const response = await fetch("https://osu.ppy.sh/oauth/token", {
-    method:"POST", headers:{"Content-Type":"application/json",Accept:"application/json"},
-    body:JSON.stringify({client_id:Number(env.OSU_CLIENT_ID),client_secret:env.OSU_CLIENT_SECRET,
-      grant_type:"client_credentials",scope:"public"}),
+    method:"POST",
+    headers:{"Content-Type":"application/x-www-form-urlencoded;charset=UTF-8",Accept:"application/json"},
+    body,
     signal:AbortSignal.timeout(12000)
   });
   if (!response.ok) throw Error("osu! token unavailable");
