@@ -1577,7 +1577,7 @@ function renderTrainingRoute(){
   const skill=(trainingRouteState.skill||"overall").toUpperCase();
   host.innerHTML=trainingRouteState.maps.map((m,i)=>{
     const id=String(m.beatmap_id),isDone=done.has(id),focus=Number(m.dna?.skills?.[trainingRouteState.skill]||m.dna?.skills?.overall||0);
-    return '<div class="training-route-row '+(isDone?"done":"")+'"><b class="training-route-order">'+(i+1)+'</b><div class="training-route-copy"><button type="button" data-ranked-detail="'+encodeURIComponent(id)+'"><strong>'+cx(m.artist||"?")+' — '+cx(m.title||"?")+' ['+cx(m.version||"?")+']</strong></button><small>'+cx(m.creator||"?")+' · ★'+Number(m.official_sr||0).toFixed(2)+' · '+Number(m.bpm||0).toFixed(0)+' BPM · '+skill+' '+focus.toFixed(1)+'</small></div><div class="training-route-actions"><button type="button" class="ghost-btn" data-training-toggle="'+encodeURIComponent(id)+'">'+(isDone?"완료 취소":"연습 완료")+'</button><button type="button" class="ghost-btn" data-similarity-seed="'+encodeURIComponent(id)+'">유사 채보</button></div></div>';
+    return '<div class="training-route-row '+(isDone?"done":"")+'"><b class="training-route-order">'+(i+1)+'</b><div class="training-route-copy"><button type="button" data-ranked-detail="'+encodeURIComponent(id)+'"><strong>'+cx(m.artist||"?")+' — '+cx(m.title||"?")+' ['+cx(m.version||"?")+']</strong></button><small>'+cx(m.creator||"?")+' · ★'+Number(m.official_sr||0).toFixed(2)+' · '+Number(m.bpm||0).toFixed(0)+' BPM · '+skill+' '+focus.toFixed(1)+'</small></div><div class="training-route-actions"><button type="button" class="ghost-btn" data-training-toggle="'+encodeURIComponent(id)+'">'+(isDone?"완료 취소":"연습 완료")+'</button><button type="button" class="ghost-btn" data-similarity-seed="'+encodeURIComponent(id)+'">유사 채보</button><button type="button" class="ghost-btn" data-compare-map="'+encodeURIComponent(id)+'">비교 +</button><button type="button" class="ghost-btn favorite-toggle '+(favoriteMaps.has(id)?"active":"")+'" data-favorite-map="'+encodeURIComponent(id)+'">'+(favoriteMaps.has(id)?"★":"☆")+'</button></div></div>';
   }).join("");
   if(status)status.textContent=(trainingRouteState.auto_skill?"자동 낮은 노출 영역 → ":"")+"목표 "+skill+" · "+trainingRouteState.band+" · "+trainingRouteState.mode+" · "+trainingRouteState.scope+" · Chart DNA 분석 완료 채보만 사용";
 }
@@ -1635,7 +1635,7 @@ document.addEventListener("click",event=>{
     if($("trainingRouteStars"))$("trainingRouteStars").value=session.band||"all";
     if($("trainingRouteMode"))$("trainingRouteMode").value=session.mode||"ramp";
     if($("trainingRouteScope"))$("trainingRouteScope").value=session.scope||"global";
-    if($("trainingRouteCount"))$("trainingRouteCount").value=String(Math.min(12,Math.max(5,session.maps?.length||8)));
+    if($("trainingRouteCount")){const n=session.maps?.length||8;$("trainingRouteCount").value=n<=5?"5":n<=8?"8":"12";}
     $("buildTrainingRoute")?.scrollIntoView({behavior:"smooth",block:"center"});return;
   }
   const remove=event.target.closest("[data-training-history-remove]");
