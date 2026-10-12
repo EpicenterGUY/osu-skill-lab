@@ -764,44 +764,73 @@ async function resolveSimilarityIds(idRows,token){
     const batch=await Promise.allSettled(shards.slice(i,i+6).map(async sh=>{
       const key=sh.path+"@"+(sh.version||catalogSummary.updated_at||"1");
       if(indexedYearCache.has(key))return indexedYearCache.get(key);
-      const rows=await fetchCatalogJson(sh.path,sh.version||catalogSummary.updated_at);
-      indexedYearCache.set(key,rows);return rows;
+      return fetchCatalogJson(sh.path,sh.version||catalogSummary.updated_at);
     }));
     for(const r of batch)if(r.status==="fulfilled")for(const m of r.value)if(wanted.has(String(m.beatmap_id)))found.set(String(m.beatmap_id),m);
   }
   return idRows.map(x=>({map:found.get(String(x.id)),score:x.score})).filter(x=>x.map);
 }
-async function runGlobalDnaSimilarity(seed,limit,token){
-  if(!seed?.dna?.skills)throw Error("기준 채보의 Chart DNA 분석이 아직 없습니다.");
-  const shards=catalogSummary?.chart_dna?.shards||[], best=[];
-  for(let i=0;i<shards.length;i++){
-    if(token!==similarityGeneration)return [];
-    const sh=shards[i],year=String(sh.year),key=year;
-    let overlay=dnaOverlayCache.get(key);
-    if(!overlay){
-      const rows=await fetchCatalogJson(sh.path,sh.version||catalogSummary.updated_at);
-      overlay=new Map();
-      for(const row of rows){
-        const dna=compactOverlayDna(row);
-        if(row?.beatmap_id&&dna)overlay.set(String(row.beatmap_id),dna);
+async function hydrateSimilarityCandidateDna(rows,token){
+  const byYear=new Map();
+  for(const row of rows){
+    const year=String(row.map?.ranked_date||"").slice(0,4),id=String(row.map?.beatmap_id||"");
+    if(!/^\d{4}$/.test(year)||!id)continue;
+    if(!byYear.has(year))byYear.set(year,new Map());
+    byYear.get(year).set(id,row.map);
+  }
+  const manifest=new Map((catalogSummary?.chart_dna?.shards||[]).map(sh=>[String(sh.year),sh]));
+  let done=0;
+  for(const [year,wanted] of byYear){
+    if(token!==similarityGeneration)return;
+    const cached=dnaOverlayCache.get(year);
+    if(cached){
+      for(const [id,map] of wanted){const dna=cached.get(id);if(dna)map.dna=dna;}
+    }else{
+      const sh=manifest.get(year);if(!sh){done++;continue;}
+      const records=await fetchCatalogJson(sh.path,sh.version||catalogSummary.updated_at);
+      for(const record of records){
+        const id=String(record?.beatmap_id||"");
+        if(!wanted.has(id))continue;
+        const dna=compactOverlayDna(record);if(dna)wanted.get(id).dna=dna;
       }
-      dnaOverlayCache.set(key,overlay);
     }
-    for(const [id,dna] of overlay){
-      if(id===String(seed.beatmap_id))continue;
-      const candidate={beatmap_id:id,dna,ranked_date:year+"-01-01"};
-      const score=similarityDnaDistance(seed,candidate);
-      if(score!=null)keepSimilarityBest(best,{beatmap_id:id,dna,ranked_date:year+"-01-01"},score,Math.max(limit*5,80));
-    }
-    best.sort((a,b)=>a.score-b.score);if(best.length>Math.max(limit*5,80))best.length=Math.max(limit*5,80);
-    const status=$("similarityStatus");if(status)status.textContent="DNA overlay 탐색 · "+(i+1)+"/"+shards.length+" 연도 · 후보 "+ct(best.length);
+    done++;
+    const status=$("similarityStatus");if(status)status.textContent="상위 후보 DNA 보강 · "+done+"/"+byYear.size+" 연도";
     await new Promise(r=>setTimeout(r,0));
   }
-  const ids=best.slice(0,Math.max(limit*3,40)).map(x=>({id:x.map.beatmap_id,year:String(x.map.ranked_date||"").slice(0,4),score:x.score}));
+}
+async function runGlobalDnaSimilarity(seed,limit,token){
+  if(!seed?.dna?.skills)throw Error("기준 채보의 Chart DNA 분석이 아직 없습니다.");
+  const shards=catalogSummary?.chart_dna?.shards||[], best=[], cap=Math.max(limit*5,80);
+  for(let i=0;i<shards.length;i++){
+    if(token!==similarityGeneration)return [];
+    const sh=shards[i],year=String(sh.year),cached=dnaOverlayCache.get(year);
+    if(cached){
+      for(const [id,dna] of cached){
+        if(id===String(seed.beatmap_id))continue;
+        const candidate={beatmap_id:id,dna,ranked_date:year+"-01-01"};
+        const score=similarityDnaDistance(seed,candidate);
+        if(score!=null)keepSimilarityBest(best,candidate,score,cap);
+      }
+    }else{
+      const records=await fetchCatalogJson(sh.path,sh.version||catalogSummary.updated_at);
+      for(const record of records){
+        const id=String(record?.beatmap_id||"");if(!id||id===String(seed.beatmap_id))continue;
+        const dna=compactOverlayDna(record);if(!dna)continue;
+        const candidate={beatmap_id:id,dna,ranked_date:String(record.ranked_date||year+"-01-01")};
+        const score=similarityDnaDistance(seed,candidate);
+        if(score!=null)keepSimilarityBest(best,candidate,score,cap);
+      }
+    }
+    best.sort((a,b)=>a.score-b.score);if(best.length>cap)best.length=cap;
+    const status=$("similarityStatus");if(status)status.textContent="DNA overlay 탐색 · "+(i+1)+"/"+shards.length+" 연도 · 상위 후보 "+ct(best.length)+" · 전체 overlay는 메모리에 보관하지 않음";
+    await new Promise(r=>setTimeout(r,0));
+  }
+  const top=best.slice(0,Math.max(limit*3,40)), dnaById=new Map(top.map(x=>[String(x.map.beatmap_id),x.map.dna]));
+  const ids=top.map(x=>({id:x.map.beatmap_id,year:String(x.map.ranked_date||"").slice(0,4),score:x.score}));
   const resolved=await resolveSimilarityIds(ids,token);
   for(const row of resolved){
-    const year=String(row.map.ranked_date||"").slice(0,4);
-    const dna=dnaOverlayCache.get(year)?.get(String(row.map.beatmap_id));if(dna)row.map.dna=dna;
+    const dna=dnaById.get(String(row.map.beatmap_id));if(dna)row.map.dna=dna;
     row.score=similarityDnaDistance(seed,row.map)??row.score;
   }
   return resolved.sort((a,b)=>a.score-b.score).slice(0,limit);
@@ -812,7 +841,7 @@ async function runGlobalMetaSimilarity(seed,mode,limit,token){
     if(Array.isArray(pre)&&pre.length){
       const rows=await resolveSimilarityIds(pre.map(x=>({id:x.beatmap_id,year:x.year,score:Number(x.distance)})),token);
       if(token!==similarityGeneration)return [];
-      const hydrated=rows.map(row=>{mergeCachedDna([row.map]);row.score=similarityScore(seed,row.map,"balanced");return row;})
+      const hydrated=rows.map(row=>{mergeCachedDna([row.map]);if(row.map.dna?.skills&&seed.dna?.skills)row.score=similarityScore(seed,row.map,"balanced");return row;})
         .sort((a,b)=>a.score-b.score).slice(0,limit);
       const status=$("similarityStatus");if(status)status.textContent="사전 계산 유사도 인덱스 사용 · 전역 스캔 없이 즉시 후보 확인";
       return hydrated;
@@ -843,11 +872,9 @@ async function runGlobalMetaSimilarity(seed,mode,limit,token){
     await new Promise(r=>setTimeout(r,0));
   }
   if(mode==="balanced"&&seed.dna?.skills){
-    const years=[...new Set(best.slice(0,cap).map(x=>String(x.map.ranked_date||"").slice(0,4)).filter(y=>/^\d{4}$/.test(y)))];
-    await loadDnaOverlayYears(years, indexedGeneration, false);
-    for(const row of best){
-      mergeCachedDna([row.map]);row.score=similarityScore(seed,row.map,"balanced");
-    }
+    await hydrateSimilarityCandidateDna(best.slice(0,cap),token);
+    if(token!==similarityGeneration)return [];
+    for(const row of best)row.score=similarityScore(seed,row.map,"balanced");
   }
   return best.sort((a,b)=>a.score-b.score).slice(0,limit);
 }
