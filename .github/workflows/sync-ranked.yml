@@ -75,9 +75,11 @@ jobs:
       - uses: actions/configure-pages@v5
       - name: Validate deploy-critical source
         run: |
-          python -m py_compile build_ranked_views.py
+          python -m py_compile build_ranked_views.py server.py
           python -m unittest discover -s tests -q
           node --check ranked-catalog.js
+          node --check client-bridge.js
+          node --check profile.js
       - name: Build lightweight public statistics and search indexes
         run: |
           # A UI-only push may still deploy the last committed DB if only data
@@ -96,7 +98,7 @@ jobs:
       - name: Prepare static Skill Lab site
         run: |
           mkdir -p _site
-          cp index.html app-shell.css ranked-catalog.js profile.js mobile-analyzer.js mobile-replay.js manifest.webmanifest sw.js version.json _site/
+          cp index.html app-shell.css ranked-catalog.js profile.js client-bridge.js mobile-analyzer.js mobile-replay.js manifest.webmanifest sw.js version.json _site/
           cp -R data _site/data
           # Defense in depth: never deploy user-profile snapshots even if a local file exists.
           rm -f _site/data/osu-profile.json _site/data/profile-config.json
