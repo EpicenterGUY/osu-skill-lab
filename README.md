@@ -1,4 +1,4 @@
-# osu! Skill Lab — Rhythm Intelligence v1.1
+# osu! Skill Lab — Rhythm Intelligence v2.6
 
 Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analysis.
 **GitHub Pages:** https://epicenterguy.github.io/osu-skill-lab/
@@ -96,8 +96,9 @@ Every run:
 ### Catalogue files
 - `data/ranked-manifest.json` — public shard index, update time, counts, history pagination status.
 - `data/ranked/*.json` — full official metadata by month, no client secret.
-- `data/ranked-summary.json` — precomputed small public statistics.
-- `data/ranked-search/*.json` — compact month-specific search indexes, downloaded on demand.
+- `data/ranked-summary.json` — precomputed small public statistics and descriptors for lazy derived datasets.
+- `data/ranked-search/*.json` — compact month-specific metadata search indexes, downloaded on demand.
+- `data/training-pools.json` — on-demand, diverse Chart-DNA practice candidates grouped by skill and official SR band; not a player-skill model.
 - `build_ranked_views.py` — stats/index generator requiring no API secrets, run by sync and Pages deployments.
 - `build_chart_dna.py` — optional small, rate-limited pilot analysis of real `.osu` object geometry, retaining only derived metrics.
 - `data/chart-dna/*.json` — experimental derived scores (not original `.osu` charts).
