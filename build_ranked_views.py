@@ -194,7 +194,30 @@ def main():
         if not search_shards:
             raise RuntimeError("--skip-search requested but no committed search shard manifest exists")
         if not checksum_lookup.get("versions"):
-            raise RuntimeError("--skip-search requested but no committed replay checksum index exists")
+            CHECKSUM_INDEX.mkdir(parents=True, exist_ok=True)
+            checksum_groups = defaultdict(list)
+            for m in values:
+                checksum = str(m.get("checksum") or "").lower()
+                if not re.fullmatch(r"[0-9a-f]{32}", checksum):
+                    continue
+                checksum_groups[checksum[:2]].append({
+                    "h": checksum, "id": int(m["beatmap_id"]), "y": date_year(m),
+                })
+            checksum_versions = {}
+            checksum_count = 0
+            for prefix in [f"{i:02x}" for i in range(256)]:
+                rows = sorted(checksum_groups.get(prefix, []), key=lambda x: x["h"])
+                path = CHECKSUM_INDEX / f"{prefix}.json"
+                publish(path, rows)
+                checksum_versions[prefix] = hashlib.sha256(path.read_bytes()).hexdigest()[:12]
+                checksum_count += len(rows)
+            checksum_lookup = {
+                "format": "md5-prefix-v1",
+                "path_template": "data/checksum-index/{prefix}.json",
+                "prefix_length": 2,
+                "entries": checksum_count,
+                "versions": checksum_versions,
+            }
     else:
         SEARCH.mkdir(parents=True, exist_ok=True)
         search_shards = []
