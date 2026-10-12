@@ -1,7 +1,7 @@
 {
-  "version": "2.6.0",
+  "version": "2.7.0",
   "channel": "ranked",
-  "name": "Practice Route",
+  "name": "Training Journal",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -46,6 +46,11 @@
     "Precomputed diverse Chart DNA practice pools published separately from Ranked search shards",
     "Auto target skill chooses the least-exposed local DNA dimension without claiming player weakness",
     "Practice sessions persist locally with completion progress",
-    "Practice Route maps connect to details, similarity, compare, favorites and relation graph"
+    "Practice Route maps connect to details, similarity, compare, favorites and relation graph",
+    "Browser-local Training Journal with finished session history and per-map completion timestamps",
+    "7-day completion KPIs, 14-day activity bars and 28-day Chart DNA exposure averages",
+    "Optional session feel and notes with JSON journal export/import",
+    "Feedback-adaptive SR band suggestion that moves conservatively from prior explicit session feedback",
+    "Recorded training sessions can restore their Practice Route configuration"
   ]
 }
