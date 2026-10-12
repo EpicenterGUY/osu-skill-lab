@@ -1811,7 +1811,7 @@ function renderReplayProfile(group,records,selectedMods){
   }).join(""):'<div class="empty">Mods 비교 표본이 없습니다.</div>';
 
   evidenceHost.innerHTML='<div class="replay-evidence-grade"><b>'+info.grade+'</b><div><span>데이터 충분도 · '+cx(info.label)+'</span><small>내부 규칙 점수 '+info.score+'/7</small></div></div>'+
-    '<div class="replay-evidence-list"><span class="'+(info.n>=6?"ok":"")+"">같은 범위 표본 '+info.n+'개</span><span class="'+(info.trueRatio>=.8?"ok":"")+'">실제 replay timestamp '+Math.round(info.trueRatio*100)+'%</span><span class="'+(info.linked?"ok":"")+'">Ranked/로컬 맵 연결 '+(info.linked?"있음":"없음")+'</span><span class="'+(info.modControlled?"ok":"")+'">Mods '+(info.modControlled?"분리됨":"혼합됨")+'</span></div>';
+    '<div class="replay-evidence-list"><span class="'+(info.n>=6?"ok":"")+'">같은 범위 표본 '+info.n+'개</span><span class="'+(info.trueRatio>=.8?"ok":"")+'">실제 replay timestamp '+Math.round(info.trueRatio*100)+'%</span><span class="'+(info.linked?"ok":"")+'">Ranked/로컬 맵 연결 '+(info.linked?"있음":"없음")+'</span><span class="'+(info.modControlled?"ok":"")+'">Mods '+(info.modControlled?"분리됨":"혼합됨")+'</span></div>';
 
   const signals=[];
   const accSd=replayStd(records,r=>r.accuracy),missSd=replayStd(records,r=>r.hits?.miss),nonSd=replayStd(records,r=>r.non300_rate);
