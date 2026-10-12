@@ -160,6 +160,17 @@ class UiContractTests(unittest.TestCase):
                       "DT/NC/HT 시간축 정렬은 아직 검증 전"):
             self.assertIn(token, RANKED)
 
+    def test_repeat_region_consensus_is_wired(self):
+        for element_id in ("copyReplayRepeatRegions", "replayRepeatWindow", "replayRepeatMin",
+                           "replayRepeatRegionKpis", "replayRepeatRegionSummary",
+                           "replayRepeatRegionList"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', RANKED)
+        for token in ("replayRepeatRegionData", "renderReplayRepeatRegions",
+                      "replayRepeatRegionReportText", "replayLongestPresence",
+                      "top-candidate recurrence"):
+            self.assertIn(token, RANKED)
+
     def test_ranked_compare_workspace_is_wired(self):
         for element_id in ("compareTray", "compareTrayItems", "compareCount", "openCompare",
                            "compareNow", "clearCompare"):
