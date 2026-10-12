@@ -1543,6 +1543,100 @@ function replayCompactMap(map){
   if(map.dna?.skills)compact.dna={skills:{...map.dna.skills}};
   return Object.keys(compact).length?compact:null;
 }
+function replayRateChangingMods(mods){
+  const value=Number(mods||0);
+  return Boolean(value&64||value&512||value&256);
+}
+function replayEffectiveOd(selectedLocal,mods){
+  let od=replayNumeric(selectedLocal?.difficulty?.OverallDifficulty);
+  if(!Number.isFinite(od))od=5;
+  const value=Number(mods||0);
+  if(value&2)od*=.5;
+  if(value&16)od=Math.min(10,od*1.4);
+  return Math.max(0,Math.min(10,od));
+}
+function replayNearestIndex(sortedValues,target){
+  let lo=0,hi=sortedValues.length;
+  while(lo<hi){const mid=(lo+hi)>>1;if(sortedValues[mid]<target)lo=mid+1;else hi=mid;}
+  if(lo<=0)return 0;if(lo>=sortedValues.length)return sortedValues.length-1;
+  return Math.abs(sortedValues[lo]-target)<Math.abs(sortedValues[lo-1]-target)?lo:lo-1;
+}
+function replayPercentile(values,p){
+  const xs=values.map(replayNumeric).filter(Number.isFinite).sort((a,b)=>a-b);
+  if(!xs.length)return null;
+  const pos=Math.max(0,Math.min(xs.length-1,(xs.length-1)*p)),lo=Math.floor(pos),hi=Math.ceil(pos);
+  return lo===hi?xs[lo]:xs[lo]+(xs[hi]-xs[lo])*(pos-lo);
+}
+function buildReplayAlignment(raw,selectedLocal){
+  const hash=String(raw?.map_hash||"").toLowerCase(),localHash=String(selectedLocal?.md5||"").toLowerCase();
+  const base={version:1,method:"tap-head-nearest-keydown-v1",supported:false,reason:""};
+  if(!raw?.replay_data_analyzed||raw?.header_only){base.reason="PC 상세 replay frame이 없습니다.";return base;}
+  if(!hash||hash!==localHash){base.reason="선택한 .osu와 replay MD5가 일치하지 않습니다.";return base;}
+  if(replayRateChangingMods(raw.mods)){base.reason="DT/NC/HT 시간축 정렬은 아직 검증 전이라 제외됩니다.";return base;}
+  const presses=(raw.presses||[]).map(p=>({t:replayNumeric(p?.t),x:replayNumeric(p?.x),y:replayNumeric(p?.y),key:p?.key})).filter(p=>Number.isFinite(p.t)).sort((a,b)=>a.t-b.t);
+  const objects=(selectedLocal?.features||[]).filter(o=>(o?.type==="circle"||o?.type==="slider")&&Number.isFinite(replayNumeric(o?.t))).map(o=>({
+    t:Number(o.t),x:replayNumeric(o.x),y:replayNumeric(o.y),type:o.type,gap:replayNumeric(o.gap),dist:replayNumeric(o.dist),angle:replayNumeric(o.angle)
+  }));
+  if(presses.length<2||objects.length<2){base.reason="키다운 또는 hitobject 좌표 표본이 부족합니다.";return base;}
+  const objTimes=objects.map(o=>o.t),offsetSamples=[];
+  for(const p of presses.slice(0,Math.min(500,presses.length))){
+    const i=replayNearestIndex(objTimes,p.t),d=p.t-objTimes[i];
+    if(Math.abs(d)<=220)offsetSamples.push(d);
+  }
+  const offset=replayMedian(offsetSamples);
+  if(offset==null||offsetSamples.length<Math.min(8,Math.max(3,Math.floor(presses.length*.05)))){base.reason="replay와 hitobject 시간축의 안정적인 offset을 찾지 못했습니다.";return base;}
+  const od=replayEffectiveOd(selectedLocal,raw.mods),windowMs=Math.max(90,Math.min(205,200-10*od+8));
+  let pi=0,matched=0,unmatched=0,early=0,late=0;
+  const residuals=[],cursorDistances=[],events=[];
+  for(const o of objects){
+    const target=o.t+offset;
+    while(pi<presses.length&&presses[pi].t<target-windowMs)pi++;
+    let best=-1,bestAbs=Infinity;
+    for(let k=pi;k<Math.min(presses.length,pi+3);k++){
+      const abs=Math.abs(presses[k].t-target);
+      if(abs<bestAbs){bestAbs=abs;best=k;}
+      if(presses[k].t>target+windowMs)break;
+    }
+    if(best>=0&&bestAbs<=windowMs){
+      const p=presses[best],res=p.t-target;
+      let cursor=null;
+      if(Number.isFinite(o.x)&&Number.isFinite(o.y)&&Number.isFinite(p.x)&&Number.isFinite(p.y))cursor=Math.hypot(p.x-o.x,p.y-o.y);
+      residuals.push(Math.abs(res));if(Number.isFinite(cursor))cursorDistances.push(cursor);
+      if(res<-55)early++;if(res>55)late++;
+      events.push({t:o.t,matched:true,residual_ms:Math.round(res),cursor_px:Number.isFinite(cursor)?Math.round(cursor):null,type:o.type});
+      matched++;pi=best+1;
+    }else{
+      events.push({t:o.t,matched:false,residual_ms:null,cursor_px:null,type:o.type});
+      unmatched++;
+    }
+  }
+  const regionSize=10000,regionMap=new Map(),timeline=selectedLocal?.timeline||[],patterns=selectedLocal?.patterns||[];
+  for(const e of events){
+    const start=Math.floor(e.t/regionSize)*regionSize;
+    if(!regionMap.has(start))regionMap.set(start,{start,end:start+regionSize,objects:0,matched:0,unmatched:0,early:0,late:0,residuals:[],cursor:[]});
+    const r=regionMap.get(start);r.objects++;
+    if(e.matched){r.matched++;if(e.residual_ms<-55)r.early++;if(e.residual_ms>55)r.late++;r.residuals.push(Math.abs(e.residual_ms));if(Number.isFinite(e.cursor_px))r.cursor.push(e.cursor_px);}
+    else r.unmatched++;
+  }
+  const regions=[...regionMap.values()].map(r=>{
+    const strainWindow=timeline.filter(x=>Number(x.t)>=r.start&&Number(x.t)<r.end),strain=strainWindow.length?Math.max(...strainWindow.map(x=>Number(x.strain||0))):null;
+    const overlapping=patterns.filter(p=>Number(p.end)>=r.start&&Number(p.start)<r.end).sort((a,b)=>Number(b.notes||0)-Number(a.notes||0))[0];
+    const residualAvg=r.residuals.length?r.residuals.reduce((a,b)=>a+b,0)/r.residuals.length:windowMs;
+    const cursorAvg=r.cursor.length?r.cursor.reduce((a,b)=>a+b,0)/r.cursor.length:null;
+    const missShare=r.objects?r.unmatched/r.objects:0,timingShare=r.matched?(r.early+r.late)/r.matched:0;
+    const score=missShare*65+timingShare*20+Math.min(15,residualAvg/Math.max(1,windowMs)*15)+(Number.isFinite(cursorAvg)?Math.min(10,cursorAvg/160*10):0);
+    return {start:r.start,end:r.end,objects:r.objects,matched:r.matched,unmatched:r.unmatched,early:r.early,late:r.late,mean_abs_ms:Math.round(residualAvg),mean_cursor_px:Number.isFinite(cursorAvg)?Math.round(cursorAvg):null,strain:Number.isFinite(strain)?Math.round(strain*10)/10:null,pattern:overlapping?String(overlapping.kind||""):"",score:Math.round(score*10)/10};
+  }).filter(r=>r.objects>=3).sort((a,b)=>b.score-a.score).slice(0,12);
+  return {
+    ...base,supported:true,reason:"",checksum:hash,object_heads:objects.length,presses:presses.length,matched,unmatched,
+    coverage_pct:Math.round(matched/objects.length*1000)/10,offset_ms:Math.round(offset),od:Math.round(od*10)/10,window_ms:Math.round(windowMs),
+    median_abs_ms:replayMedian(residuals)==null?null:Math.round(replayMedian(residuals)*10)/10,
+    p90_abs_ms:replayPercentile(residuals,.9)==null?null:Math.round(replayPercentile(residuals,.9)*10)/10,
+    median_cursor_px:replayMedian(cursorDistances)==null?null:Math.round(replayMedian(cursorDistances)*10)/10,
+    early,late,replay_miss_total:Number(raw?.hits?.miss??0),regions
+  };
+}
+
 async function recordReplaySignal(raw,selectedLocal=null){
   if(!raw)return;
   const hits=replayHits(raw),judged=hits.great+hits.good+hits.meh+hits.miss;
@@ -1558,6 +1652,7 @@ async function recordReplaySignal(raw,selectedLocal=null){
       const vals=raw.bursts.map(x=>Number(x?.std)).filter(Number.isFinite).sort((a,b)=>a-b);
       return vals.length?vals[Math.floor(vals.length/2)]:null;
     })():null);
+  const alignment=buildReplayAlignment(raw,selectedLocal);
   const record={
     id,imported_at:importedAt,played_at:playedAt,played_at_source:raw.replay_timestamp?"replay_timestamp":"imported_at_fallback",filename:String(raw.filename||""),
     player:String(raw.player||""),map_hash:String(raw.map_hash||"").toLowerCase(),
@@ -1569,7 +1664,7 @@ async function recordReplaySignal(raw,selectedLocal=null){
     taps:raw.taps==null?null:Number(raw.taps),median_gap:raw.median_gap==null?null:Number(raw.median_gap),
     burst_count:Number(raw.burst_count??raw.bursts?.length??0),burst_std_median:Number.isFinite(burstStd)?burstStd:null,
     link_type:resolved.map?resolved.link_type:(localFallback?"selected-local-unverified":"unresolved"),
-    map:replayCompactMap(map),
+    map:replayCompactMap(map),alignment,
   };
   replaySignalHistory=[record,...replaySignalHistory.filter(x=>String(x.id)!==String(id))].slice(0,200);
   persistReplaySignals();renderReplaySignals();
