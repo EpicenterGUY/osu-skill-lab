@@ -1,4 +1,4 @@
-# osu! Skill Lab — Rhythm Intelligence v2.20
+# osu! Skill Lab — Rhythm Intelligence v2.20.1
 
 Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analysis.
 **GitHub Pages:** https://epicenterguy.github.io/osu-skill-lab/
@@ -8,7 +8,7 @@ Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analys
 - **M1 · Public Ranked Catalogue — DONE**  
   Public osu!standard Ranked/Approved metadata catalogue, fast summary-first loading, monthly lazy search shards, mobile/PWA UI, profile-local storage, and automated GitHub Pages deployment.
 - **M2 · Chart DNA Coverage — IN PROGRESS**  
-  Real `.osu`-based Aim / Stream / Speed / Stamina / Tech / Reading / Flow heuristics are being backfilled separately from metadata. DNA is published as a lazy overlay so search stays fast while coverage grows.
+  Real `.osu`-based Aim / Stream / Speed / Stamina / Tech / Reading / Flow heuristics are being backfilled separately from metadata. DNA is published as a lazy overlay so search stays fast while coverage grows. The hourly collector now also has a push fallback when its analyzer/workflow changes, and the UI warns when the collector checkpoint is older than three hours so scheduler delay is visible instead of looking like a frozen counter.
 - **M3 · Mirror-class Explorer & Observatory — IN PROGRESS**  
   Advanced filters, multi-map comparison, random discovery, era comparison, mapper fingerprints, oddities, similarity neighborhoods, Difficulty Twins, and richer statistics.
 - **M4 · OSL Client — BUILDING**  
