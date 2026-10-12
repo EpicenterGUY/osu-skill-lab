@@ -41,6 +41,7 @@ Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analys
 - **Similarity Explorer** promotes “similar maps” into a dedicated workflow: choose any loaded/result map as a seed, then search by balanced metadata+DNA, metadata structure, Chart DNA pattern, same mapper, or same era. Current-scope results are instant; explicit global searches stream monthly shards progressively, while featured/DNA targets can use precomputed global neighborhoods first.
 - **Chart Relation Graph** visualizes one seed map as a network of same-set, same-mapper, DNA-similar, metadata-similar, and same-era relationships. Nodes are clickable, inspectable, comparable, and can be expanded as a new graph focus.
 - Whole-catalog search also works with a blank text query: choose only SR/BPM/AR/OD/length/status/DNA filters and the scanner keeps every matching map rather than requiring a keyword.
+- **Search Workspace** saves up to 20 named filter/search presets locally, keeps recent whole-catalog searches, restores shared filter URLs, and exports the currently filtered result set as CSV or JSON.
 - Sort by official SR, BPM, ranked date, play count, length, AR/OD, and available Chart DNA dimensions.
 - Full monthly metadata shards are not loaded by the page on entry; only the selected month/year search index is fetched on demand. Mobile, PWA, and desktop work with no browser OAuth credentials.
 - The optional **STATS → Ranked 색인 가져오기** button is only for importing additional local datasets.
