@@ -1,7 +1,7 @@
 {
-  "version": "2.19.0",
+  "version": "2.20.0",
   "channel": "client",
-  "name": "Background Chart DNA",
+  "name": "Always-on Local Watcher",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -117,6 +117,12 @@
     "Client status exposes cached and remaining DNA counts plus live processed/analyzed/error progress",
     "Background DNA batches can process 200, 1000, 2500 or 5000 local maps and can be stopped from the Client tab",
     "Local Library Search displays the dominant cached DNA axis and overall heuristic score when available",
-    "Opening a local map writes its derived DNA summary through to the same local cache"
+    "Opening a local map writes its derived DNA summary through to the same local cache",
+    "M4 Phase 4 adds a persistent server-side Songs and Replay watcher while OSL Client is running",
+    "Watcher settings persist in local client.json with a configurable 15 to 600 second interval",
+    "Dependency-free polling signatures trigger incremental scans only after actual .osu or .osr tree changes",
+    "Watcher state exposes last check, last detected change and automatic scan count in the Client UI",
+    "The older tab-open Replay watch yields when the server-side watcher is enabled to avoid duplicate polling",
+    "Songs path changes now preserve Replay, watcher and other local Client settings instead of overwriting client.json"
   ]
 }
