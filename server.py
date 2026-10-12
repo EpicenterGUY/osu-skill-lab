@@ -22,7 +22,7 @@ CLIENT_WATCH_WAKE=threading.Event()
 CLIENT_WATCH={'thread_running':False,'enabled':False,'interval_s':30,'last_check':None,'last_change':None,'checks':0,'triggered_scans':0,'message':'대기 중'}
 UPDATE_RAW_BASE='https://raw.githubusercontent.com/EpicenterGUY/osu-skill-lab/main/'
 UPDATE_MANIFEST_URL=UPDATE_RAW_BASE+'client-update-manifest.json'
-UPDATE_FILES=('server.py','osu_api.py','index.html','app-shell.css','ranked-catalog.js','profile.js','client-bridge.js','mobile-analyzer.js','mobile-replay.js','manifest.webmanifest','sw.js','version.json','실행.bat')
+UPDATE_FILES=('server.py','osu_api.py','index.html','app-shell.css','ranked-catalog.js','profile.js','client-bridge.js','mobile-analyzer.js','mobile-replay.js','manifest.webmanifest','sw.js','version.json','실행.bat','client-launcher.py','install-client.bat','uninstall-client.bat')
 CLIENT_UPDATE_LOCK=threading.Lock()
 CLIENT_UPDATE={'checking':False,'applying':False,'remote_version':None,'update_available':False,'restart_required':False,
   'checked_at':None,'applied_at':None,'progress_done':0,'progress_total':0,'last_backup':None,'message':'업데이트 확인 전'}
