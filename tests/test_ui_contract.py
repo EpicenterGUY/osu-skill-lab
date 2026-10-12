@@ -209,6 +209,16 @@ class UiContractTests(unittest.TestCase):
         self.assertIn('data-tab="client"', HTML)
         self.assertIn("M4 · BUILDING", HTML)
 
+    def test_osl_client_background_dna_is_wired(self):
+        for element_id in ("clientDnaCached", "clientDnaRemaining", "clientDnaLimit",
+                           "clientDnaStart", "clientDnaStop", "clientDnaStatus", "clientDnaProgress"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', CLIENT)
+        for token in ("renderDnaStatus", "startDna", "stopDna", "dominantDna",
+                      "/api/client/dna/start", "/api/client/dna/stop"):
+            self.assertIn(token, CLIENT)
+        self.assertIn("Background DNA ✓", HTML)
+
     def test_osl_client_replay_inbox_is_wired(self):
         for element_id in ("clientReplayPath", "clientReplayAutoDetect", "clientReplaySavePath",
                            "clientReplayScan", "clientReplayStatus", "clientReplayWatch",
