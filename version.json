@@ -1,7 +1,7 @@
 {
-  "version": "2.12.0",
+  "version": "2.13.0",
   "channel": "ranked",
-  "name": "PC Timeline Alignment",
+  "name": "Repeat Regions",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -76,6 +76,11 @@
     "Alignment reports explicitly separate replay total misses from unmatched-object candidates and never claim exact judgement locations",
     "DT, NC and HT replays are excluded from timeline alignment until clock-rate transformation is validated",
     "Local PC server now serves Ranked UI assets and public data shards required by Replay Signals, Trends, Profile and Alignment",
-    "Local hitobject feature vectors retain x/y coordinates for optional cursor-distance alignment"
+    "Local hitobject feature vectors retain x/y coordinates for optional cursor-distance alignment",
+    "Repeat Region Consensus groups supported PC alignments by exact beatmap checksum and Mods combination",
+    "Repeated 10-second anomaly candidates report recurrence, longest consecutive appearance and averaged alignment signals",
+    "Per-replay presence strips show when a region reappeared across recent alignment samples",
+    "Repeat-region thresholds support two, three or majority recurrence across the latest 5, 10 or all matching alignments",
+    "Repeat-region wording explicitly treats missing windows as absent from the saved top-candidate set rather than confirmed clean play"
   ]
 }
