@@ -11,6 +11,8 @@ CLIENT_CONFIG=CLIENT_HOME/'client.json'
 CLIENT_DB=CLIENT_HOME/'client.db'
 CLIENT_SCAN_LOCK=threading.Lock()
 CLIENT_SCAN={'running':False,'scanned':0,'updated':0,'reused':0,'errors':0,'started_at':None,'finished_at':None,'message':'대기 중'}
+CLIENT_REPLAY_LOCK=threading.Lock()
+CLIENT_REPLAY_SCAN={'running':False,'scanned':0,'updated':0,'reused':0,'errors':0,'started_at':None,'finished_at':None,'message':'대기 중'}
 
 def client_now():
     return datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
@@ -67,6 +69,15 @@ def client_db():
     CREATE INDEX IF NOT EXISTS idx_maps_beatmap_id ON maps(beatmap_id);
     CREATE INDEX IF NOT EXISTS idx_maps_title ON maps(title);
     CREATE INDEX IF NOT EXISTS idx_maps_creator ON maps(creator);
+    CREATE TABLE IF NOT EXISTS replays(
+      path TEXT PRIMARY KEY, root TEXT NOT NULL, record_id TEXT NOT NULL, mtime_ns INTEGER NOT NULL, size INTEGER NOT NULL,
+      map_hash TEXT, replay_hash TEXT, player TEXT, replay_time TEXT, score INTEGER, combo INTEGER, mods INTEGER,
+      accuracy REAL, miss INTEGER, non300_rate REAL, scan_token TEXT, indexed_at TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_replays_record_id ON replays(record_id);
+    CREATE INDEX IF NOT EXISTS idx_replays_root ON replays(root);
+    CREATE INDEX IF NOT EXISTS idx_replays_map_hash ON replays(map_hash);
+    CREATE INDEX IF NOT EXISTS idx_replays_time ON replays(replay_time);
     CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT);
     ''')
     return db
@@ -77,6 +88,99 @@ def client_meta_set(db,key,value):
 def client_meta_get(db,key,default=None):
     row=db.execute('SELECT value FROM meta WHERE key=?',(key,)).fetchone()
     return row['value'] if row else default
+
+def client_resolve_replays():
+    cfg=client_json_read(CLIENT_CONFIG,{})
+    configured=str(cfg.get('replay_path') or '').strip()
+    if configured:
+        p=Path(configured).expanduser()
+        if p.exists() and p.is_dir():return p.resolve(),'configured'
+    songs,_=client_resolve_songs()
+    if songs:
+        sibling=songs.parent/'Replays'
+        if sibling.exists() and sibling.is_dir():return sibling.resolve(),'auto'
+    local=os.environ.get('LOCALAPPDATA')
+    if local:
+        p=Path(local)/'osu!'/'Replays'
+        if p.exists() and p.is_dir():return p.resolve(),'auto'
+    return None,'missing'
+
+def client_replay_record_id(path):
+    return hashlib.sha1(str(Path(path).resolve()).encode('utf-8','replace')).hexdigest()[:24]
+
+def client_scan_replay_worker(root):
+    root=Path(root).resolve();token=uuid.uuid4().hex;now=client_now();db=None
+    with CLIENT_REPLAY_LOCK:
+        CLIENT_REPLAY_SCAN.update({'running':True,'scanned':0,'updated':0,'reused':0,'errors':0,'started_at':now,'finished_at':None,'message':'Replay Inbox 검색 중'})
+    try:
+        db=client_db();root_s=str(root)
+        for path in root.rglob('*.osr'):
+            with CLIENT_REPLAY_LOCK:CLIENT_REPLAY_SCAN['scanned']+=1
+            try:
+                st=path.stat();path_s=str(path.resolve());record_id=client_replay_record_id(path_s)
+                old=db.execute('SELECT mtime_ns,size FROM replays WHERE path=?',(path_s,)).fetchone()
+                if old and int(old['mtime_ns'])==int(st.st_mtime_ns) and int(old['size'])==int(st.st_size):
+                    db.execute('UPDATE replays SET scan_token=? WHERE path=?',(token,path_s))
+                    with CLIENT_REPLAY_LOCK:CLIENT_REPLAY_SCAN['reused']+=1
+                else:
+                    r=parse_replay(path.read_bytes());h=r.get('hits') or {}
+                    db.execute('''INSERT INTO replays(path,root,record_id,mtime_ns,size,map_hash,replay_hash,player,replay_time,score,combo,mods,accuracy,miss,non300_rate,scan_token,indexed_at)
+                      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                      ON CONFLICT(path) DO UPDATE SET root=excluded.root,record_id=excluded.record_id,mtime_ns=excluded.mtime_ns,size=excluded.size,
+                      map_hash=excluded.map_hash,replay_hash=excluded.replay_hash,player=excluded.player,replay_time=excluded.replay_time,
+                      score=excluded.score,combo=excluded.combo,mods=excluded.mods,accuracy=excluded.accuracy,miss=excluded.miss,
+                      non300_rate=excluded.non300_rate,scan_token=excluded.scan_token,indexed_at=excluded.indexed_at''',
+                      (path_s,root_s,record_id,st.st_mtime_ns,st.st_size,str(r.get('map_hash') or '').lower(),str(r.get('replay_hash') or ''),
+                       str(r.get('player') or ''),r.get('replay_timestamp'),int(r.get('score') or 0),int(r.get('combo') or 0),int(r.get('mods') or 0),
+                       r.get('accuracy'),int(h.get('miss') or 0),r.get('non300_rate'),token,now))
+                    with CLIENT_REPLAY_LOCK:CLIENT_REPLAY_SCAN['updated']+=1
+                if CLIENT_REPLAY_SCAN['scanned']%100==0:db.commit()
+            except Exception:
+                with CLIENT_REPLAY_LOCK:CLIENT_REPLAY_SCAN['errors']+=1
+        db.execute('DELETE FROM replays WHERE root=? AND scan_token<>?',(root_s,token))
+        client_meta_set(db,'replay_path',root_s);client_meta_set(db,'last_replay_scan',client_now());db.commit()
+        count=db.execute('SELECT COUNT(*) c FROM replays WHERE root=?',(root_s,)).fetchone()['c']
+        with CLIENT_REPLAY_LOCK:CLIENT_REPLAY_SCAN['message']=f'완료 · .osr {count:,}개 Inbox'
+    except Exception as exc:
+        with CLIENT_REPLAY_LOCK:CLIENT_REPLAY_SCAN['message']='Replay 스캔 실패: '+str(exc)
+    finally:
+        if db:db.close()
+        with CLIENT_REPLAY_LOCK:
+            CLIENT_REPLAY_SCAN['running']=False;CLIENT_REPLAY_SCAN['finished_at']=client_now()
+
+def client_start_replay_scan():
+    root,source=client_resolve_replays()
+    if not root:return {'ok':False,'error':'Replay 폴더를 찾지 못했습니다. .osr 파일이 있는 폴더를 직접 지정해 주세요.'}
+    with CLIENT_REPLAY_LOCK:
+        if CLIENT_REPLAY_SCAN['running']:return {'ok':True,'started':False,'source':source,'replay_path':str(root),'scan':dict(CLIENT_REPLAY_SCAN)}
+    threading.Thread(target=client_scan_replay_worker,args=(root,),daemon=True).start()
+    return {'ok':True,'started':True,'source':source,'replay_path':str(root)}
+
+def client_replay_list(limit=30):
+    root,_=client_resolve_replays()
+    if not root:return []
+    limit=max(1,min(100,int(limit or 30)));db=client_db()
+    rows=[dict(r) for r in db.execute('''SELECT r.record_id,r.map_hash,r.player,r.replay_time,r.score,r.combo,r.mods,r.accuracy,r.miss,r.non300_rate,
+      m.beatmap_id,m.artist,m.title,m.creator,m.version
+      FROM replays r LEFT JOIN maps m ON m.md5=r.map_hash
+      WHERE r.root=? ORDER BY COALESCE(r.replay_time,r.indexed_at) DESC LIMIT ?''',(str(root),limit)).fetchall()]
+    db.close();return rows
+
+def client_replay_analyze(record_id):
+    root,_=client_resolve_replays()
+    if not root:raise ValueError('Replay 폴더가 설정되지 않았습니다.')
+    db=client_db();row=db.execute('SELECT path,map_hash FROM replays WHERE root=? AND record_id=?',(str(root),str(record_id))).fetchone()
+    if not row:db.close();raise ValueError('Replay Inbox에서 해당 .osr을 찾지 못했습니다. 다시 스캔해 주세요.')
+    path=Path(row['path']).resolve()
+    if root not in path.parents:db.close();raise ValueError('설정된 Replay 폴더 밖의 파일은 읽지 않습니다.')
+    replay=parse_replay(path.read_bytes());replay['filename']=path.name;local_map=None
+    maprow=db.execute('SELECT path FROM maps WHERE md5=? LIMIT 1',(str(row['map_hash'] or '').lower(),)).fetchone()
+    db.close()
+    if maprow:
+        mpath=Path(maprow['path']).resolve();songs,_=client_resolve_songs()
+        if songs and songs in mpath.parents:
+            local_map=parse_map(mpath.read_bytes());local_map['filename']=mpath.name;local_map['client_source']='replay-inbox-match'
+    return {'replay':replay,'map':local_map}
 
 def parse_map_index(blob):
     raw=blob.decode('utf-8-sig','replace');sec='';meta={};diff={};general={};timing=[];mode=0
@@ -169,8 +273,16 @@ def client_status():
             sets=db.execute('SELECT COUNT(DISTINCT COALESCE(beatmapset_id,path)) c FROM maps WHERE root=?',(root_s,)).fetchone()['c']
         last_scan=client_meta_get(db,'last_scan');db.close()
     except:pass
+    replay_root,replay_source=client_resolve_replays();replay_count=0;last_replay_scan=None
+    try:
+        rdb=client_db()
+        if replay_root:replay_count=rdb.execute('SELECT COUNT(*) c FROM replays WHERE root=?',(str(replay_root),)).fetchone()['c']
+        last_replay_scan=client_meta_get(rdb,'last_replay_scan');rdb.close()
+    except:pass
     with CLIENT_SCAN_LOCK:scan=dict(CLIENT_SCAN)
-    return {'local_server':True,'client_version':'0.1.0','songs_path':str(root) if root else None,'path_source':source,'path_exists':bool(root),'maps':count,'beatmapsets':sets,'last_scan':last_scan,'scan':scan}
+    with CLIENT_REPLAY_LOCK:replay_scan=dict(CLIENT_REPLAY_SCAN)
+    return {'local_server':True,'client_version':'0.2.0','songs_path':str(root) if root else None,'path_source':source,'path_exists':bool(root),'maps':count,'beatmapsets':sets,'last_scan':last_scan,'scan':scan,
+      'replay_path':str(replay_root) if replay_root else None,'replay_path_source':replay_source,'replay_path_exists':bool(replay_root),'replays':replay_count,'last_replay_scan':last_replay_scan,'replay_scan':replay_scan}
 
 def client_search(q='',limit=40):
     root,_=client_resolve_songs()
