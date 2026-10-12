@@ -102,8 +102,9 @@ def client_fetch_update_manifest():
 
 def client_check_update():
     with CLIENT_UPDATE_LOCK:
-        if CLIENT_UPDATE['applying']:return client_update_status()
-        CLIENT_UPDATE.update({'checking':True,'message':'GitHub 최신 버전 확인 중…'})
+        applying=bool(CLIENT_UPDATE['applying'])
+        if not applying:CLIENT_UPDATE.update({'checking':True,'message':'GitHub 최신 버전 확인 중…'})
+    if applying:return client_update_status()
     try:
         manifest=client_fetch_update_manifest();local=client_local_version();remote=manifest['version']
         available=client_version_parts(remote)>client_version_parts(local)
@@ -157,7 +158,8 @@ def client_update_worker():
                 source=stage/path
                 old=backup/path
                 if target.exists():shutil.copy2(target,old)
-                source.replace(target);replaced.append(path)
+                temp_target=target.with_name(target.name+'.osl-update.tmp')
+                shutil.copy2(source,temp_target);os.replace(temp_target,target);replaced.append(path)
         except Exception:
             for path in reversed(replaced):
                 target=BASE/path;old=backup/path
@@ -178,8 +180,10 @@ def client_update_worker():
 
 def client_start_update():
     with CLIENT_UPDATE_LOCK:
-        if CLIENT_UPDATE['applying']:return {'ok':True,'started':False,'update':client_update_status()}
-        CLIENT_UPDATE['message']='업데이트 시작 중…'
+        already=bool(CLIENT_UPDATE['applying'])
+        if not already:
+            CLIENT_UPDATE.update({'applying':True,'checking':False,'message':'업데이트 시작 중…'})
+    if already:return {'ok':True,'started':False,'update':client_update_status()}
     threading.Thread(target=client_update_worker,daemon=True,name='osl-self-updater').start()
     return {'ok':True,'started':True,'update':client_update_status()}
 
