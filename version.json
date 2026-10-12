@@ -1,7 +1,7 @@
 {
-  "version": "2.14.0",
+  "version": "2.15.0",
   "channel": "ranked",
-  "name": "Region Fingerprint",
+  "name": "Failure Structure Profile",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -87,6 +87,11 @@
     "Structural labels include Stream/Burst, Jump, Tech/Rhythm, Slider-heavy, Dense/Reading, Flow and Mixed",
     "Repeat Region Consensus can filter recurring anomaly candidates by structural fingerprint",
     "Individual PC alignment candidates and exported reports include structural fingerprints with legacy fallback for older records",
-    "Fingerprint wording remains descriptive and does not treat structural classes as official difficulty types or player weaknesses"
+    "Fingerprint wording remains descriptive and does not treat structural classes as official difficulty types or player weaknesses",
+    "Failure Structure Profile aggregates repeated alignment candidate windows across checksum+Mods groups",
+    "Cross-map structure composition reports candidate-window counts, average recurrence, alignment score and unmatched share",
+    "Failure Structure Profile supports all-time, 30-day and 90-day scopes plus minimum alignment-group size",
+    "Structure bars link back to the matching Repeat Region structural filter",
+    "Failure Structure wording explicitly uses repeated saved anomaly candidates as its denominator instead of total play time or failure probability"
   ]
 }
