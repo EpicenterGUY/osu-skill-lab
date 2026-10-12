@@ -1,4 +1,4 @@
-# osu! Skill Lab — Rhythm Intelligence v2.11
+# osu! Skill Lab — Rhythm Intelligence v2.12
 
 Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analysis.
 **GitHub Pages:** https://epicenterguy.github.io/osu-skill-lab/
@@ -48,6 +48,7 @@ Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analys
 - **Replay Failure Signals** stores imported .osr outcome headers locally, links replays back to Ranked maps through a lazy two-hex MD5 checksum index, and summarizes accuracy, judgement mix, misses, and available Chart-DNA demand context. Browser-only replay parsing stays header-only; the local PC server can add key-input timing proxies, but neither path claims exact miss timestamps or failure locations.
 - **Replay Trend Lab** groups repeated replays of the same beatmap, filters same-map trends by Mods, plots accuracy/miss/non-300/combo history, compares replay samples before/after the first recorded Practice Route completion only within the same Mods combination, and summarizes repeated outcome samples by the map's dominant base Chart-DNA axis. These are temporal/sample comparisons, not causal training-effect or weakness claims.
 - **Replay Profile** summarizes the currently selected same-map/Mods replay window with descriptive sample standard deviation, observed ranges, per-Mod technical statistics, timestamp provenance, map-link state, and an A–D **data sufficiency** grade. That grade only reflects sample quantity/metadata quality and never claims skill, training effect, statistical significance, or causal confidence.
+- **PC Timeline Alignment** is an experimental local-only bridge between a checksum-matching selected .osu and PC-decoded .osr keydown frames. It greedily aligns circle/slider-head timestamps to one keydown each, estimates a small global offset, summarizes timing/cursor residuals, and ranks 10-second anomaly-candidate windows. It does **not** recreate osu!'s judgement engine or identify exact miss locations; DT/NC/HT are intentionally excluded until clock-rate alignment is validated.
 - Sort by official SR, BPM, ranked date, play count, length, AR/OD, and available Chart DNA dimensions.
 - Full monthly metadata shards are not loaded by the page on entry; only the selected month/year search index is fetched on demand. Mobile, PWA, and desktop work with no browser OAuth credentials.
 - The optional **STATS → Ranked 색인 가져오기** button is only for importing additional local datasets.
@@ -126,9 +127,10 @@ This updates only local files unless you explicitly commit/push them.
 ## Local PC chart analysis
 Run `실행.bat` (Python 3.10+), or start `server.py`, then load `.osu` maps.
 - Chart X-Ray, time-based strain, aim/stream/speed/stamina/flow/tech/reading heuristics
-- `.osr` replay basic analysis when using the local Python server
+- `.osr` replay analysis when using the local Python server, including experimental checksum-matched tap-head/key-down timeline alignment for NM/non-rate-changing Mods
 - JSON export/import of local browser analysis; PC and phone data don't otherwise sync automatically
 - Mobile PWA can analyze local `.osu` files without the Python backend.
+- The local PC server serves the same Ranked/Training frontend assets and local `data/*.json` files, so Replay Signals/Trends/Profile/Timeline Alignment work from `실행.bat` instead of silently losing those frontend modules.
 
 ## Scope and limits
 The **catalogue currently targets osu!standard Ranked/Approved**. It does not yet index Loved, Qualified, Pending, Graveyard, or all four game modes. It began from an initial 832 difficulties and keeps growing; a pagination cursor reaching the end does not guarantee every historical beatmap or every change was captured. The published count and rankings only describe maps actually collected. No worldwide ranking, percentile, or completion claim is made.
