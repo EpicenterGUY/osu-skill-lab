@@ -1,4 +1,4 @@
-# osu! Skill Lab — Rhythm Intelligence v2.17
+# osu! Skill Lab — Rhythm Intelligence v2.18
 
 Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analysis.
 **GitHub Pages:** https://epicenterguy.github.io/osu-skill-lab/
@@ -11,12 +11,12 @@ Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analys
   Real `.osu`-based Aim / Stream / Speed / Stamina / Tech / Reading / Flow heuristics are being backfilled separately from metadata. DNA is published as a lazy overlay so search stays fast while coverage grows.
 - **M3 · Mirror-class Explorer & Observatory — IN PROGRESS**  
   Advanced filters, multi-map comparison, random discovery, era comparison, mapper fingerprints, oddities, similarity neighborhoods, Difficulty Twins, and richer statistics.
-- **M4 · OSL Client — PLANNED**  
-  Carry the recent **osu! Skill Lab client** direction into a dedicated desktop-client track instead of treating the project as web-only. The client milestone is to unify the existing public Ranked/Chart-DNA database with local `.osu` / `.osr` analysis in one desktop experience, while keeping the current web/PWA as a first-class lightweight front end. The current `server.py` / `실행.bat` local analyzer is the technical starting point; client-specific integrations should be added incrementally rather than blocking the website.
+- **M4 · OSL Client — BUILDING**  
+  Phase 1–2 are now live in the local Python client bridge. The Client tab can auto-detect or configure a Songs folder, maintain an incremental SQLite metadata/MD5 index, search the local library, analyze indexed .osu maps without a file picker, and maintain a local **Replay Inbox** for .osr files. Replay Inbox entries are matched back to the active Songs library by MD5 and can feed Replay Signals / PC Timeline Alignment with one click. The optional tab-open watch only rescans the configured .osr folder while the Client tab is open; it does not claim to capture every osu! play.
 - **M5 · Personal Rhythm Intelligence — EARLY PREVIEW**  
   Practice Route Builder, the browser-local Training Journal, period-comparison Training Insights, Replay Failure Signals, same-map Replay Trends/Profile, PC Timeline Alignment, repeated-region consensus, local Region Fingerprints, and a cross-map Failure Structure Profile now connect user-controlled Chart-DNA practice exposure with imported replay outcomes while explicitly avoiding pass/skill claims. Exact miss-location reconstruction, stronger replay/map alignment, confidence models, and long-term performance modeling remain future work.
 
-> The client milestone is a roadmap item, not a claim that a packaged desktop client or direct osu! game integration already exists.
+> OSL Client is now an active local bridge, but it is still **not** a packaged installer or direct osu! process integration. The current implementation runs through `server.py` / `실행.bat` and reads only explicitly configured local folders.
 
 ## v1.1 fast load and browser-local profiles
 - The repository contains a pre-seeded `data/ranked-summary.json` (about 25 KB at initial 5,058 difficulties), so first paint never depends on downloading every Ranked map.
@@ -134,6 +134,9 @@ Run `실행.bat` (Python 3.10+), or start `server.py`. The **OSL Client** tab is
 - It checks common osu! stable `Songs` locations and allows a manual Songs path when osu! is installed elsewhere.
 - **Library Scan** builds `~/.osu-skill-lab/client.db` with local-only SQLite metadata + MD5. Unchanged files are reused by mtime/size instead of being reparsed.
 - **Local Library Search** searches artist/title/mapper/difficulty/Beatmap ID, then **분석 열기** reads only that indexed .osu and sends the result into the existing Chart X-Ray/Skill DNA browser state.
+- **Replay Inbox** auto-detects the sibling `Replays` folder when present (or accepts another explicit folder), incrementally indexes actual `.osr` files, and joins each replay to the active Songs index by beatmap MD5.
+- **Replay 분석** decodes the selected local .osr, loads the matching local .osu when available, and sends both into Replay Signals / PC Timeline Alignment without a manual file picker.
+- The optional **tab-open watch** asks the local server to rescan about every 12 seconds only while the Client tab is open. It watches stored/exported `.osr` files; it is not an always-on process watcher and does not guarantee capture of every play.
 - The server binds only to `127.0.0.1`; configured file analysis verifies the indexed file still lives under the configured Songs root.
 - GitHub Pages/PWA displays the Client tab but does not attempt to access the local file system.
 
