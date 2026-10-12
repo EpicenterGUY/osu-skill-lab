@@ -58,6 +58,22 @@ class UiContractTests(unittest.TestCase):
                       "runGlobalMetaSimilarity", "similarityDnaDistance", "similarityMetaDistance"):
             self.assertIn(token, RANKED)
 
+    def test_filter_only_global_search_is_supported(self):
+        self.assertIn("검색어 없이 필터 검색 완료", RANKED)
+        self.assertIn("rankedMapMatches", RANKED)
+        self.assertNotIn("상위 4,000건만 화면 보관", RANKED)
+
+    def test_relation_graph_is_wired(self):
+        for element_id in ("relationNodeLimit", "relationDensity", "buildRelationGraph",
+                           "expandRelationNode", "resetRelationGraph", "relationGraphStatus",
+                           "relationGraph", "relationGraphEdges", "relationGraphNodes",
+                           "relationNodeInspector"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', RANKED)
+        for token in ("relationKinds", "relationStrength", "relationGraphMaps",
+                      "data-relation-node", "buildRelationGraph"):
+            self.assertIn(token, RANKED)
+
     def test_ranked_compare_workspace_is_wired(self):
         for element_id in ("compareTray", "compareTrayItems", "compareCount", "openCompare",
                            "compareNow", "clearCompare"):
