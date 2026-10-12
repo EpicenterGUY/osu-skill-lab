@@ -96,6 +96,17 @@ class UiContractTests(unittest.TestCase):
                       "trainingRouteScore", "data-training-toggle", "trainingRouteMaps"):
             self.assertIn(token, RANKED)
 
+    def test_training_journal_is_wired(self):
+        for element_id in ("trainingSessionFeel", "trainingSessionNote", "finishTrainingRoute",
+                           "trainingJournalKpis", "trainingActivity14", "trainingExposure28",
+                           "trainingJournalSummary", "trainingJournalList",
+                           "importTrainingJournal", "exportTrainingJournal", "clearTrainingJournal"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', RANKED)
+        for token in ("osl-training-history", "renderTrainingJournal", "archiveTrainingRoute",
+                      "trainingSessionEvents", "suggestTrainingBand", "data-training-history-replay"):
+            self.assertIn(token, RANKED)
+
     def test_ranked_compare_workspace_is_wired(self):
         for element_id in ("compareTray", "compareTrayItems", "compareCount", "openCompare",
                            "compareNow", "clearCompare"):
