@@ -1,3 +1,4 @@
+import ast
 import unittest
 from pathlib import Path
 
@@ -7,6 +8,9 @@ SERVER = (ROOT / "server.py").read_text(encoding="utf-8")
 
 
 class ReplayContractTests(unittest.TestCase):
+    def test_pc_server_source_is_valid_python(self):
+        ast.parse(SERVER)
+
     def test_browser_parser_is_honest_header_only(self):
         self.assertIn("header_only:true", MOBILE)
         self.assertIn("replay_data_analyzed:false", MOBILE)
