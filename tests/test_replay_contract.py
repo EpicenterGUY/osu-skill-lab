@@ -26,6 +26,9 @@ class ReplayContractTests(unittest.TestCase):
         self.assertIn("'replay_timestamp'", SERVER)
         self.assertIn("'miss_rate'", SERVER)
 
+    def test_map_features_keep_coordinates_for_pc_alignment(self):
+        self.assertIn("'x':o['x'],'y':o['y']", SERVER)
+
     def test_pc_parser_handles_replays_without_compressed_frame_payload(self):
         self.assertIn("if size>0:", SERVER)
         self.assertIn("raw=''", SERVER)
