@@ -38,7 +38,7 @@ let rankedSearchHistory = [];
 let sharedSearchHandled = false;
 let trainingPoolCache = null;
 let trainingRouteGeneration = 0;
-let trainingRouteState = {skill:null,band:null,mode:null,scope:null,maps:[],done:[],done_at:{},feel:"",note:"",created_at:null};
+let trainingRouteState = {skill:null,requested_band:null,band:null,mode:null,scope:null,maps:[],done:[],done_at:{},feel:"",note:"",created_at:null};
 let trainingHistory = [];
 const trainingRouteMaps = new Map();
 try {
