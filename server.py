@@ -160,10 +160,11 @@ def client_replay_list(limit=30):
     root,_=client_resolve_replays()
     if not root:return []
     limit=max(1,min(100,int(limit or 30)));db=client_db()
+    songs,_=client_resolve_songs();songs_s=str(songs) if songs else ''
     rows=[dict(r) for r in db.execute('''SELECT r.record_id,r.map_hash,r.player,r.replay_time,r.score,r.combo,r.mods,r.accuracy,r.miss,r.non300_rate,
       m.beatmap_id,m.artist,m.title,m.creator,m.version
-      FROM replays r LEFT JOIN maps m ON m.md5=r.map_hash
-      WHERE r.root=? ORDER BY COALESCE(r.replay_time,r.indexed_at) DESC LIMIT ?''',(str(root),limit)).fetchall()]
+      FROM replays r LEFT JOIN maps m ON m.md5=r.map_hash AND m.root=?
+      WHERE r.root=? ORDER BY COALESCE(r.replay_time,r.indexed_at) DESC LIMIT ?''',(songs_s,str(root),limit)).fetchall()]
     db.close();return rows
 
 def client_replay_analyze(record_id):
@@ -174,10 +175,11 @@ def client_replay_analyze(record_id):
     path=Path(row['path']).resolve()
     if root not in path.parents:db.close();raise ValueError('설정된 Replay 폴더 밖의 파일은 읽지 않습니다.')
     replay=parse_replay(path.read_bytes());replay['filename']=path.name;local_map=None
-    maprow=db.execute('SELECT path FROM maps WHERE md5=? LIMIT 1',(str(row['map_hash'] or '').lower(),)).fetchone()
+    songs,_=client_resolve_songs()
+    maprow=db.execute('SELECT path FROM maps WHERE root=? AND md5=? LIMIT 1',(str(songs) if songs else '',str(row['map_hash'] or '').lower())).fetchone()
     db.close()
     if maprow:
-        mpath=Path(maprow['path']).resolve();songs,_=client_resolve_songs()
+        mpath=Path(maprow['path']).resolve()
         if songs and songs in mpath.parents:
             local_map=parse_map(mpath.read_bytes());local_map['filename']=mpath.name;local_map['client_source']='replay-inbox-match'
     return {'replay':replay,'map':local_map}
