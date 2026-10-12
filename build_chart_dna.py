@@ -254,15 +254,24 @@ def main():
                 "year": year, "analyzed": analyzed, "candidates": len(rows),
                 "coverage_percent": round(analyzed / max(1, len(rows)) * 100, 3),
             })
+        elapsed = max(0.1, time.monotonic() - started_monotonic)
+        terminal_count = sum(1 for v in failed.values() if isinstance(v, dict) and v.get("terminal"))
+        resolved = len(dna) + terminal_count
         state["updated_at"] = current_now.isoformat()
         state["blocked_on_last_run"] = current_blocked
         state["succeeded_last_run"] = succeeded
         state["attempted_last_run"] = attempted
-        state["elapsed_seconds_last_run"] = round(time.monotonic() - started_monotonic, 1)
+        state["success_ratio_last_run"] = round(succeeded / max(1, attempted), 4)
+        state["elapsed_seconds_last_run"] = round(elapsed, 1)
+        state["successful_requests_per_minute_last_run"] = round(succeeded / elapsed * 60, 2)
+        state["terminal_failed_count"] = terminal_count
+        state["remaining_candidates"] = max(0, len(candidates) - resolved)
         dump(DNA_STATE, state)
-        dump(DNA_MANIFEST, {"format":"osu-skill-lab-chart-dna","version":3,
+        dump(DNA_MANIFEST, {"format":"osu-skill-lab-chart-dna","version":4,
             "analyzed_difficulties":len(dna),"candidate_difficulties":len(candidates),
+            "unsupported_difficulties":terminal_count,"resolved_difficulties":resolved,
             "coverage_percent":round(len(dna)/max(1,len(candidates))*100,4),
+            "resolved_percent":round(resolved/max(1,len(candidates))*100,4),
             "coverage_by_year":coverage_by_year,
             "method":"chart-dna-pilot-v1","status":"experimental partial coverage",
             "selection_strategy":"coverage-balanced by ranked year; newest first within year",
@@ -280,6 +289,8 @@ def main():
             continue
         prior = failed.get(str(beatmap_id))
         if prior:
+            if prior.get("terminal"):
+                continue
             try:
                 retry_at = datetime.fromisoformat(prior["retry_after"])
                 if now < retry_at:
@@ -326,13 +337,28 @@ def main():
             print(f"Chart DNA {beatmap_id}: HTTP {exc.code}; retaining metadata only", flush=True)
             if exc.code in (403, 429, 503):
                 blocked = True
-            retry_hours = 72 if exc.code in (403, 404) else 24
+            previous = failed.get(str(beatmap_id)) or {}
+            retries = int(previous.get("failures") or 0) + 1
+            retry_hours = 168 if exc.code == 404 else 72 if exc.code == 403 else 24
             failed[str(beatmap_id)] = {"retry_after": (now + timedelta(hours=retry_hours)).isoformat(),
-                                       "reason": f"HTTP {exc.code}"}
-        except (OSError, ValueError, URLError) as exc:
+                                       "reason": f"HTTP {exc.code}", "failures": retries}
+        except ValueError as exc:
+            reason = str(exc) or "ValueError"
+            previous = failed.get(str(beatmap_id)) or {}
+            retries = int(previous.get("failures") or 0) + 1
+            terminal = reason.startswith("too few playable hit objects")
+            retry_hours = 24 * 3650 if terminal else 168 if "MD5 mismatch" in reason else 72
+            print(f"Chart DNA {beatmap_id}: unsupported/unavailable ({reason})", flush=True)
+            failed[str(beatmap_id)] = {
+                "retry_after": (now + timedelta(hours=retry_hours)).isoformat(),
+                "reason": reason[:160], "failures": retries, "terminal": terminal,
+            }
+        except (OSError, URLError) as exc:
             print(f"Chart DNA {beatmap_id}: unavailable ({type(exc).__name__})", flush=True)
+            previous = failed.get(str(beatmap_id)) or {}
+            retries = int(previous.get("failures") or 0) + 1
             failed[str(beatmap_id)] = {"retry_after": (now + timedelta(hours=24)).isoformat(),
-                                       "reason": type(exc).__name__}
+                                       "reason": type(exc).__name__, "failures": retries}
         if attempted % args.checkpoint_every == 0:
             persist(datetime.now(timezone.utc), blocked)
             print(f"Checkpoint: {len(dna)}/{len(candidates)} DNA charts stored.", flush=True)
