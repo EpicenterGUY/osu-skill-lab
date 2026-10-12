@@ -1,7 +1,7 @@
 {
-  "version": "2.18.0",
+  "version": "2.19.0",
   "channel": "client",
-  "name": "Replay Inbox",
+  "name": "Background Chart DNA",
   "released": "2026-10-12",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
@@ -110,6 +110,13 @@
     "Replay Inbox rows join back to the active Songs library by beatmap MD5 without exposing local filesystem paths to the browser",
     "One-click Replay Inbox analysis loads the matching local .osu when available and feeds Replay Signals plus PC Timeline Alignment",
     "Optional tab-open replay watch rescans about every 12 seconds only while the Client tab is open and does not claim to capture every osu! play",
-    "Replay file reads are constrained to the configured replay root and replay-to-map joins are constrained to the active Songs root"
+    "Replay file reads are constrained to the configured replay root and replay-to-map joins are constrained to the active Songs root",
+    "M4 Phase 3 adds a bounded Background Chart DNA queue to the local OSL Client",
+    "Background DNA caches compact derived skill summaries in local SQLite without uploading local .osu files",
+    "DNA cache validity is tied to the indexed map path, MD5 and mtime so changed charts are not silently reused",
+    "Client status exposes cached and remaining DNA counts plus live processed/analyzed/error progress",
+    "Background DNA batches can process 200, 1000, 2500 or 5000 local maps and can be stopped from the Client tab",
+    "Local Library Search displays the dominant cached DNA axis and overall heuristic score when available",
+    "Opening a local map writes its derived DNA summary through to the same local cache"
   ]
 }
