@@ -1,4 +1,4 @@
-# osu! Skill Lab — Rhythm Intelligence v2.21
+# osu! Skill Lab — Rhythm Intelligence v2.22
 
 Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analysis.
 **GitHub Pages:** https://epicenterguy.github.io/osu-skill-lab/
@@ -12,11 +12,11 @@ Unofficial osu!standard beatmap metadata catalogue + local beatmap/replay analys
 - **M3 · Mirror-class Explorer & Observatory — IN PROGRESS**  
   Advanced filters, multi-map comparison, random discovery, era comparison, mapper fingerprints, oddities, similarity neighborhoods, Difficulty Twins, and richer statistics.
 - **M4 · OSL Client — BUILDING**  
-  Phase 1–5 are now live in the local Python client bridge. The Client tab can auto-detect or configure a Songs folder, maintain an incremental SQLite metadata/MD5 index, search the local library, analyze indexed .osu maps without a file picker, maintain a local **Replay Inbox** for .osr files, run a bounded **Background Chart DNA** queue, and enable an **Always-on Local Watcher** while the local server is running. The watcher uses dependency-free polling signatures and only triggers the existing incremental Songs/Replay scans after an actual folder change is detected. Background DNA stores only compact derived summaries in local SQLite and never uploads local charts.
+  Phase 1–6 are now live in the local Python client bridge. The Client tab can auto-detect or configure a Songs folder, maintain an incremental SQLite metadata/MD5 index, search the local library, analyze indexed .osu maps without a file picker, maintain a local **Replay Inbox** for .osr files, run a bounded **Background Chart DNA** queue, and enable an **Always-on Local Watcher** while the local server is running. The watcher uses dependency-free polling signatures and only triggers the existing incremental Songs/Replay scans after an actual folder change is detected. Background DNA stores only compact derived summaries in local SQLite and never uploads local charts.
 - **M5 · Personal Rhythm Intelligence — EARLY PREVIEW**  
   Practice Route Builder, the browser-local Training Journal, period-comparison Training Insights, Replay Failure Signals, same-map Replay Trends/Profile, PC Timeline Alignment, repeated-region consensus, local Region Fingerprints, and a cross-map Failure Structure Profile now connect user-controlled Chart-DNA practice exposure with imported replay outcomes while explicitly avoiding pass/skill claims. Exact miss-location reconstruction, stronger replay/map alignment, confidence models, and long-term performance modeling remain future work.
 
-> OSL Client is now an active local bridge, but it is still **not** a packaged installer or direct osu! process integration. The current implementation runs through `server.py` / `실행.bat` and reads only explicitly configured local folders.
+> OSL Client now includes a **Windows script installer + single-instance launcher**, but it is not yet a single EXE/MSI package or direct osu! process integration. `install-client.bat` installs verified Client files under `%LOCALAPPDATA%\\osu-skill-lab`; user DB/settings remain under `~/.osu-skill-lab`.
 
 ## v1.1 fast load and browser-local profiles
 - The repository contains a pre-seeded `data/ranked-summary.json` (about 25 KB at initial 5,058 difficulties), so first paint never depends on downloading every Ranked map.
@@ -139,6 +139,7 @@ Run `실행.bat` (Python 3.10+), or start `server.py`. The **OSL Client** tab is
 - **Background Chart DNA** processes a user-selected bounded batch (up to 5,000 maps per run) in a background thread and caches compact Aim/Stream/Speed/Stamina/Tech/Reading/Flow summaries in `~/.osu-skill-lab/client.db`. It checks the indexed MD5 + mtime before reusing a cache entry and can be stopped from the Client tab.
 - **Always-on Local Watcher** can persist in `~/.osu-skill-lab/client.json` and, while `server.py` / `실행.bat` remains running, checks Songs and Replay file signatures at a configurable 15–600 second interval. It triggers the existing incremental scans only after a signature change; it is a polling watcher, not a Windows service or direct osu! process hook.
 - **Verified Client Updater** checks a fixed official GitHub manifest on demand, downloads only whitelisted Client shell files, verifies Git blob hashes + byte sizes, backs up current files, and restores them automatically if replacement fails. `client.db` and `client.json` are never update targets; a successful `server.py` update requires a restart.
+- **Windows Installer & Launcher** uses the same verified manifest to install under `%LOCALAPPDATA%\\osu-skill-lab`, creates a Start Menu shortcut, optionally adds a desktop shortcut / login autostart, records the active localhost runtime to avoid duplicate server instances, and provides UI controls for autostart + restart. Standard uninstall preserves `~/.osu-skill-lab/client.db` and `client.json`.
 - The older optional **tab-open Replay watch** remains as a browser-local fallback, but it automatically yields when the server-side Always-on Local Watcher is enabled. Neither watcher guarantees capture of plays that osu! never writes as `.osr` files.
 - The server binds only to `127.0.0.1`; configured file analysis verifies the indexed file still lives under the configured Songs root.
 - GitHub Pages/PWA displays the Client tab but does not attempt to access the local file system.
