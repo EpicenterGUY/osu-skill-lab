@@ -3,13 +3,15 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 from urllib.request import Request, urlopen
-import struct,lzma,json,math,statistics,webbrowser,threading,hashlib,os,sqlite3,time,uuid,shutil
+import struct,lzma,json,math,statistics,webbrowser,threading,hashlib,os,sqlite3,time,uuid,shutil,subprocess,sys
 from datetime import datetime, timezone
 import osu_api
 BASE=Path(__file__).resolve().parent; MAX_UPLOAD=25*1024*1024
 CLIENT_HOME=Path.home()/'.osu-skill-lab'
 CLIENT_CONFIG=CLIENT_HOME/'client.json'
 CLIENT_DB=CLIENT_HOME/'client.db'
+CLIENT_RUNTIME=CLIENT_HOME/'runtime.json'
+CLIENT_INSTALL_META=CLIENT_HOME/'installation.json'
 CLIENT_SCAN_LOCK=threading.Lock()
 CLIENT_SCAN={'running':False,'scanned':0,'updated':0,'reused':0,'errors':0,'started_at':None,'finished_at':None,'message':'대기 중'}
 CLIENT_REPLAY_LOCK=threading.Lock()
@@ -26,6 +28,61 @@ UPDATE_FILES=('server.py','osu_api.py','index.html','app-shell.css','ranked-cata
 CLIENT_UPDATE_LOCK=threading.Lock()
 CLIENT_UPDATE={'checking':False,'applying':False,'remote_version':None,'update_available':False,'restart_required':False,
   'checked_at':None,'applied_at':None,'progress_done':0,'progress_total':0,'last_backup':None,'message':'업데이트 확인 전'}
+
+def client_install_dir():
+    raw=os.environ.get('LOCALAPPDATA')
+    base=Path(raw) if raw else Path.home()/'AppData'/'Local'
+    return (base/'osu-skill-lab').resolve()
+
+def client_startup_link():
+    raw=os.environ.get('APPDATA')
+    base=Path(raw) if raw else Path.home()/'AppData'/'Roaming'
+    return base/'Microsoft'/'Windows'/'Start Menu'/'Programs'/'Startup'/'osu! Skill Lab.lnk'
+
+def client_start_menu_link():
+    raw=os.environ.get('APPDATA')
+    base=Path(raw) if raw else Path.home()/'AppData'/'Roaming'
+    return base/'Microsoft'/'Windows'/'Start Menu'/'Programs'/'osu! Skill Lab.lnk'
+
+def client_install_status():
+    install=client_install_dir();meta=client_json_read(CLIENT_INSTALL_META,{})
+    try:current=BASE.resolve()==install
+    except:current=False
+    return {
+      'supported':os.name=='nt',
+      'installed':bool((install/'server.py').is_file() and (install/'client-launcher.py').is_file()),
+      'current_is_installed':current,
+      'install_dir':str(install),
+      'recorded_version':meta.get('version'),
+      'installed_at':meta.get('installed_at'),
+      'autostart':client_startup_link().exists(),
+      'start_menu':client_start_menu_link().exists(),
+      'launcher_available':(BASE/'client-launcher.py').is_file(),
+    }
+
+def client_set_autostart(enabled):
+    if os.name!='nt':raise ValueError('Windows Client에서만 자동 시작을 설정할 수 있습니다.')
+    launcher=BASE/'client-launcher.py'
+    if not launcher.is_file():raise ValueError('client-launcher.py가 없습니다. Client를 업데이트해 주세요.')
+    flags=getattr(subprocess,'CREATE_NO_WINDOW',0)
+    result=subprocess.run([sys.executable,str(launcher),'set-autostart','on' if enabled else 'off'],
+      cwd=str(BASE),capture_output=True,text=True,timeout=20,creationflags=flags)
+    if result.returncode!=0:raise ValueError((result.stderr or result.stdout or '자동 시작 설정 실패').strip())
+    return client_install_status()
+
+def client_restart_request():
+    if os.name!='nt':raise ValueError('Windows Client에서만 재시작할 수 있습니다.')
+    launcher=BASE/'client-launcher.py'
+    if not launcher.is_file():raise ValueError('client-launcher.py가 없습니다. Client를 업데이트해 주세요.')
+    flags=getattr(subprocess,'CREATE_NO_WINDOW',0)|getattr(subprocess,'CREATE_NEW_PROCESS_GROUP',0)
+    log=CLIENT_HOME/'client.log';CLIENT_HOME.mkdir(parents=True,exist_ok=True)
+    stream=log.open('a',encoding='utf-8')
+    try:
+        subprocess.Popen([sys.executable,str(launcher),'restart','--wait-pid',str(os.getpid())],
+          cwd=str(BASE),stdin=subprocess.DEVNULL,stdout=stream,stderr=stream,creationflags=flags)
+    finally:
+        stream.close()
+    return {'ok':True,'restarting':True,'message':'현재 서버 종료 후 OSL Client를 다시 시작합니다.'}
 
 def client_now():
     return datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
@@ -641,8 +698,8 @@ def client_status():
     with CLIENT_REPLAY_LOCK:replay_scan=dict(CLIENT_REPLAY_SCAN)
     with CLIENT_DNA_LOCK:dna=dict(CLIENT_DNA)
     dna.update({'cached':dna_cached,'remaining':dna_remaining,'last_run':last_dna_run})
-    watch=client_watch_status();update=client_update_status()
-    return {'local_server':True,'client_version':'0.5.0','songs_path':str(root) if root else None,'path_source':source,'path_exists':bool(root),'maps':count,'beatmapsets':sets,'last_scan':last_scan,'scan':scan,'dna':dna,'watch':watch,'update':update,
+    watch=client_watch_status();update=client_update_status();install=client_install_status()
+    return {'local_server':True,'client_version':'0.6.0','songs_path':str(root) if root else None,'path_source':source,'path_exists':bool(root),'maps':count,'beatmapsets':sets,'last_scan':last_scan,'scan':scan,'dna':dna,'watch':watch,'update':update,'install':install,
       'replay_path':str(replay_root) if replay_root else None,'replay_path_source':replay_source,'replay_path_exists':bool(replay_root),'replays':replay_count,'last_replay_scan':last_replay_scan,'replay_scan':replay_scan}
 
 def client_search(q='',limit=40):
@@ -843,7 +900,7 @@ class H(BaseHTTPRequestHandler):
         if p.startswith('/api/'):
             try:
                 q=parse_qs(urlparse(self.path).query)
-                if p=='/api/osu/status': return self.sendj({'configured':osu_api.configured(),'version':'0.5.0'})
+                if p=='/api/osu/status': return self.sendj({'configured':osu_api.configured(),'version':'0.6.0'})
                 if p=='/api/osu/lookup': return self.sendj(osu_api.lookup_md5(q.get('checksum',[''])[0]))
                 if p=='/api/osu/search': return self.sendj(osu_api.search_ranked(q.get('q',[''])[0],q.get('page',['1'])[0]))
                 if p=='/api/client/status': return self.sendj(client_status())
@@ -852,6 +909,7 @@ class H(BaseHTTPRequestHandler):
                 if p=='/api/client/dna/status': return self.sendj(client_status().get('dna',{}))
                 if p=='/api/client/watch/status': return self.sendj(client_watch_status())
                 if p=='/api/client/update/status': return self.sendj(client_update_status())
+                if p=='/api/client/install/status': return self.sendj(client_install_status())
                 return self.sendj({'error':'Not found'},404)
             except Exception as exc: return self.sendj({'error':str(exc)},400)
         if p in ('/','/index.html'):
@@ -910,6 +968,14 @@ class H(BaseHTTPRequestHandler):
                 return self.sendj(client_check_update())
             if p=='/api/client/update/apply':
                 return self.sendj(client_start_update(),202)
+            if p=='/api/client/install/startup':
+                data=json.loads(b.decode('utf-8') or '{}') if b else {}
+                return self.sendj(client_set_autostart(bool(data.get('enabled'))))
+            if p=='/api/client/restart':
+                result=client_restart_request()
+                self.sendj(result,202)
+                threading.Timer(.35,self.server.shutdown).start()
+                return
             if p=='/api/client/replays/scan':
                 return self.sendj(client_start_replay_scan(),202)
             if p=='/api/client/replays/config':
@@ -935,7 +1001,19 @@ class H(BaseHTTPRequestHandler):
 
 def main():
     client_start_watch_thread()
-    s=ThreadingHTTPServer(('127.0.0.1',0),H);u=f'http://127.0.0.1:{s.server_port}';print('osu! Skill Lab local PC server:',u);threading.Timer(.7,lambda:webbrowser.open(u)).start()
-    try:s.serve_forever()
-    except KeyboardInterrupt:pass
+    s=ThreadingHTTPServer(('127.0.0.1',0),H);u=f'http://127.0.0.1:{s.server_port}'
+    client_json_write(CLIENT_RUNTIME,{'pid':os.getpid(),'port':s.server_port,'url':u,'started_at':client_now(),'base':str(BASE)})
+    print('osu! Skill Lab local PC server:',u)
+    if os.environ.get('OSL_BROWSER','1')!='0':
+        threading.Timer(.7,lambda:webbrowser.open(u)).start()
+    try:
+        s.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        s.server_close()
+        current=client_json_read(CLIENT_RUNTIME,{})
+        if int(current.get('pid') or 0)==os.getpid():
+            try:CLIENT_RUNTIME.unlink(missing_ok=True)
+            except:pass
 if __name__=='__main__':main()
