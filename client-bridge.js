@@ -178,6 +178,49 @@ async function applyUpdate(){
   }catch(err){alert("업데이트 시작 실패: "+err.message);if(btn)btn.disabled=false}
 }
 
+function renderInstallerStatus(data){
+  const state=$("clientInstallStatus"),path=$("clientInstallPath"),startup=$("clientStartupEnabled"),save=$("clientStartupSave"),restart=$("clientRestart");
+  if(!state)return;
+  const hosted=isHosted(),ins=data?.install||{};
+  if(path)path.textContent=ins.install_dir||"—";
+  if(startup&&document.activeElement!==startup)startup.checked=Boolean(ins.autostart);
+  if(hosted){
+    state.innerHTML='<b>웹/PWA 모드</b><span>Windows Installer 상태는 로컬 OSL Client 서버에서만 확인합니다.</span>';
+    if(startup)startup.disabled=true;if(save)save.disabled=true;if(restart)restart.disabled=true;return;
+  }
+  const installed=Boolean(ins.installed),current=Boolean(ins.current_is_installed),launcher=Boolean(ins.launcher_available);
+  const title=current?"✓ 설치형 OSL Client 실행 중":installed?"설치본 있음 · 현재는 다른 폴더에서 실행 중":"Portable/개발 실행";
+  const detail=current?
+    ("설치 위치 "+esc(ins.install_dir||"—")+(ins.autostart?" · Windows 로그인 자동 시작 켜짐":" · 자동 시작 꺼짐")):
+    installed?
+      ("설치 위치 "+esc(ins.install_dir||"—")+" · 다음 실행은 시작 메뉴 바로가기를 권장합니다."):
+      ("install-client.bat를 실행하면 %LOCALAPPDATA%\\osu-skill-lab에 설치하고 기존 DB/설정은 보존합니다.");
+  state.innerHTML='<b>'+esc(title)+'</b><span>'+detail+'</span>';
+  if(startup)startup.disabled=!installed;
+  if(save)save.disabled=!installed;
+  if(restart)restart.disabled=!launcher;
+}
+async function saveStartup(){
+  if(isHosted())return;
+  const button=$("clientStartupSave");if(button)button.disabled=true;
+  const enabled=Boolean($("clientStartupEnabled")?.checked);
+  try{
+    await api("/api/client/install/startup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled})});
+    await refreshStatus();
+  }catch(err){alert("Windows 자동 시작 설정 실패: "+err.message);if(button)button.disabled=false}
+}
+async function restartClient(){
+  if(isHosted())return;
+  const button=$("clientRestart");if(button){button.disabled=true;button.textContent="재시작 중…";}
+  try{
+    await api("/api/client/restart",{method:"POST"});
+    const state=$("clientInstallStatus");if(state)state.innerHTML='<b>OSL Client 재시작 중…</b><span>새 서버가 열리면 이 창은 닫아도 됩니다.</span>';
+  }catch(err){
+    alert("OSL Client 재시작 실패: "+err.message);
+    if(button){button.disabled=false;button.textContent="OSL Client 재시작";}
+  }
+}
+
 function dominantDna(dna){
   const skills=dna?.skills||{},keys=["aim","stream","speed","stamina","tech","reading","flow"];
   const best=keys.map(k=>[k,Number(skills[k])]).filter(([,v])=>Number.isFinite(v)).sort((a,b)=>b[1]-a[1])[0];
@@ -235,10 +278,11 @@ function renderStatus(data){
   renderDnaStatus(data);
   renderWatcherStatus(data);
   renderUpdaterStatus(data);
+  renderInstallerStatus(data);
   if(hosted){
     state.innerHTML='<b>GitHub Pages · OSL Client Bridge 비활성</b><span>로컬 파일 시스템 접근은 실행.bat / server.py로 연 PC 서버에서만 동작합니다.</span>';
     progress.classList.remove("running");progress.querySelector("span").textContent="웹/PWA 모드";
-    ["clientSongsPath","clientAutoDetect","clientSavePath","clientScan","clientSearch","clientQuery","clientReplayPath","clientReplayAutoDetect","clientReplaySavePath","clientReplayScan","clientReplayWatch","clientDnaLimit","clientDnaStart","clientDnaStop","clientWatcherEnabled","clientWatcherInterval","clientWatcherSave","clientUpdateCheck","clientUpdateApply"].forEach(id=>{const el=$(id);if(el)el.disabled=true});
+    ["clientSongsPath","clientAutoDetect","clientSavePath","clientScan","clientSearch","clientQuery","clientReplayPath","clientReplayAutoDetect","clientReplaySavePath","clientReplayScan","clientReplayWatch","clientDnaLimit","clientDnaStart","clientDnaStop","clientWatcherEnabled","clientWatcherInterval","clientWatcherSave","clientUpdateCheck","clientUpdateApply","clientStartupEnabled","clientStartupSave","clientRestart"].forEach(id=>{const el=$(id);if(el)el.disabled=true});
     return;
   }
   const scan=data?.scan||{},exists=Boolean(data?.path_exists);
@@ -332,6 +376,8 @@ function bind(){
   $("clientWatcherSave")?.addEventListener("click",saveWatcher);
   $("clientUpdateCheck")?.addEventListener("click",checkUpdate);
   $("clientUpdateApply")?.addEventListener("click",applyUpdate);
+  $("clientStartupSave")?.addEventListener("click",saveStartup);
+  $("clientRestart")?.addEventListener("click",restartClient);
   const watch=$("clientReplayWatch");
   if(watch){
     try{watch.checked=localStorage.getItem("osl-client-replay-watch")==="1"}catch(_){}
@@ -346,5 +392,5 @@ function bind(){
   });
 }
 bind();refreshStatus();scheduleReplayWatch();
-window.OSLClientBridge={refresh:refreshStatus,search:searchLibrary,scan:startScan,replays:refreshReplays,replayScan:startReplayScan,dnaStart:startDna,dnaStop:stopDna,watchSave:saveWatcher,updateCheck:checkUpdate,updateApply:applyUpdate};
+window.OSLClientBridge={refresh:refreshStatus,search:searchLibrary,scan:startScan,replays:refreshReplays,replayScan:startReplayScan,dnaStart:startDna,dnaStop:stopDna,watchSave:saveWatcher,updateCheck:checkUpdate,updateApply:applyUpdate,startupSave:saveStartup,restart:restartClient};
 })();
