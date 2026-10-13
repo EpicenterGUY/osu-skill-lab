@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = (ROOT / "build_ranked_views.py").read_text(encoding="utf-8")
 DNA_WORKFLOW = (ROOT / ".github/workflows/backfill-chart-dna.yml").read_text(encoding="utf-8")
+SYNC_WORKFLOW = (ROOT / ".github/workflows/sync-ranked.yml").read_text(encoding="utf-8")
 
 
 class DataArchitectureTests(unittest.TestCase):
@@ -49,6 +50,12 @@ class DataArchitectureTests(unittest.TestCase):
         self.assertIn("--delay 1", DNA_WORKFLOW)
         self.assertIn("--max-minutes 40", DNA_WORKFLOW)
         self.assertIn("2200", DNA_WORKFLOW)
+
+    def test_dna_backfill_completion_triggers_pages_deploy(self):
+        self.assertIn('workflow_run:', SYNC_WORKFLOW)
+        self.assertIn('workflows: ["Backfill Ranked Chart DNA"]', SYNC_WORKFLOW)
+        self.assertIn("github.event_name != 'workflow_run'", SYNC_WORKFLOW)
+        self.assertIn("github.event.workflow_run.conclusion == 'success'", SYNC_WORKFLOW)
 
     def test_dna_backfill_has_push_fallback_for_pipeline_changes(self):
         self.assertIn("push:", DNA_WORKFLOW)
