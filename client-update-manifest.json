@@ -1,14 +1,14 @@
 {
   "format": "osu-skill-lab-client-update",
-  "version": "2.21.0",
+  "version": "2.22.0",
   "channel": "stable",
   "source": "https://raw.githubusercontent.com/EpicenterGUY/osu-skill-lab/main/",
-  "generated_at": "2026-10-12T14:24:00Z",
+  "generated_at": "2026-10-13T06:04:00Z",
   "files": [
     {
       "path": "server.py",
-      "git_blob_sha": "a300a963f1ced42cbea89a37e67af16f40402c70",
-      "size": 56414
+      "git_blob_sha": "4b1f673c76040b4a85de1930702825b0a01f4ee4",
+      "size": 60345
     },
     {
       "path": "osu_api.py",
@@ -17,13 +17,13 @@
     },
     {
       "path": "index.html",
-      "git_blob_sha": "5fba0d5ffdfec8cae6ce99fb795f8fc2a8275b70",
-      "size": 92002
+      "git_blob_sha": "18ee6e0149829123c19806194c6b973286ae2459",
+      "size": 93495
     },
     {
       "path": "app-shell.css",
-      "git_blob_sha": "23a5af965eaecd7644bb09376ea3e7012d41c224",
-      "size": 78505
+      "git_blob_sha": "6a84fa856a4e181699dd1d9468e330f17d064413",
+      "size": 79322
     },
     {
       "path": "ranked-catalog.js",
@@ -37,8 +37,8 @@
     },
     {
       "path": "client-bridge.js",
-      "git_blob_sha": "2fed4e34d28a6c60b6739dcd2dc4c8c2ec7b7749",
-      "size": 22531
+      "git_blob_sha": "bc6ec0a71ac8043ea50fe71dd36bb3f251ab413c",
+      "size": 25377
     },
     {
       "path": "mobile-analyzer.js",
@@ -57,18 +57,33 @@
     },
     {
       "path": "sw.js",
-      "git_blob_sha": "d2267f0dc0aa3bfec83287a9893491c1b6fe6bb2",
+      "git_blob_sha": "81dfda451e0ada96f09d95cb9a837fa9e3541ec6",
       "size": 1812
     },
     {
       "path": "version.json",
-      "git_blob_sha": "02318455d51f71484d79ece18adf1985609b5520",
-      "size": 13466
+      "git_blob_sha": "6ca34f8394ac0261160e4c59a3638fa5303291cd",
+      "size": 14330
     },
     {
       "path": "실행.bat",
-      "git_blob_sha": "a1af659e004ff321807e27f892d923f068404eed",
-      "size": 126
+      "git_blob_sha": "3f36f493004679eeabdb6e5c8248311aba1f9e94",
+      "size": 365
+    },
+    {
+      "path": "client-launcher.py",
+      "git_blob_sha": "82742df0472c3f8ace5d66100530060ee335c86a",
+      "size": 17085
+    },
+    {
+      "path": "install-client.bat",
+      "git_blob_sha": "4fbcc006a9f01d85ec918e891da1dc9aea82ef5c",
+      "size": 1025
+    },
+    {
+      "path": "uninstall-client.bat",
+      "git_blob_sha": "e84d17849386452740be859b15bc999afcf84dd5",
+      "size": 738
     }
   ]
 }
