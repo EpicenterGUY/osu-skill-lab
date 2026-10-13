@@ -2,16 +2,19 @@ name: Sync osu Ranked catalogue + publish Pages
 on:
   push:
     branches: [main]
+  workflow_run:
+    workflows: ["Backfill Ranked Chart DNA"]
+    types: [completed]
   workflow_dispatch:
   schedule:
     - cron: '23 * * * *'
 concurrency:
   # Collapse rapid UI commits into the newest deploy, without interrupting hourly data sync.
-  group: osu-ranked-${{ github.event_name == 'push' && 'site-push' || 'scheduled-sync' }}
-  cancel-in-progress: ${{ github.event_name == 'push' }}
+  group: osu-ranked-${{ (github.event_name == 'push' || github.event_name == 'workflow_run') && 'site-push' || 'scheduled-sync' }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'workflow_run' }}
 jobs:
   sync:
-    if: github.event_name != 'push'
+    if: github.event_name != 'push' && github.event_name != 'workflow_run'
     runs-on: ubuntu-latest
     # Serialize all writes to Ranked DB across regular sync and long backfill workflows.
     concurrency:
@@ -54,9 +57,9 @@ jobs:
 
   deploy:
     needs: sync
-    # Scheduled collectors commit to main; that push starts the one canonical deploy.
-    # Avoid packaging/deploying the same data twice from the parent scheduled run.
-    if: always() && github.event_name == 'push'
+    # UI pushes deploy immediately. Data-writer pushes made with GITHUB_TOKEN do not
+    # trigger push workflows, so a successful Chart DNA workflow_run deploys latest main.
+    if: always() && (github.event_name == 'push' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'))
     runs-on: ubuntu-latest
     concurrency:
       group: osu-ranked-pages-deploy
