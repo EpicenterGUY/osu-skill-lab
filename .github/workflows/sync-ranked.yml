@@ -78,8 +78,11 @@ jobs:
       - uses: actions/configure-pages@v5
       - name: Validate deploy-critical source
         run: |
-          python -m py_compile build_ranked_views.py server.py
+          python -m py_compile build_ranked_views.py server.py client-launcher.py
           python -m unittest discover -s tests -q
+          test -s install-client.bat
+          test -s uninstall-client.bat
+          test -s 실행.bat
           node --check ranked-catalog.js
           node --check client-bridge.js
           node --check profile.js
