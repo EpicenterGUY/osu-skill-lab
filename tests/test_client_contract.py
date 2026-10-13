@@ -91,7 +91,8 @@ class ClientContractTests(unittest.TestCase):
                       "def start_server(", "def process_exists(", "OpenProcess",
                       "install_dir() / \"osu-skill-lab\"" if False else "return local_appdata() / \"osu-skill-lab\""):
             self.assertIn(token, LAUNCHER)
-        self.assertIn("~/.osu-skill-lab", INSTALL_BAT.replace("%USERPROFILE%\\", "~/"))
+        self.assertIn(".osu-skill-lab", INSTALL_BAT)
+        self.assertIn("사용자 DB/설정", INSTALL_BAT)
         self.assertIn("client-launcher.py install", INSTALL_BAT)
         self.assertIn("client-launcher.py uninstall", UNINSTALL_BAT)
         self.assertNotIn("--purge-data", UNINSTALL_BAT)
