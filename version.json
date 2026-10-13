@@ -1,8 +1,8 @@
 {
-  "version": "2.21.0",
+  "version": "2.22.0",
   "channel": "client",
-  "name": "Verified Client Updater",
-  "released": "2026-10-12",
+  "name": "Windows Installer & Launcher",
+  "released": "2026-10-13",
   "features": [
     "Home loads one 25KB precomputed summary without downloading legacy 832-map index",
     "2026 June–October compact month search shards pre-seeded with content-addressable caching",
@@ -133,6 +133,13 @@
     "Only a fixed whitelist of Client shell files can be replaced and local DB/config files are excluded",
     "Every downloaded update file is verified by expected byte size and Git blob SHA-1 before installation",
     "Client files are backed up before replacement and partially applied updates are automatically rolled back on failure",
-    "Successful server updates require an explicit OSL Client restart; updates are never silently auto-installed"
+    "Successful server updates require an explicit OSL Client restart; updates are never silently auto-installed",
+    "M4 Phase 6 adds a Windows installer that downloads and verifies the official Client manifest before installing",
+    "Installed Client files live under %LOCALAPPDATA%/osu-skill-lab while client.db and client.json remain under the existing user data directory",
+    "Windows Start Menu and optional desktop shortcuts launch through a single-instance Python launcher",
+    "Optional Windows login autostart runs the local Client quietly without opening duplicate server instances",
+    "The launcher records and probes the active localhost runtime so reopening OSL Client focuses the existing server instead of spawning another",
+    "Client UI exposes installed/portable state, autostart controls and a restart action for applying server updates",
+    "Standard uninstall removes program files and shortcuts while preserving local database and settings"
   ]
 }
