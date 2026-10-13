@@ -237,6 +237,16 @@ class UiContractTests(unittest.TestCase):
                       "/api/client/update/check", "/api/client/update/apply", "Updater ✓"):
             self.assertIn(token, CLIENT + HTML)
 
+    def test_osl_client_windows_installer_is_wired(self):
+        for element_id in ("clientInstallPath", "clientStartupEnabled", "clientStartupSave",
+                           "clientRestart", "clientInstallStatus"):
+            self.assertIn(f'id="{element_id}"', HTML)
+            self.assertIn('$("' + element_id + '")', CLIENT)
+        for token in ("renderInstallerStatus", "saveStartup", "restartClient",
+                      "/api/client/install/startup", "/api/client/restart", "Installer ✓"):
+            self.assertIn(token, CLIENT + HTML)
+        self.assertIn("Phase 6 · Windows", HTML)
+
     def test_osl_client_replay_inbox_is_wired(self):
         for element_id in ("clientReplayPath", "clientReplayAutoDetect", "clientReplaySavePath",
                            "clientReplayScan", "clientReplayStatus", "clientReplayWatch",
