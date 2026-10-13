@@ -234,6 +234,26 @@ def runtime_status():
 def process_exists(pid):
     if not pid or pid <= 0:
         return False
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+            process_query_limited_information = 0x1000
+            still_active = 259
+            handle = ctypes.windll.kernel32.OpenProcess(
+                process_query_limited_information, False, int(pid)
+            )
+            if not handle:
+                return False
+            try:
+                code = wintypes.DWORD()
+                if not ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                    return False
+                return int(code.value) == still_active
+            finally:
+                ctypes.windll.kernel32.CloseHandle(handle)
+        except Exception:
+            return False
     try:
         os.kill(pid, 0)
         return True
@@ -330,6 +350,12 @@ def install_client(autostart=False, desktop=False, launch=False):
             if backup and backup.exists():
                 shutil.rmtree(target, ignore_errors=True)
                 shutil.copytree(backup, target, dirs_exist_ok=True)
+            else:
+                for name in reversed(replaced):
+                    try:
+                        (target / name).unlink(missing_ok=True)
+                    except Exception:
+                        pass
             raise
         create_shortcut(start_menu_link(), "start", "osu! Skill Lab 실행")
         if desktop:
