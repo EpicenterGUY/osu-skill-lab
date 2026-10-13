@@ -6,6 +6,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SERVER = (ROOT / "server.py").read_text(encoding="utf-8")
 CLIENT = (ROOT / "client-bridge.js").read_text(encoding="utf-8")
 SW = (ROOT / "sw.js").read_text(encoding="utf-8")
+LAUNCHER = (ROOT / "client-launcher.py").read_text(encoding="utf-8")
+INSTALL_BAT = (ROOT / "install-client.bat").read_text(encoding="utf-8")
+UNINSTALL_BAT = (ROOT / "uninstall-client.bat").read_text(encoding="utf-8")
+RUN_BAT = (ROOT / "실행.bat").read_text(encoding="utf-8")
 
 
 class ClientContractTests(unittest.TestCase):
@@ -79,6 +83,28 @@ class ClientContractTests(unittest.TestCase):
         self.assertIn("if path not in UPDATE_FILES", SERVER)
         self.assertIn("client_git_blob_sha(blob)!=row['git_blob_sha']", SERVER)
         self.assertIn("restart_required", SERVER)
+
+    def test_windows_installer_launcher_is_single_instance_and_data_safe(self):
+        ast.parse(LAUNCHER)
+        for token in ("RAW_BASE = \"https://raw.githubusercontent.com/EpicenterGUY/osu-skill-lab/main/\"",
+                      "def install_client(", "def set_autostart(", "def runtime_status(",
+                      "def start_server(", "def process_exists(", "OpenProcess",
+                      "install_dir() / \"osu-skill-lab\"" if False else "return local_appdata() / \"osu-skill-lab\""):
+            self.assertIn(token, LAUNCHER)
+        self.assertIn("~/.osu-skill-lab", INSTALL_BAT.replace("%USERPROFILE%\\", "~/"))
+        self.assertIn("client-launcher.py install", INSTALL_BAT)
+        self.assertIn("client-launcher.py uninstall", UNINSTALL_BAT)
+        self.assertNotIn("--purge-data", UNINSTALL_BAT)
+        self.assertIn("client-launcher.py start", RUN_BAT)
+
+    def test_server_exposes_installed_runtime_and_restart_controls(self):
+        for token in ("CLIENT_RUNTIME=CLIENT_HOME/'runtime.json'", "client_install_status",
+                      "client_set_autostart", "client_restart_request", "OSL_BROWSER",
+                      "client_json_write(CLIENT_RUNTIME"):
+            self.assertIn(token, SERVER)
+        for endpoint in ("/api/client/install/status", "/api/client/install/startup",
+                         "/api/client/restart"):
+            self.assertIn(endpoint, SERVER)
 
     def test_browser_replay_watch_is_explicitly_tab_open_only(self):
         for token in ("osl-client-replay-watch", "scheduleReplayWatch",
